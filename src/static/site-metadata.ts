@@ -10,9 +10,9 @@ interface ISiteMetadataResult {
 }
 
 const data: ISiteMetadataResult = {
-  siteTitle: 'Running Page',
-  siteUrl: 'https://running.viazure.cc',
-  logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTtc69JxHNcmN1ETpMUX4dozAgAN6iPjWalQ&usqp=CAU',
+  siteTitle: 'Running 🏃‍',
+  siteUrl: 'https://run.viazure.cc',
+  logo: 'https://avatars.githubusercontent.com/u/9543636?v=4&size=225',
   description: '想不明白的事情那么多，想到就能做的事情太少了。',
   navLinks: [
     {
