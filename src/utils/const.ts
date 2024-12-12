@@ -3,7 +3,7 @@ const MAPBOX_TOKEN =
   // For security reasons, please avoid using the default public token provided by Mapbox as much as possible.
   // Instead, manually add a new token and apply URL restrictions.
   // (please refer to https://github.com/yihong0618/running_page/issues/643#issuecomment-2042668580)
-  'pk.eyJ1IjoieWlob25nMDYxOCIsImEiOiJja2J3M28xbG4wYzl0MzJxZm0ya2Fua2p2In0.PNKfkeQwYuyGOTT_x9BJ4Q';
+  'pk.eyJ1IjoidmlhenVyZSIsImEiOiJjbTRrd2doNzYwbjM2MmpzaXkyY3NyYWNjIn0.7oWT5Vwxfd7Ruh-ilFG-Rg';
 const MUNICIPALITY_CITIES_ARR = [
   '北京市',
   '上海市',
@@ -43,7 +43,7 @@ const ROAD_LABEL_DISPLAY = true;
 const PRIVACY_MODE = false;
 // update for now 2024/11/17 the lights on default is false
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
-const LIGHTS_ON =false;
+const LIGHTS_ON = true;
 // richer title for the activity types (like garmin style)
 const RICH_TITLE = false;
 
@@ -86,7 +86,7 @@ const ACTIVITY_TYPES = {
   CYCLING_TITLE,
   SKIING_TITLE,
   WALKING_TITLE,
-}
+};
 
 const RUN_TITLES = {
   FULL_MARATHON_RUN_TITLE,
