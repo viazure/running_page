@@ -11,15 +11,15 @@
   python run_page/get_garmin_secret.py ${email} ${password} --is-cn
 ```
 
-![running_page](https://socialify.git.ci/yihong0618/running_page/image?description=1&font=Inter&forks=1&issues=1&language=1&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fshaonianche%2Fgallery%2Fmaster%2Frunning_page%2Frunning_page_logo_150*150.jpg&owner=1&pulls=1&stargazers=1&theme=Light)
+![running_page](https://socialify.git.ci/viazure/running_page/image?description=1&font=Inter&forks=1&issues=1&language=1&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fshaonianche%2Fgallery%2Fmaster%2Frunning_page%2Frunning_page_logo_150*150.jpg&owner=1&pulls=1&stargazers=1&theme=Light)
 
-# [这里是白银越野赛全部 21 位逝者的故事](https://github.com/yihong0618/running_page/issues/135)
+# [这里是白银越野赛全部 21 位逝者的故事](https://github.com/viazure/running_page/issues/135)
 
 R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 
-# [打造个人跑步主页](https://yihong.run/running)
+# [打造个人跑步主页](https://run.viazure.cc)
 
-[English](README.md) | 简体中文 | [Wiki](https://wiki.mfydev.run/)
+[English](README.md) | 简体中文 | [Wiki](https://mfydev.github.io/Running-Page-Wiki/)
 
 <details>
 <summary>GIF 展示</summary>
@@ -30,7 +30,7 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 
 </details>
 
-## [大家的跑步主页展示](https://github.com/yihong0618/running_page/issues/12)
+## [大家的跑步主页展示](https://github.com/viazure/running_page/issues/12)
 
 <details>
 <summary>Running page runners</summary>
@@ -41,8 +41,8 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 | ------------------------------------------------- | ---------------------------------------------- | ----------- |
 | [zhubao315](https://github.com/zhubao315)         | <https://zhubao315.github.io/running>          | Strava      |
 | [shaonianche](https://github.com/shaonianche)     | <https://run.duanfei.org>                      | Strava      |
-| [yihong0618](https://github.com/yihong0618)       | <https://yihong.run>                           | Nike        |
-| [superleeyom](https://github.com/superleeyom)     | <https://running.leeyom.top>                   | Strava        |
+| [viazure](https://github.com/viazure)             | <https://yihong.run>                           | Nike        |
+| [superleeyom](https://github.com/superleeyom)     | <https://running.leeyom.top>                   | Strava      |
 | [geekplux](https://github.com/geekplux)           | <https://activities.geekplux.com>              | Nike        |
 | [guanlan](https://github.com/guanlan)             | <https://grun.vercel.app>                      | Strava      |
 | [tuzimoe](https://github.com/tuzimoe)             | <https://run.tuzi.moe>                         | Nike        |
@@ -106,11 +106,12 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 | [laqieer](https://github.com/laqieer)             | <https://laqieer.github.io/running_page/>      | Strava      |
 | [Guoxin](https://github.com/guoxinl)              | <https://running.guoxin.space/>                | Strava      |
 | [Darren](https://github.com/Flavored4179)         | <https://run.wdoc.top/>                        | tcx         |
+
 </details>
 
 ## 它是怎么工作的
 
-![image](https://github.com/yihong0618/running_page/assets/15976103/85d8d59d-2639-431e-8406-9d818afbd4ab)
+![image](https://github.com/viazure/running_page/assets/15976103/85d8d59d-2639-431e-8406-9d818afbd4ab)
 
 ## 特性
 
@@ -155,6 +156,7 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 - **[Garmin_to_Strava(Using Garmin Run, Strava backup data)](#garmin_to_strava)**
 - **[Strava_to_Garmin(Using Strava Run, Garmin backup data)](#strava_to_garmin)**
 - **[Coros高驰](#Coros高驰)**
+
 ## 视频教程
 
 - https://www.youtube.com/watch?v=reLiY9p8EJk
@@ -163,7 +165,7 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 ## 下载
 
 ```bash
-git clone https://github.com/yihong0618/running_page.git --depth=1
+git clone https://github.com/viazure/running_page.git --depth=1
 ```
 
 ## 安装及测试 (node >= 20 python >= 3.11)
@@ -233,7 +235,7 @@ siteMetadata: {
     },
     {
       name: 'About',
-      url: 'https://github.com/yihong0618/running_page/blob/master/README-CN.md',
+      url: 'https://github.com/viazure/running_page/blob/master/README-CN.md',
     },
   ],
 },
@@ -351,7 +353,7 @@ python3(python) run_page/keep_sync.py ${your mobile} ${your password} --with-gpx
 示例：
 
 ```bash
-python3(python) run_page/keep_sync.py 13333xxxx example --with-gpx 
+python3(python) run_page/keep_sync.py 13333xxxx example --with-gpx
 ```
 
 > 增加了 keep 对其他运动类型的支持，目前可选的有running, cycling, hiking，默认的运动数据类型为running。
@@ -365,7 +367,6 @@ python3(python) run_page/keep_sync.py ${your mobile} ${your password} --with-gpx
 ```bash
 python3(python) run_page/keep_sync.py 13333xxxx example --with-gpx --sync-types running cycling hiking
 ```
-
 
 </details>
 
@@ -411,7 +412,7 @@ python3(python) run_page/joyrun_sync.py ${your mobile} ${your 验证码} --athle
 示例：
 
 ```bash
-python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete yihong0618
+python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete viazure
 ```
 
 joyrun 导出 gpx 文件
@@ -441,7 +442,7 @@ python3(python) run_page/joyrun_sync.py 1393xx30xxxx 97e5fe4997d20f9b1007xxxxx -
 > 支持配置min_grid_distance，默认为10
 
 ```bash
-python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete yihong0618 --min_grid_distance 5 
+python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete viazure --min_grid_distance 5
 ```
 
 </details>
@@ -619,7 +620,7 @@ python3(python) run_page/garmin_sync.py xxxxxxxxxx --is-cn --only-run
 <br>
 
 - 如果你只想同步 `type running` 使用参数 --only-run
-**The Python version must be >=3.10**
+  **The Python version must be >=3.10**
 
 #### 获取佳明 CN 的密钥
 
@@ -670,13 +671,14 @@ python3(python) run_page/nike_sync.py ${access_token}
 ```
 
 如果你同步了一次（已经完成同步）想继续同步新的
+
 ```bash
 python3(python) run_page/nike_sync.py ${access_token} --continue-sync
 ```
 
 ![tg_image_166091873](https://github.com/user-attachments/assets/9d4851d6-849a-4bb7-8ffe-5358fa7328b2)
 
-如果你想自动化同步NRC中的运动数据,去 [issue692](https://github.com/yihong0618/running_page/issues/692#issuecomment-2218849713)中查看相关内容.
+如果你想自动化同步NRC中的运动数据,去 [issue692](https://github.com/viazure/running_page/issues/692#issuecomment-2218849713)中查看相关内容.
 
 </details>
 
@@ -946,7 +948,7 @@ python3(python) run_page/strava_to_garmin_sync.py ${{ secrets.STRAVA_CLIENT_ID }
 
 如果要在同步到 Garmin 的运动记录中添加 Garmin 设备信息，需要添加`--use_fake_garmin_device`参数，这将在同步的 Garmin 锻炼记录中添加一个 Garmin 设备（默认情况下为 `Garmin Forerunner 245`，您可以在`garmin_device_adaptor.py`中更改设备信息），运动记录中有了设备信息之后就可以同步到其他 APP 中，比如数字心动（攒上马积分）这类不能通过 Apple Watch 同步的 APP，当然也可以同步到 Keep，悦跑圈，咕咚等 APP。
 
-<img width="830" alt="image" src="https://github.com/yihong0618/running_page/assets/8613196/b5076942-3133-4c89-ad66-a828211667dc">
+<img width="830" alt="image" src="https://github.com/viazure/running_page/assets/8613196/b5076942-3133-4c89-ad66-a828211667dc">
 
 最终执行的命令如下：
 
@@ -980,28 +982,32 @@ python run_page/coros_sync.py ${{ secrets.COROS_ACCOUNT }} ${{ secrets.COROS_PAS
 </details>
 
 ### Keep_to_Strava
+
 <details>
 <summary>获取您的Keep数据，然后同步到Strava</summary>
 
 示例:
+
 ```bash
 python3(python) run_page/keep_to_strava_sync.py ${your mobile} ${your password} ${client_id} ${client_secret} ${strava_refresh_token} --sync-types running cycling hiking
 ```
 
 #### 解决的需求：
+
 1. 适用于由Strava总览/展示数据，但是有多种运动类型，且数据来自不同设备的用户。
 2. 适用于期望将华为运动健康/OPPO健康等数据同步到Strava的用户(前提是手机APP端已经开启了和Keep之间的数据同步)。
 3. 理论上华为/OPPO等可以通过APP同步到Keep的设备，均可通过此方法自动同步到Strava，目前已通过测试的APP有
-    - 华为运动健康: 户外跑步，户外骑行，户外步行。
+   - 华为运动健康: 户外跑步，户外骑行，户外步行。
 
 #### 特性以及使用细节:
+
 1. 与Keep相似，但是由keep_to_strava_sync.py实现，不侵入data.db 与 activities.json。因此不会出现由于同时使用keep_sync和strava_sync而导致的数据重复统计/展示问题。
 2. 上传至Strava时，会自动识别为Strava中相应的运动类型, 目前支持的运动类型为running, cycling, hiking。
 3. run_data_sync.yml中的修改：
 
-    ```yaml
-    RUN_TYPE: keep_to_strava_sync
-    ```
+   ```yaml
+   RUN_TYPE: keep_to_strava_sync
+   ```
 
 </details>
 
@@ -1013,7 +1019,7 @@ python3(python) run_page/keep_to_strava_sync.py ${your mobile} ${your password} 
 <br>
 
 - 生成数据展示 SVG
-- 展示效果：[点击查看](https://raw.githubusercontent.com/yihong0618/running_page/master/assets/github.svg)、[点击查看](https://raw.githubusercontent.com/yihong0618/running_page/28fa801e4e30f30af5ae3dc906bf085daa137936/assets/grid.svg)
+- 展示效果：[点击查看](https://raw.githubusercontent.com/viazure/running_page/master/assets/github.svg)、[点击查看](https://raw.githubusercontent.com/viazure/running_page/28fa801e4e30f30af5ae3dc906bf085daa137936/assets/grid.svg)
 
 > 感兴趣的同学可以改下方参数 (--special-distance 10 --special-distance2 20, 10km~20km 展示为 special-color1 20km 以上展示为 special-color2, --min-distance 10.0 用来筛选 10km 以上的)
 
@@ -1096,12 +1102,11 @@ python3(python) run_page/gen_svg.py --from-db --type circular --use-localtime
 
 4. 为 GitHub Actions 添加代码提交权限，访问仓库的 `Settings > Actions > General`页面，找到 `Workflow permissions` 的设置项，将选项配置为 `Read and write permissions`，支持 CI 将运动数据更新后提交到仓库中。
 
-
 5. 如果想把你的 running_page 部署在 xxx.github.io 而不是 xxx.github.io/run_page 亦或是想要添加自定义域名于 GitHub Pages，需要做三点
 
--  修改你的 fork 的 running_page 仓库改名为 xxx.github.io, xxx 是你 github 的 username
--  修改 gh-pages.yml 中的 Build 模块，删除 `${{ github.event.repository.name }}` 改为`run: PATH_PREFIX=/ pnpm build` 即可
--  修改 src/static/site-metadata.ts 中 `siteUrl: ''` 或是添加你的自定义域名，`siteUrl: '[your_own_domain]'`， 即可
+- 修改你的 fork 的 running_page 仓库改名为 xxx.github.io, xxx 是你 github 的 username
+- 修改 gh-pages.yml 中的 Build 模块，删除 `${{ github.event.repository.name }}` 改为`run: PATH_PREFIX=/ pnpm build` 即可
+- 修改 src/static/site-metadata.ts 中 `siteUrl: ''` 或是添加你的自定义域名，`siteUrl: '[your_own_domain]'`， 即可
 
 </details>
 
@@ -1114,7 +1119,7 @@ python3(python) run_page/gen_svg.py --from-db --type circular --use-localtime
 
 <br>
 
-Actions [源码](https://github.com/yihong0618/running_page/blob/master/.github/workflows/run_data_sync.yml)
+Actions [源码](https://github.com/viazure/running_page/blob/master/.github/workflows/run_data_sync.yml)
 需要做如下步骤
 
 1. 更改成你的 app type 及 info
@@ -1141,7 +1146,7 @@ Actions [源码](https://github.com/yihong0618/running_page/blob/master/.github/
 1. 拿到项目的 actions id（需要自行申请 token）
 
 ```shell
-curl https://api.github.com/repos/yihong0618/running_page/actions/workflows -H "Authorization: token d8xxxxxxxxxx" # change to your config
+curl https://api.github.com/repos/viazure/running_page/actions/workflows -H "Authorization: token d8xxxxxxxxxx" # change to your config
 ```
 
 <center><img src="https://cdn.jujimeizuo.cn/blog/2023/10/get-action-id.jpg" alt="get-action-id"></center>
