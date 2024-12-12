@@ -33,7 +33,7 @@ const GOOGLE_ANALYTICS_TRACKING_ID = '';
 // styling: set to `true` if you want dash-line route
 const USE_DASH_LINE = true;
 // styling: route line opacity: [0, 1]
-const LINE_OPACITY = 0.6;
+const LINE_OPACITY = 0.4;
 // styling: map height
 const MAP_HEIGHT = 600;
 //set to `false` if you want to hide the road label characters
@@ -43,7 +43,7 @@ const ROAD_LABEL_DISPLAY = false;
 const PRIVACY_MODE = false;
 // update for now 2024/11/17 the lights on default is false
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
-const LIGHTS_ON = true;
+const LIGHTS_ON = false;
 // richer title for the activity types (like garmin style)
 const RICH_TITLE = false;
 
