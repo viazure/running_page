@@ -16,8 +16,12 @@ const data: ISiteMetadataResult = {
   description: '想不明白的事情那么多，想到就能做的事情太少了。',
   navLinks: [
     {
+      name: 'Blog',
+      url: 'https://viazure.cc',
+    },
+    {
       name: 'About',
-      url: 'https://github.com/viazure',
+      url: 'https://github.com/yihong0618/running_page/blob/master/README-CN.md',
     },
   ],
 };
