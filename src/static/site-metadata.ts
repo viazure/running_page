@@ -1,4 +1,4 @@
-interface ISiteMetadataResult {
+﻿interface ISiteMetadataResult {
   siteTitle: string;
   siteUrl: string;
   description: string;
