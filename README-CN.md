@@ -19,7 +19,7 @@ R.I.P. 希望大家都能健康顺利的跑过终点，逝者安息。
 
 # [打造个人跑步主页](https://yihong.run/running)
 
-[English](README.md) | 简体中文 | [Wiki](https://wiki.mfydev.run/)
+[English](README.md) | 简体中文 | [Wiki](https://mfydev.github.io/Running-Page-Wiki/)
 
 <details>
 <summary>GIF 展示</summary>
@@ -353,7 +353,7 @@ python3(python) run_page/keep_sync.py ${your mobile} ${your password} --with-gpx
 示例：
 
 ```bash
-python3(python) run_page/keep_sync.py 13333xxxx example --with-gpx 
+python3(python) run_page/keep_sync.py 13333xxxx example --with-gpx
 ```
 
 > 增加了 keep 对其他运动类型的支持，目前可选的有running, cycling, hiking，默认的运动数据类型为running。
@@ -443,7 +443,7 @@ python3(python) run_page/joyrun_sync.py 1393xx30xxxx 97e5fe4997d20f9b1007xxxxx -
 > 支持配置min_grid_distance，默认为10
 
 ```bash
-python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete yihong0618 --min_grid_distance 5 
+python3(python) run_page/joyrun_sync.py 13333xxxx xxxx --athlete yihong0618 --min_grid_distance 5
 ```
 
 </details>
