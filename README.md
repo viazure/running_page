@@ -107,6 +107,7 @@ English | [简体中文](README-CN.md) | [Wiki](https://mfydev.github.io/Running
 | [Samuel](https://github.com/SamuelDixxon)         | <https://samueldixxon.github.io/running_page/> | Keep        |
 | [Evan](https://github.com/LinghaoChan)            | <https://github.com/LinghaoChan/running>       | Keep        |
 | [Shuqi](https://github.com/zhufengme)             | <https://runner-shuqi.devlink.cn/>             | Garmin      |
+| [shugoal](https://github.com/shugoal)            | <https://shugoal.github.io/wk-shu/>             | Garmin      |
 </details>
 
 ## How it works
