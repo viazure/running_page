@@ -3,7 +3,7 @@ const MAPBOX_TOKEN =
   // For security reasons, please avoid using the default public token provided by Mapbox as much as possible.
   // Instead, manually add a new token and apply URL restrictions.
   // (please refer to https://github.com/yihong0618/running_page/issues/643#issuecomment-2042668580)
-  'pk.eyJ1IjoieWlob25nMDYxOCIsImEiOiJja2J3M28xbG4wYzl0MzJxZm0ya2Fua2p2In0.PNKfkeQwYuyGOTT_x9BJ4Q';
+  'pk.eyJ1IjoidmlhenVyZSIsImEiOiJjbTRrd2doNzYwbjM2MmpzaXkyY3NyYWNjIn0.7oWT5Vwxfd7Ruh-ilFG-Rg';
 const MUNICIPALITY_CITIES_ARR = [
   '北京市',
   '上海市',
@@ -37,13 +37,13 @@ const LINE_OPACITY = 0.4;
 // styling: map height
 const MAP_HEIGHT = 600;
 //set to `false` if you want to hide the road label characters
-const ROAD_LABEL_DISPLAY = true;
+const ROAD_LABEL_DISPLAY = false;
 // update for now 2024/11/17 the privacy mode is true
 //set to `true` if you want to display only the routes without showing the map.
 const PRIVACY_MODE = false;
 // update for now 2024/11/17 the lights on default is false
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
-const LIGHTS_ON =false;
+const LIGHTS_ON = false;
 // richer title for the activity types (like garmin style)
 const RICH_TITLE = false;
 
@@ -59,8 +59,8 @@ const ENGLISH_INFO_MESSAGE = (yearLength: number, year: string): string =>
 
 // not support English for now
 const CHINESE_LOCATION_INFO_MESSAGE_FIRST =
-  '我跑过了一些地方，希望随着时间推移，地图点亮的地方越来越多';
-const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '不要停下来，不要停下奔跑的脚步';
+  '我跑过了一些地方，希望随着时间推移，地图点亮的地方越来越多。';
+const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '';
 
 const INFO_MESSAGE = IS_CHINESE ? CHINESE_INFO_MESSAGE : ENGLISH_INFO_MESSAGE;
 const FULL_MARATHON_RUN_TITLE = IS_CHINESE ? '全程马拉松' : 'Full Marathon';
@@ -97,7 +97,7 @@ const ACTIVITY_TYPES = {
   CYCLING_TITLE,
   SKIING_TITLE,
   WALKING_TITLE,
-}
+};
 
 const RUN_TITLES = {
   FULL_MARATHON_RUN_TITLE,
@@ -109,19 +109,18 @@ const RUN_TITLES = {
   NIGHT_RUN_TITLE,
 };
 const ACTIVITY_TOTAL = {
-    ACTIVITY_COUNT_TITLE,
-    MAX_DISTANCE_TITLE,
-    MAX_SPEED_TITLE,
-    TOTAL_TIME_TITLE,
-    AVERAGE_SPEED_TITLE,
-    TOTAL_DISTANCE_TITLE,
-    YEARLY_TITLE,
-    MONTHLY_TITLE,
-    WEEKLY_TITLE,
-    DAILY_TITLE,
-    LOCATION_TITLE
+  ACTIVITY_COUNT_TITLE,
+  MAX_DISTANCE_TITLE,
+  MAX_SPEED_TITLE,
+  TOTAL_TIME_TITLE,
+  AVERAGE_SPEED_TITLE,
+  TOTAL_DISTANCE_TITLE,
+  YEARLY_TITLE,
+  MONTHLY_TITLE,
+  WEEKLY_TITLE,
+  DAILY_TITLE,
+  LOCATION_TITLE,
 };
-
 export {
   USE_GOOGLE_ANALYTICS,
   GOOGLE_ANALYTICS_TRACKING_ID,
@@ -142,7 +141,7 @@ export {
   LIGHTS_ON,
   RICH_TITLE,
   ACTIVITY_TYPES,
-  ACTIVITY_TOTAL
+  ACTIVITY_TOTAL,
 };
 
 const nike = 'rgb(224,237,94)'; // if you want change the main color change here src/styles/variables.scss
