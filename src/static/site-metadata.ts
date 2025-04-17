@@ -18,15 +18,15 @@ const data: ISiteMetadataResult = {
   siteTitle: 'Running‍ Page',
   siteUrl: 'https://run.viazure.cc',
   logo: 'https://avatars.githubusercontent.com/u/9543636?v=4&size=225',
-  description: '想不明白的事情那么多，想到就能做的事情太少了。 —— 关于跑步',
+  description: '想不明白的事情那么多，想到就能做的事情太少了。',
   navLinks: [
-    {
-      name: 'Summary',
-      url: `${getBasePath()}/summary`,
-    },
     {
       name: 'Blog',
       url: 'https://viazure.cc',
+    },
+    {
+      name: 'Summary',
+      url: `${getBasePath()}/summary`,
     },
     {
       name: 'About',
