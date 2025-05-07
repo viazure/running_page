@@ -1,0 +1,40 @@
+﻿name: Garmin CN Sync To Global
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+  push:
+    branches:
+      - master
+    paths:
+      - run_page/garmin_only_sync_cn_global.py
+
+jobs:
+  sync:
+    name: Sync
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        id: setup_python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # 运行「仅同步佳明国区数据到国际区」脚本
+      - name: Run sync Garmin CN to Garmin script only
+        run: |
+          python run_page/garmin_only_sync_cn_global.py ${{ secrets.GARMIN_SECRET_STRING_CN }} ${{ secrets.GARMIN_SECRET_STRING }}
