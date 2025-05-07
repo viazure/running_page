@@ -9,11 +9,17 @@ on:
       - master
     paths:
       - run_page/garmin_only_sync_cn_global.py
+env:
+  SAVE_DATA_IN_GITHUB_CACHE: true
+  DATA_CACHE_PREFIX: 'track_data'
 
 jobs:
   sync:
     name: Sync
     runs-on: ubuntu-latest
+    outputs:
+      SAVE_DATA_IN_GITHUB_CACHE: ${{ steps.set_output.outputs.SAVE_DATA_IN_GITHUB_CACHE }}
+      DATA_CACHE_PREFIX: ${{ steps.set_output.outputs.DATA_CACHE_PREFIX }}
 
     steps:
       - name: Checkout
@@ -33,6 +39,25 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+
+      - name: Cache Data Files
+        if: env.SAVE_DATA_IN_GITHUB_CACHE == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            activities
+            assets
+            GPX_OUT
+            TCX_OUT
+            FIT_OUT
+            Workouts
+            run_page/data.db
+            src/static/activities.json
+            imported.json
+          key: ${{ env.DATA_CACHE_PREFIX }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.DATA_CACHE_PREFIX }}-${{ github.sha }}-
+            ${{ env.DATA_CACHE_PREFIX }}-
 
       # 运行「仅同步佳明国区数据到国际区」脚本
       - name: Run sync Garmin CN to Garmin script only
