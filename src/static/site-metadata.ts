@@ -18,7 +18,8 @@ const data: ISiteMetadataResult = {
   siteTitle: 'Running Page',
   siteUrl: 'https://run.viazure.cc',
   logo: 'https://viazure.cc/icons/favicon.svg',
-  description: '世界上想不明白的事情那么多，想到就能做的事情太少了。—— 关于跑步',
+  description:
+    '世界上想不明白的事情那么多，想到就能做的事情太少了。—— 关于跑步',
   navLinks: [
     {
       name: 'Summary',
