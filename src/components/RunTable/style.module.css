@@ -3,7 +3,7 @@
   .runTable th:nth-child(3),
   .runTable td:nth-child(3) {
     display: none;
-    /* 隐藏第3列 */
+    /* 隐藏第 3 列 */
   }
 }
 
@@ -12,7 +12,7 @@
   .runTable th:nth-child(5),
   .runTable td:nth-child(5) {
     display: none;
-    /* 隐藏第5列 */
+    /* 隐藏第 5 列 */
   }
 }
 
@@ -21,7 +21,7 @@
   margin: 2rem 0 5rem 0;
   color: var(--color-run-table-thead);
   background-color: var(--color-background);
-  font-family: var(--font-mono);
+  /* font-family: var(--font-mono); */
   :is(thead) {
     color: var(--color-run-table-thead);
     text-align: right;
