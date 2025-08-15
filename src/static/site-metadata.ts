@@ -1,4 +1,4 @@
-interface ISiteMetadataResult {
+﻿interface ISiteMetadataResult {
   siteTitle: string;
   siteUrl: string;
   description: string;
@@ -16,9 +16,10 @@ const getBasePath = () => {
 
 const data: ISiteMetadataResult = {
   siteTitle: 'Running Page',
-  siteUrl: 'https://yihong.run',
-  logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTtc69JxHNcmN1ETpMUX4dozAgAN6iPjWalQ&usqp=CAU',
-  description: 'Personal site and blog',
+  siteUrl: 'https://run.viazure.cc',
+  logo: 'https://viazure.cc/icons/favicon.svg',
+  description:
+    '世界上想不明白的事情那么多，想到就能做的事情太少了。—— 关于跑步',
   navLinks: [
     {
       name: 'Summary',
@@ -26,7 +27,7 @@ const data: ISiteMetadataResult = {
     },
     {
       name: 'Blog',
-      url: 'https://github.com/yihong0618/gitblog',
+      url: 'https://viazure.cc',
     },
     {
       name: 'About',

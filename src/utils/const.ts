@@ -3,7 +3,7 @@ const MAPBOX_TOKEN =
   // For security reasons, please avoid using the default public token provided by Mapbox as much as possible.
   // Instead, manually add a new token and apply URL restrictions.
   // (please refer to https://github.com/yihong0618/running_page/issues/643#issuecomment-2042668580)
-  'pk.eyJ1IjoieWlob25nMDYxOCIsImEiOiJja2J3M28xbG4wYzl0MzJxZm0ya2Fua2p2In0.PNKfkeQwYuyGOTT_x9BJ4Q';
+  'pk.eyJ1IjoidmlhenVyZSIsImEiOiJjbTRrd2doNzYwbjM2MmpzaXkyY3NyYWNjIn0.7oWT5Vwxfd7Ruh-ilFG-Rg';
 const MUNICIPALITY_CITIES_ARR = [
   '北京市',
   '上海市',
@@ -41,12 +41,12 @@ const MAP_HEIGHT = window.innerWidth <= 768 ? 250 : 600;
 const ROAD_LABEL_DISPLAY = true;
 // updated on 2024/11/17: privacy mode is set to true by default
 //set to `true` if you want to display only the routes without showing the map.
-const PRIVACY_MODE = false;
+const PRIVACY_MODE = true;
 // updated on 2024/11/17: lights are turned off by default
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
 const LIGHTS_ON = false;
 //set to `true` if you want to show the 'Elevation Gain' column
-const SHOW_ELEVATION_GAIN = false;
+const SHOW_ELEVATION_GAIN = true;
 // richer title for the activity types (like garmin style)
 const RICH_TITLE = false;
 
@@ -62,8 +62,8 @@ const ENGLISH_INFO_MESSAGE = (yearLength: number, year: string): string =>
 
 // English is not supported for location info messages yet
 const CHINESE_LOCATION_INFO_MESSAGE_FIRST =
-  '跑过了一些地方，希望随着时间推移，点亮的地方越来越多';
-const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '不要停下来，不要停下奔跑的脚步';
+  '世界上想不明白的事情那么多，想到就能做的事情太少了。';
+const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '';
 
 const INFO_MESSAGE = IS_CHINESE ? CHINESE_INFO_MESSAGE : ENGLISH_INFO_MESSAGE;
 const FULL_MARATHON_RUN_TITLE = IS_CHINESE ? '全程马拉松' : 'Full Marathon';
