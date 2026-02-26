@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type MouseEvent } from 'react';
 import useSiteMetadata from '@/hooks/useSiteMetadata';
 import { useTheme, Theme } from '@/hooks/useTheme';
 import { PRIVACY_MODE, PRIVACY_UNLOCK_SEQUENCE } from '@/utils/const';
@@ -10,7 +10,7 @@ import {
 import styles from './style.module.css';
 
 const LOGO_TAP_TARGET = 7;
-const LOGO_TAP_RESET_MS = 2000;
+const LOGO_TAP_WINDOW_MS = 2000;
 
 const Header = () => {
   const { logo, siteUrl, navLinks } = useSiteMetadata();
@@ -19,26 +19,26 @@ const Header = () => {
   const toggleUnlock = usePrivacyUnlockToggle();
   const [currentIconIndex, setCurrentIconIndex] = useState(0);
   const logoTapCount = useRef(0);
-  const logoTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logoTapWindowRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogoTap = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       if (!PRIVACY_MODE || !PRIVACY_UNLOCK_SEQUENCE.length) return;
       e.preventDefault();
       e.stopPropagation();
-      if (logoTapTimeout.current) {
-        clearTimeout(logoTapTimeout.current);
-        logoTapTimeout.current = null;
-      }
       logoTapCount.current += 1;
       if (logoTapCount.current >= LOGO_TAP_TARGET) {
+        if (logoTapWindowRef.current) {
+          clearTimeout(logoTapWindowRef.current);
+          logoTapWindowRef.current = null;
+        }
         logoTapCount.current = 0;
         toggleUnlock();
-      } else {
-        logoTapTimeout.current = setTimeout(() => {
+      } else if (logoTapCount.current === 1) {
+        logoTapWindowRef.current = setTimeout(() => {
           logoTapCount.current = 0;
-          logoTapTimeout.current = null;
-        }, LOGO_TAP_RESET_MS);
+          logoTapWindowRef.current = null;
+        }, LOGO_TAP_WINDOW_MS);
       }
     },
     [toggleUnlock]
