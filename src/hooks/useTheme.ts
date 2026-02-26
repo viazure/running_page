@@ -141,14 +141,17 @@ export const useTheme = () => {
    * Set theme and dispatch event to notify other components.
    * No-op when privacy is effective (theme forced to dark).
    */
-  const setTheme = useCallback((newTheme: Theme) => {
-    if (effectivePrivacy) return;
-    setThemeState(newTheme);
-    const event = new CustomEvent(THEME_CHANGE_EVENT, {
-      detail: { theme: newTheme },
-    });
-    window.dispatchEvent(event);
-  }, [effectivePrivacy]);
+  const setTheme = useCallback(
+    (newTheme: Theme) => {
+      if (effectivePrivacy) return;
+      setThemeState(newTheme);
+      const event = new CustomEvent(THEME_CHANGE_EVENT, {
+        detail: { theme: newTheme },
+      });
+      window.dispatchEvent(event);
+    },
+    [effectivePrivacy]
+  );
 
   // Apply theme changes to DOM and localStorage; when effective privacy always enforce dark
   useEffect(() => {

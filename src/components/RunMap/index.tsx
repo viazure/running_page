@@ -72,7 +72,7 @@ const RunMap = ({
   const mapRef = useRef<MapRef>(null);
   const [lights, setLights] = useState(PRIVACY_MODE ? false : LIGHTS_ON);
   // When privacy unlocked, show map (lights on) and allow toggle; otherwise respect PRIVACY_MODE
-  const effectiveLights = (PRIVACY_MODE && !isUnlocked) ? false : lights;
+  const effectiveLights = PRIVACY_MODE && !isUnlocked ? false : lights;
 
   useEffect(() => {
     if (isUnlocked) setLights(true);

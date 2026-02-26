@@ -26,14 +26,18 @@ export function usePrivacyUnlock(): boolean {
 /** Normalize key for sequence match: Arrow keys as-is, letters lowercase */
 function normalizeKey(e: KeyboardEvent): string | null {
   const k = e.key;
-  if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight') return k;
+  if (
+    k === 'ArrowUp' ||
+    k === 'ArrowDown' ||
+    k === 'ArrowLeft' ||
+    k === 'ArrowRight'
+  )
+    return k;
   if (k.length === 1 && /^[a-zA-Z]$/.test(k)) return k.toLowerCase();
   return null;
 }
 
-export function PrivacyUnlockProvider({
-  children,
-}: React.PropsWithChildren) {
+export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
   const [isUnlocked, setUnlocked] = useState(getStored);
   const bufferRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,7 +73,10 @@ export function PrivacyUnlockProvider({
       }
 
       bufferRef.current = [...bufferRef.current, key].slice(-len);
-      if (bufferRef.current.length === len && bufferRef.current.every((v, i) => v === sequence[i])) {
+      if (
+        bufferRef.current.length === len &&
+        bufferRef.current.every((v, i) => v === sequence[i])
+      ) {
         resetBuffer();
         persist(!getStored());
       } else {

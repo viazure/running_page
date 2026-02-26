@@ -408,7 +408,7 @@ const ActivityList: React.FC = () => {
     setSportTypeOptions(uniqueSportTypes);
   }, []);
 
-  // 添加useEffect监听interval变化
+  // 添加 useEffect 监听 interval 变化
   useEffect(() => {
     if (interval === 'life' && sportType !== 'all') {
       setSportType('all');

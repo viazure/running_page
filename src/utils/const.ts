@@ -46,9 +46,18 @@ const ROAD_LABEL_DISPLAY = true;
 const PRIVACY_MODE = true;
 // Hidden unlock: when PRIVACY_MODE is true, press this key sequence anywhere to toggle map (Contra 30 lives: ↑↑↓↓←→←→BA). Empty array = feature disabled.
 const PRIVACY_UNLOCK_SEQUENCE: string[] = [
-  'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
-  'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
-  'b', 'a', 'b', 'a',
+  'ArrowUp',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowRight',
+  'b',
+  'a',
+  'b',
+  'a',
 ];
 // updated on 2024/11/17: lights are turned off by default
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
