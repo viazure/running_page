@@ -90,6 +90,10 @@ jobs:
             ${{ env.DATA_CACHE_PREFIX }}-${{ github.sha }}-
             ${{ env.DATA_CACHE_PREFIX }}-
 
+      - name: Restore assets/index.tsx from repo
+        if: env.SAVE_DATA_IN_GITHUB_CACHE == 'true'
+        run: git checkout HEAD -- assets/index.tsx
+
       - name: Run sync Nike script
         if: env.RUN_TYPE == 'nike'
         run: |
