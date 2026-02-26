@@ -17,10 +17,15 @@ function getStored(): boolean {
 
 const PrivacyUnlockContext = createContext<{
   isUnlocked: boolean;
-}>({ isUnlocked: false });
+  toggleUnlock: () => void;
+}>({ isUnlocked: false, toggleUnlock: () => {} });
 
 export function usePrivacyUnlock(): boolean {
   return useContext(PrivacyUnlockContext).isUnlocked;
+}
+
+export function usePrivacyUnlockToggle(): () => void {
+  return useContext(PrivacyUnlockContext).toggleUnlock;
 }
 
 /** Normalize key for sequence match: Arrow keys as-is, letters lowercase */
@@ -91,9 +96,17 @@ export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
     };
   }, [persist]);
 
+  const toggleUnlock = useCallback(() => {
+    if (!PRIVACY_MODE) return;
+    persist(!getStored());
+  }, [persist]);
+
   const value = React.useMemo(
-    () => ({ isUnlocked: PRIVACY_MODE ? isUnlocked : false }),
-    [isUnlocked]
+    () => ({
+      isUnlocked: PRIVACY_MODE ? isUnlocked : false,
+      toggleUnlock,
+    }),
+    [isUnlocked, toggleUnlock]
   );
 
   return (

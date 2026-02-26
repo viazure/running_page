@@ -1,16 +1,48 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import useSiteMetadata from '@/hooks/useSiteMetadata';
 import { useTheme, Theme } from '@/hooks/useTheme';
-import { PRIVACY_MODE } from '@/utils/const';
-import { usePrivacyUnlock } from '@/contexts/PrivacyUnlockContext';
+import { PRIVACY_MODE, PRIVACY_UNLOCK_SEQUENCE } from '@/utils/const';
+import {
+  usePrivacyUnlock,
+  usePrivacyUnlockToggle,
+} from '@/contexts/PrivacyUnlockContext';
 import styles from './style.module.css';
+
+const LOGO_TAP_TARGET = 7;
+const LOGO_TAP_RESET_MS = 2000;
 
 const Header = () => {
   const { logo, siteUrl, navLinks } = useSiteMetadata();
   const { setTheme } = useTheme();
   const isUnlocked = usePrivacyUnlock();
+  const toggleUnlock = usePrivacyUnlockToggle();
   const [currentIconIndex, setCurrentIconIndex] = useState(0);
+  const logoTapCount = useRef(0);
+  const logoTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLogoTap = useCallback(
+    (e: React.MouseEvent) => {
+      if (!PRIVACY_MODE || !PRIVACY_UNLOCK_SEQUENCE.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (logoTapTimeout.current) {
+        clearTimeout(logoTapTimeout.current);
+        logoTapTimeout.current = null;
+      }
+      logoTapCount.current += 1;
+      if (logoTapCount.current >= LOGO_TAP_TARGET) {
+        logoTapCount.current = 0;
+        toggleUnlock();
+      } else {
+        logoTapTimeout.current = setTimeout(() => {
+          logoTapCount.current = 0;
+          logoTapTimeout.current = null;
+        }, LOGO_TAP_RESET_MS);
+      }
+    },
+    [toggleUnlock]
+  );
 
   const icons = [
     {
@@ -67,7 +99,14 @@ const Header = () => {
     <>
       <nav className="mx-auto mt-12 flex w-full min-w-max max-w-screen-2xl items-center justify-between pl-6 lg:px-16">
         <div className="w-1/4">
-          <Link to={siteUrl}>
+          <Link
+            to={siteUrl}
+            onClick={
+              PRIVACY_MODE && PRIVACY_UNLOCK_SEQUENCE.length
+                ? handleLogoTap
+                : undefined
+            }
+          >
             <picture>
               <img className="h-16 w-16 rounded-full" alt="logo" src={logo} />
             </picture>
