@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MAP_TILE_STYLE_LIGHT, MAP_TILE_STYLE_DARK } from '@/utils/const';
+import {
+  MAP_TILE_STYLE_LIGHT,
+  MAP_TILE_STYLE_DARK,
+  PRIVACY_MODE,
+} from '@/utils/const';
+import { usePrivacyUnlock } from '@/contexts/PrivacyUnlockContext';
 
 export type Theme = 'light' | 'dark';
 
@@ -122,36 +127,48 @@ export const useMapTheme = () => {
  * @returns Object with current theme and function to change theme
  */
 export const useTheme = () => {
-  // Initialize theme from localStorage or default to dark
+  const isUnlocked = usePrivacyUnlock();
+  // When privacy mode and not unlocked, force dark; otherwise from localStorage
+  const effectivePrivacy = PRIVACY_MODE && !isUnlocked;
+
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark';
+    if (effectivePrivacy) return 'dark';
     return (localStorage.getItem('theme') as Theme) || 'dark';
   });
 
   /**
-   * Set theme and dispatch event to notify other components
+   * Set theme and dispatch event to notify other components.
+   * No-op when privacy is effective (theme forced to dark).
    */
   const setTheme = useCallback((newTheme: Theme) => {
+    if (effectivePrivacy) return;
     setThemeState(newTheme);
-
-    // Dispatch custom event for theme change
     const event = new CustomEvent(THEME_CHANGE_EVENT, {
       detail: { theme: newTheme },
     });
     window.dispatchEvent(event);
-  }, []);
+  }, [effectivePrivacy]);
 
-  // Apply theme changes to DOM and localStorage
+  // Apply theme changes to DOM and localStorage; when effective privacy always enforce dark
   useEffect(() => {
     const root = window.document.documentElement;
+    const effectiveTheme = effectivePrivacy ? 'dark' : theme;
+    root.setAttribute('data-theme', effectiveTheme);
+    localStorage.setItem('theme', effectiveTheme);
+    if (effectivePrivacy && theme !== 'dark') setThemeState('dark');
+  }, [theme, effectivePrivacy]);
 
-    // Set attribute and save to localStorage for both themes
-    root.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+  // When user unlocks, restore theme from localStorage
+  useEffect(() => {
+    if (!effectivePrivacy && typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme') as Theme | null;
+      if (saved === 'dark' || saved === 'light') setThemeState(saved);
+    }
+  }, [effectivePrivacy]);
 
   return {
-    theme,
+    theme: effectivePrivacy ? 'dark' : theme,
     setTheme,
   };
 };

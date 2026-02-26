@@ -46,6 +46,7 @@ import { RPGeometry } from '@/static/run_countries';
 import './mapbox.css';
 import LightsControl from '@/components/RunMap/LightsControl';
 import { useMapTheme, useThemeChangeCounter } from '@/hooks/useTheme';
+import { usePrivacyUnlock } from '@/contexts/PrivacyUnlockContext';
 
 interface IRunMapProps {
   title: string;
@@ -67,8 +68,16 @@ const RunMap = ({
   animationTrigger,
 }: IRunMapProps) => {
   const { countries, provinces } = useActivities();
+  const isUnlocked = usePrivacyUnlock();
   const mapRef = useRef<MapRef>(null);
   const [lights, setLights] = useState(PRIVACY_MODE ? false : LIGHTS_ON);
+  // When privacy unlocked, show map (lights on) and allow toggle; otherwise respect PRIVACY_MODE
+  const effectiveLights = (PRIVACY_MODE && !isUnlocked) ? false : lights;
+
+  useEffect(() => {
+    if (isUnlocked) setLights(true);
+  }, [isUnlocked]);
+
   // layers that should remain visible when lights are off
   const keepWhenLightsOff = ['runs2', 'animated-run'];
   const [mapGeoData, setMapGeoData] =
@@ -125,7 +134,7 @@ const RunMap = ({
             map.setPitch(currentPitch);
 
             // Reapply layer visibility settings with current lights state
-            switchLayerVisibility(map, lights);
+            switchLayerVisibility(map, effectiveLights);
           } catch (error) {
             console.warn('Error applying map style changes:', error);
           }
@@ -135,7 +144,7 @@ const RunMap = ({
       // Use once to automatically remove the listener after it fires
       map.once('style.load', handleStyleLoad);
     }
-  }, [mapStyle, lights]); // Include lights to ensure layer visibility updates correctly when theme changes
+  }, [mapStyle, effectiveLights]); // Include effectiveLights so layer visibility updates correctly when theme changes
 
   useEffect(() => {
     if (mapRef.current) {
@@ -228,19 +237,20 @@ const RunMap = ({
       // Add a small delay to ensure map is ready
       setTimeout(() => {
         try {
-          switchLayerVisibility(map, lights);
+          switchLayerVisibility(map, effectiveLights);
         } catch (error) {
           console.warn('Error switching layer visibility:', error);
         }
       }, 50);
     }
-  }, [lights]);
+  }, [effectiveLights]);
 
   const mapRefCallback = useCallback(
     (ref: MapRef) => {
       if (ref !== null) {
         const map = ref.getMap();
-        if (map && IS_CHINESE) {
+        // MapboxLanguage 仅支持 Mapbox 矢量 v8 样式；使用 mapcn 等时不要添加，否则报错
+        if (map && IS_CHINESE && (MAP_TILE_VENDOR as string) === 'mapbox') {
           map.addControl(new MapboxLanguage({ defaultLanguage: 'zh-Hans' }));
         }
         // all style resources have been downloaded
@@ -265,15 +275,15 @@ const RunMap = ({
             });
           }
           mapRef.current = ref;
-          switchLayerVisibility(map, lights);
+          switchLayerVisibility(map, effectiveLights);
         });
       }
       if (mapRef.current) {
         const map = mapRef.current.getMap();
-        switchLayerVisibility(map, lights);
+        switchLayerVisibility(map, effectiveLights);
       }
     },
-    [mapRef, lights]
+    [mapRef, effectiveLights]
   );
 
   const initGeoDataLength = geoData.features.length;
@@ -468,10 +478,10 @@ const RunMap = ({
           type="line"
           paint={{
             'line-color': ['get', 'color'],
-            'line-width': isBigMap && lights ? 1 : 2,
+            'line-width': isBigMap && effectiveLights ? 1 : 2,
             'line-dasharray': dash,
             'line-opacity':
-              isSingleRun || isBigMap || !lights ? 1 : LINE_OPACITY,
+              isSingleRun || isBigMap || !effectiveLights ? 1 : LINE_OPACITY,
             'line-blur': 1,
           }}
           layout={{
@@ -523,7 +533,9 @@ const RunMap = ({
       )}
       <span className={styles.runTitle}>{title}</span>
       <FullscreenControl style={fullscreenButton} />
-      {!PRIVACY_MODE && <LightsControl setLights={setLights} lights={lights} />}
+      {(!PRIVACY_MODE || isUnlocked) && (
+        <LightsControl setLights={setLights} lights={lights} />
+      )}
       <NavigationControl
         showCompass={false}
         position={'bottom-right'}

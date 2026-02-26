@@ -2,11 +2,14 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import useSiteMetadata from '@/hooks/useSiteMetadata';
 import { useTheme, Theme } from '@/hooks/useTheme';
+import { PRIVACY_MODE } from '@/utils/const';
+import { usePrivacyUnlock } from '@/contexts/PrivacyUnlockContext';
 import styles from './style.module.css';
 
 const Header = () => {
   const { logo, siteUrl, navLinks } = useSiteMetadata();
   const { setTheme } = useTheme();
+  const isUnlocked = usePrivacyUnlock();
   const [currentIconIndex, setCurrentIconIndex] = useState(0);
 
   const icons = [
@@ -80,17 +83,19 @@ const Header = () => {
               {n.name}
             </a>
           ))}
-          <div className="ml-4 flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={handleToggle}
-              className={`${styles.themeButton} ${styles.themeButtonActive}`}
-              aria-label={`Switch to ${currentIcon.id} theme`}
-              title={`Switch to ${currentIcon.id} theme`}
-            >
-              <div className={styles.iconWrapper}>{currentIcon.svg}</div>
-            </button>
-          </div>
+          {(!PRIVACY_MODE || isUnlocked) && (
+            <div className="ml-4 flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handleToggle}
+                className={`${styles.themeButton} ${styles.themeButtonActive}`}
+                aria-label={`Switch to ${currentIcon.id} theme`}
+                title={`Switch to ${currentIcon.id} theme`}
+              >
+                <div className={styles.iconWrapper}>{currentIcon.svg}</div>
+              </button>
+            </div>
+          )}
         </div>
       </nav>
     </>

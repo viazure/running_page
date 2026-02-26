@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
+import { PrivacyUnlockProvider } from '@/contexts/PrivacyUnlockContext';
 import Index from './pages';
 import NotFound from './pages/404';
 import ReactGA from 'react-ga4';
@@ -38,7 +39,9 @@ const routes = createBrowserRouter(
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HelmetProvider>
-      <RouterProvider router={routes} />
+      <PrivacyUnlockProvider>
+        <RouterProvider router={routes} />
+      </PrivacyUnlockProvider>
     </HelmetProvider>
   </React.StrictMode>
 );

@@ -1,9 +1,11 @@
 // Constants
+// Mapbox token: 从环境变量 VITE_MAPBOX_TOKEN 读取（避免密钥被 GitHub 检测并拒绝推送）
+// 本地在项目根目录建 .env 文件，内容：VITE_MAPBOX_TOKEN=pk.xxx
+// 部署时在 Vercel/Netlify 等配置同名环境变量
 const MAPBOX_TOKEN =
-  // For security reasons, please avoid using the default public token provided by Mapbox as much as possible.
-  // Instead, manually add a new token and apply URL restrictions.
-  // (please refer to https://github.com/yihong0618/running_page/issues/643#issuecomment-2042668580)
-  'pk.eyJ1IjoieWlob25nMDYxOCIsImEiOiJjbWYxdXR4YncwMTJtMm5zOTE4eTZpMGdtIn0.OnsXdwkZFztR8a5Ph_T-xg';
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_MAPBOX_TOKEN
+    ? import.meta.env.VITE_MAPBOX_TOKEN
+    : '';
 const MUNICIPALITY_CITIES_ARR = [
   '北京市',
   '上海市',
@@ -41,12 +43,18 @@ const MAP_HEIGHT = window.innerWidth <= 768 ? 250 : 600;
 const ROAD_LABEL_DISPLAY = true;
 // updated on 2024/11/17: privacy mode is set to true by default
 //set to `true` if you want to display only the routes without showing the map.
-const PRIVACY_MODE = false;
+const PRIVACY_MODE = true;
+// Hidden unlock: when PRIVACY_MODE is true, press this key sequence anywhere to toggle map (Contra 30 lives: ↑↑↓↓←→←→BA). Empty array = feature disabled.
+const PRIVACY_UNLOCK_SEQUENCE: string[] = [
+  'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+  'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
+  'b', 'a', 'b', 'a',
+];
 // updated on 2024/11/17: lights are turned off by default
 //set to `false` if you want to make light off as default, only effect when `PRIVACY_MODE` = false
 const LIGHTS_ON = false;
 //set to `true` if you want to show the 'Elevation Gain' column
-const SHOW_ELEVATION_GAIN = false;
+const SHOW_ELEVATION_GAIN = true;
 // richer title for the activity types (like garmin style)
 const RICH_TITLE = false;
 
@@ -62,8 +70,8 @@ const ENGLISH_INFO_MESSAGE = (yearLength: number, year: string): string =>
 
 // English is not supported for location info messages yet
 const CHINESE_LOCATION_INFO_MESSAGE_FIRST =
-  '跑过了一些地方，希望随着时间推移，点亮的地方越来越多';
-const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '不要停下来，不要停下奔跑的脚步';
+  '世界上想不明白的事情那么多，想到就能做的事情太少了。';
+const CHINESE_LOCATION_INFO_MESSAGE_SECOND = '';
 
 const INFO_MESSAGE = IS_CHINESE ? CHINESE_INFO_MESSAGE : ENGLISH_INFO_MESSAGE;
 const FULL_MARATHON_RUN_TITLE = IS_CHINESE ? '全程马拉松' : 'Full Marathon';
@@ -159,6 +167,7 @@ export {
   LINE_OPACITY,
   MAP_HEIGHT,
   PRIVACY_MODE,
+  PRIVACY_UNLOCK_SEQUENCE,
   LIGHTS_ON,
   SHOW_ELEVATION_GAIN,
   RICH_TITLE,
