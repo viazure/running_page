@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -24,6 +24,7 @@ export function TrendChart({
   className = '',
 }: TrendChartProps) {
   const { t, locale } = useLocale();
+  const gradientId = useId().replace(/:/g, '');
 
   const data = useMemo(() => {
     const buckets = Array.from({ length: 12 }, (_, month) => {
@@ -63,11 +64,24 @@ export function TrendChart({
       {/* Explicit height so ResponsiveContainer works (%, min-h alone is not enough) */}
       <div className="h-[200px] min-h-0 w-full flex-1">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart
+          <AreaChart
             data={data}
             margin={{ top: 8, right: 4, left: -18, bottom: 0 }}
-            barCategoryGap="18%"
           >
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="0%"
+                  stopColor="var(--color-accent)"
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="100%"
+                  stopColor="var(--color-accent)"
+                  stopOpacity={0.02}
+                />
+              </linearGradient>
+            </defs>
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="var(--color-border)"
@@ -89,7 +103,11 @@ export function TrendChart({
               allowDecimals={false}
             />
             <Tooltip
-              cursor={{ fill: 'var(--color-accent)', fillOpacity: 0.08 }}
+              cursor={{
+                stroke: 'var(--color-accent)',
+                strokeWidth: 1,
+                strokeOpacity: 0.35,
+              }}
               wrapperStyle={{ outline: 'none' }}
               contentStyle={{
                 backgroundColor: 'var(--color-card)',
@@ -110,13 +128,19 @@ export function TrendChart({
                 ];
               }}
             />
-            <Bar
+            <Area
+              type="monotone"
               dataKey="distance"
-              fill="var(--color-accent)"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={28}
+              stroke="var(--color-accent)"
+              strokeWidth={2}
+              fill={`url(#${gradientId})`}
+              activeDot={{
+                r: 4,
+                strokeWidth: 0,
+                fill: 'var(--color-accent)',
+              }}
             />
-          </BarChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

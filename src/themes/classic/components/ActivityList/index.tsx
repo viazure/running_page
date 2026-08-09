@@ -13,10 +13,16 @@ import styles from './style.module.css';
 import { ACTIVITY_TOTAL, LOADING_TEXT } from '../../utils/const';
 import { totalStat, yearSummaryStats } from '@assets/index';
 import { loadSvgComponent } from '../../utils/svgUtils';
-import { SHOW_ELEVATION_GAIN, HOME_PAGE_TITLE } from '../../utils/const';
+import {
+  SHOW_ELEVATION_GAIN,
+  HOME_PAGE_TITLE,
+  IS_CHINESE,
+} from '../../utils/const';
 import { DIST_UNIT, M_TO_DIST } from '../../utils/utils';
 import type { Activity } from '../../utils/utils';
 import useActivities from '../../hooks/useActivities';
+import { useLocale } from '@/hooks/useLocale';
+import ActivityChart from './ActivityChart';
 // Layout constants (avoid magic numbers)
 const ITEM_WIDTH = 280;
 const ITEM_GAP = 20;
@@ -30,12 +36,16 @@ const VIRTUAL_LIST_STYLES = {
   horizontalScrollBar: {},
   horizontalScrollBarThumb: {
     background:
-      'var(--color-summary-accent, var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4))))',
+      'var(--color-summary-scrollbar, color-mix(in srgb, var(--color-summary-fg, #000) 22%, transparent))',
   },
-  verticalScrollBar: {},
+  verticalScrollBar: {
+    width: 6,
+    right: 2,
+  },
   verticalScrollBarThumb: {
     background:
-      'var(--color-summary-accent, var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4))))',
+      'var(--color-summary-scrollbar, color-mix(in srgb, var(--color-summary-fg, #000) 22%, transparent))',
+    borderRadius: 999,
   },
 };
 
@@ -70,10 +80,6 @@ const getInitialListHeight = () =>
 
 const loadRoutePreview = () => import('../RoutePreview');
 const RoutePreview = lazy(loadRoutePreview);
-const loadActivityChart = () => import('./ActivityChart');
-const ActivityChart = lazy(loadActivityChart);
-
-void loadActivityChart();
 
 const MonthOfLifeSvg = (sportType: string) => {
   const path = sportType === 'all' ? './mol.svg' : `./mol_${sportType}.svg`;
@@ -132,6 +138,7 @@ interface ActivityCardProps {
   dailyDistances: number[];
   interval: string;
   activities?: Activity[]; // Add activities for day interval
+  cardWidth?: number;
 }
 
 interface ActivityGroups {
@@ -418,6 +425,10 @@ function useActivityListMeasurements(itemWidth: number, gap: number) {
   const layoutFrameRef = useRef<number | null>(null);
 
   const itemsPerRowStore = useMemo(() => createSnapshotStore(0), []);
+  const cardWidthStore = useMemo(
+    () => createSnapshotStore(itemWidth),
+    [itemWidth]
+  );
   const rowHeightStore = useMemo(() => createSnapshotStore(360), []);
   const listHeightStore = useMemo(
     () => createSnapshotStore(getInitialListHeight()),
@@ -428,6 +439,11 @@ function useActivityListMeasurements(itemWidth: number, gap: number) {
     itemsPerRowStore.subscribe,
     itemsPerRowStore.getSnapshot,
     itemsPerRowStore.getServerSnapshot
+  );
+  const cardWidth = useSyncExternalStore(
+    cardWidthStore.subscribe,
+    cardWidthStore.getSnapshot,
+    cardWidthStore.getServerSnapshot
   );
   const rowHeight = useSyncExternalStore(
     rowHeightStore.subscribe,
@@ -444,40 +460,39 @@ function useActivityListMeasurements(itemWidth: number, gap: number) {
     const container = containerRef.current;
     if (!container) return;
     const containerWidth = container.clientWidth;
-    const count = Math.floor((containerWidth + gap) / (itemWidth + gap));
+    const isMobile = containerWidth <= 640;
+    let count: number;
+    if (isMobile) {
+      // Two columns when there's room (~300px+); otherwise one
+      count = containerWidth >= 300 ? 2 : 1;
+    } else {
+      count = Math.max(
+        1,
+        Math.floor((containerWidth + gap) / (itemWidth + gap))
+      );
+    }
+    const width = Math.floor(
+      (containerWidth - gap * Math.max(0, count - 1)) / count
+    );
     itemsPerRowStore.setSnapshot(count);
-  }, [gap, itemWidth, itemsPerRowStore]);
+    cardWidthStore.setSnapshot(isMobile ? width : itemWidth);
+  }, [gap, itemWidth, itemsPerRowStore, cardWidthStore]);
 
   const updateListHeight = useCallback(() => {
-    const filterH = filterRef.current?.clientHeight || 0;
     const containerEl = containerRef.current;
-    let topOffset = 0;
     if (containerEl) {
-      const rect = containerEl.getBoundingClientRect();
-      topOffset = Math.max(0, rect.top);
-    }
-
-    const base = topOffset || filterH || 0;
-    let bottomPadding = 16;
-    if (containerEl?.parentElement) {
-      try {
-        const parentRect = containerEl.parentElement.getBoundingClientRect();
-        const containerRect = containerEl.getBoundingClientRect();
-        const distanceToParentBottom = Math.max(
-          0,
-          parentRect.bottom - containerRect.bottom
-        );
-        bottomPadding = Math.min(
-          48,
-          Math.max(8, Math.round(distanceToParentBottom / 4))
-        );
-      } catch (e) {
-        console.error(e);
+      const h = containerEl.clientHeight;
+      if (h > 0) {
+        listHeightStore.setSnapshot(Math.max(120, Math.floor(h)));
+        return;
       }
     }
 
+    const topOffset = containerEl
+      ? Math.max(0, containerEl.getBoundingClientRect().top)
+      : filterRef.current?.clientHeight || 0;
     listHeightStore.setSnapshot(
-      Math.max(100, window.innerHeight - base - bottomPadding)
+      Math.max(120, Math.floor(window.innerHeight - topOffset - 8))
     );
   }, [listHeightStore]);
 
@@ -593,6 +608,7 @@ function useActivityListMeasurements(itemWidth: number, gap: number) {
 
   return {
     itemsPerRow,
+    cardWidth,
     listHeight,
     rowHeight,
     setFilterContainerRef,
@@ -607,6 +623,7 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
   dailyDistances,
   interval,
   activities = [],
+  cardWidth,
 }) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const showChart = ['month', 'week', 'year'].includes(interval);
@@ -624,21 +641,15 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
     }));
   }, [dailyDistances, interval, period, showChart]);
 
-  const { yAxisMax, yAxisTicks } = useMemo(() => {
-    if (!showChart) {
-      return { yAxisMax: 0, yAxisTicks: [] };
-    }
-    const max = Math.ceil(
-      Math.max(...data.map((d) => parseFloat(d.distance))) + 10
+  const yAxisMax = useMemo(() => {
+    if (!showChart) return 0;
+    return Math.ceil(
+      Math.max(...data.map((d) => parseFloat(d.distance)), 0) + 10
     );
-    return {
-      yAxisMax: max,
-      yAxisTicks: Array.from(
-        { length: Math.ceil(max / 5) + 1 },
-        (_, i) => i * 5
-      ),
-    };
   }, [data, showChart]);
+
+  const avgDistance =
+    summary.count > 0 ? summary.totalDistance / summary.count : 0;
 
   return (
     <div
@@ -647,74 +658,93 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
       style={{
         cursor:
           interval === 'day' && activities.length > 0 ? 'pointer' : 'default',
+        ...(cardWidth ? { width: cardWidth } : null),
       }}
     >
       <div className={`${styles.cardInner} ${isFlipped ? styles.flipped : ''}`}>
-        {/* Front side - Activity details */}
         <div className={styles.cardFront}>
           <h2 className={styles.activityName}>{period}</h2>
-          <div className={styles.activityDetails}>
-            <p>
-              <strong>{ACTIVITY_TOTAL.TOTAL_DISTANCE_TITLE}:</strong>{' '}
-              {summary.totalDistance.toFixed(2)} {DIST_UNIT}
-            </p>
+          <p className={styles.statHero}>
+            {summary.totalDistance.toFixed(2)}
+            <span className={styles.statHeroUnit}> {DIST_UNIT}</span>
+          </p>
+          <p className={styles.statMeta}>
+            {formatTime(summary.totalTime)}
+            {interval !== 'day' && (
+              <>
+                <span className={styles.statMetaSep}>·</span>
+                {summary.count} {IS_CHINESE ? '次' : 'acts'}
+              </>
+            )}
+          </p>
+
+          <div className={styles.statGrid}>
+            <div className={styles.statCell}>
+              <span className={styles.statLabel}>
+                {ACTIVITY_TOTAL.AVERAGE_SPEED_TITLE}
+              </span>
+              <span className={styles.statValue}>
+                {formatPace(summary.averageSpeed)}
+              </span>
+            </div>
             {SHOW_ELEVATION_GAIN &&
               summary.totalElevationGain !== undefined && (
-                <p>
-                  <strong>{ACTIVITY_TOTAL.TOTAL_ELEVATION_GAIN_TITLE}:</strong>{' '}
-                  {summary.totalElevationGain.toFixed(0)} m
-                </p>
+                <div className={styles.statCell}>
+                  <span className={styles.statLabel}>
+                    {ACTIVITY_TOTAL.TOTAL_ELEVATION_GAIN_TITLE}
+                  </span>
+                  <span className={styles.statValue}>
+                    {summary.totalElevationGain.toFixed(0)} m
+                  </span>
+                </div>
               )}
-            <p>
-              <strong>{ACTIVITY_TOTAL.AVERAGE_SPEED_TITLE}:</strong>{' '}
-              {formatPace(summary.averageSpeed)}
-            </p>
-            <p>
-              <strong>{ACTIVITY_TOTAL.TOTAL_TIME_TITLE}:</strong>{' '}
-              {formatTime(summary.totalTime)}
-            </p>
             {summary.averageHeartRate !== undefined && (
-              <p>
-                <strong>{ACTIVITY_TOTAL.AVERAGE_HEART_RATE_TITLE}:</strong>{' '}
-                {summary.averageHeartRate.toFixed(0)} bpm
-              </p>
+              <div className={styles.statCell}>
+                <span className={styles.statLabel}>
+                  {ACTIVITY_TOTAL.AVERAGE_HEART_RATE_TITLE}
+                </span>
+                <span className={styles.statValue}>
+                  {summary.averageHeartRate.toFixed(0)} bpm
+                </span>
+              </div>
             )}
             {interval !== 'day' && (
               <>
-                <p>
-                  <strong>{ACTIVITY_TOTAL.ACTIVITY_COUNT_TITLE}:</strong>{' '}
-                  {summary.count}
-                </p>
-                <p>
-                  <strong>{ACTIVITY_TOTAL.MAX_DISTANCE_TITLE}:</strong>{' '}
-                  {summary.maxDistance.toFixed(2)} {DIST_UNIT}
-                </p>
-                <p>
-                  <strong>{ACTIVITY_TOTAL.MAX_SPEED_TITLE}:</strong>{' '}
-                  {formatPace(summary.maxSpeed)}
-                </p>
-                <p>
-                  <strong>{ACTIVITY_TOTAL.AVERAGE_DISTANCE_TITLE}:</strong>{' '}
-                  {(summary.totalDistance / summary.count).toFixed(2)}{' '}
-                  {DIST_UNIT}
-                </p>
+                <div className={styles.statCell}>
+                  <span className={styles.statLabel}>
+                    {ACTIVITY_TOTAL.MAX_DISTANCE_TITLE}
+                  </span>
+                  <span className={styles.statValue}>
+                    {summary.maxDistance.toFixed(2)} {DIST_UNIT}
+                  </span>
+                </div>
+                <div className={styles.statCell}>
+                  <span className={styles.statLabel}>
+                    {ACTIVITY_TOTAL.MAX_SPEED_TITLE}
+                  </span>
+                  <span className={styles.statValue}>
+                    {formatPace(summary.maxSpeed)}
+                  </span>
+                </div>
+                <div className={styles.statCell}>
+                  <span className={styles.statLabel}>
+                    {ACTIVITY_TOTAL.AVERAGE_DISTANCE_TITLE}
+                  </span>
+                  <span className={styles.statValue}>
+                    {avgDistance.toFixed(2)} {DIST_UNIT}
+                  </span>
+                </div>
               </>
             )}
-            {showChart && (
-              <div className={styles.chart}>
-                <Suspense fallback={null}>
-                  <ActivityChart
-                    data={data}
-                    yAxisMax={yAxisMax}
-                    yAxisTicks={yAxisTicks}
-                  />
-                </Suspense>
-              </div>
-            )}
           </div>
+
+          {showChart && (
+            <div className={styles.chart}>
+              <ActivityChart data={data} yAxisMax={yAxisMax} />
+            </div>
+          )}
         </div>
 
-        {/* Back side - Route preview */}
         {interval === 'day' && activities.length > 0 && (
           <div className={styles.cardBack}>
             <div className={styles.routeContainer}>
@@ -736,6 +766,7 @@ const activityCardAreEqual = (
 ) => {
   if (prev.period !== next.period) return false;
   if (prev.interval !== next.interval) return false;
+  if (prev.cardWidth !== next.cardWidth) return false;
   const s1 = prev.summary;
   const s2 = next.summary;
   if (
@@ -766,6 +797,7 @@ const ActivityCard = React.memo(ActivityCardInner, activityCardAreEqual);
 
 const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
   const { activities: activityData } = useActivities();
+  const { t, locale } = useLocale();
   const [interval, setInterval] = useState<IntervalType>('month');
   const [sportType, setSportType] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
@@ -846,6 +878,7 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
 
   const {
     itemsPerRow,
+    cardWidth,
     listHeight,
     rowHeight,
     setFilterContainerRef,
@@ -898,53 +931,102 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
   const rowWidth =
     itemsPerRow < 1
       ? '100%'
-      : `${itemsPerRow * ITEM_WIDTH + Math.max(0, itemsPerRow - 1) * ITEM_GAP}px`;
+      : `${itemsPerRow * cardWidth + Math.max(0, itemsPerRow - 1) * ITEM_GAP}px`;
 
   const loading = itemsPerRow < 1 || !rowHeight;
   const SelectedYearSvg = selectedYear
     ? yearSummarySvgs[`./year_summary_${selectedYear}.svg`]
     : null;
 
+  const dataFilter =
+    sportType === 'running' || sportType === 'Run'
+      ? 'Run'
+      : sportType === 'cycling' || sportType === 'Ride'
+        ? 'Ride'
+        : 'all';
+
+  const intervalOptions: { value: IntervalType; label: string }[] = [
+    { value: 'year', label: ACTIVITY_TOTAL.YEARLY_TITLE },
+    { value: 'month', label: ACTIVITY_TOTAL.MONTHLY_TITLE },
+    { value: 'week', label: ACTIVITY_TOTAL.WEEKLY_TITLE },
+    { value: 'day', label: ACTIVITY_TOTAL.DAILY_TITLE },
+    { value: 'life', label: 'Life' },
+  ];
+
+  const sportLabel = (type: string) => {
+    if (type === 'all') return locale === 'zh' ? '全部' : 'All';
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  };
+
   return (
-    <div className={styles.activityList}>
-      <div className={styles.filterContainer} ref={setFilterContainerRef}>
-        <button className={styles.smallHomeButton} onClick={handleHomeClick}>
-          {HOME_PAGE_TITLE}
-        </button>
-        <select
-          onChange={(e) => setSportType(e.target.value)}
-          value={sportType}
-        >
-          {sportTypeOptions.map((type) => (
-            <option
-              key={type}
-              value={type}
-              disabled={interval === 'life' && type !== 'all'}
+    <div className={styles.activityList} data-filter={dataFilter}>
+      {onBack && (
+        <div className={styles.pageTopBar}>
+          <button type="button" onClick={onBack} className={styles.backButton}>
+            <svg
+              className={styles.backIcon}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              {type}
-            </option>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            {t('back')}
+          </button>
+          <h1 className={styles.pageTitle}>{t('summary')}</h1>
+        </div>
+      )}
+
+      <div className={styles.filterContainer} ref={setFilterContainerRef}>
+        {!onBack && (
+          <button className={styles.smallHomeButton} onClick={handleHomeClick}>
+            {HOME_PAGE_TITLE}
+          </button>
+        )}
+        <div className={styles.chipRow}>
+          {sportTypeOptions.map((type) => {
+            const disabled = interval === 'life' && type !== 'all';
+            const active = sportType === type;
+            return (
+              <button
+                key={type}
+                type="button"
+                disabled={disabled}
+                className={`${styles.filterChip} ${active ? styles.filterChipActive : ''}`}
+                onClick={() => !disabled && setSportType(type)}
+              >
+                {sportLabel(type)}
+              </button>
+            );
+          })}
+        </div>
+        <div className={styles.chipRow}>
+          {intervalOptions.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={`${styles.filterChip} ${interval === value ? styles.filterChipActive : ''}`}
+              onClick={() => toggleInterval(value)}
+            >
+              {label}
+            </button>
           ))}
-        </select>
-        <select
-          onChange={(e) => toggleInterval(e.target.value as IntervalType)}
-          value={interval}
-        >
-          <option value="year">{ACTIVITY_TOTAL.YEARLY_TITLE}</option>
-          <option value="month">{ACTIVITY_TOTAL.MONTHLY_TITLE}</option>
-          <option value="week">{ACTIVITY_TOTAL.WEEKLY_TITLE}</option>
-          <option value="day">{ACTIVITY_TOTAL.DAILY_TITLE}</option>
-          <option value="life">Life</option>
-        </select>
+        </div>
       </div>
 
       {interval === 'life' && (
         <div className={styles.lifeContainer}>
-          {/* Year selector buttons */}
           <div className={styles.yearSelector}>
             {availableYears.map((year) => (
               <button
                 key={year}
-                className={`${styles.yearButton} ${selectedYear === year ? styles.yearButtonActive : ''}`}
+                type="button"
+                className={`${styles.filterChip} ${selectedYear === year ? styles.filterChipActive : ''}`}
                 onClick={() =>
                   setSelectedYear(selectedYear === year ? null : year)
                 }
@@ -955,10 +1037,8 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
           </div>
           <Suspense fallback={<div>Loading SVG...</div>}>
             {SelectedYearSvg ? (
-              // Show Year Summary SVG when a year is selected
               <SelectedYearSvg className={styles.yearSummarySvg} />
             ) : (
-              // Show Life SVG when no year is selected
               <>
                 {(sportType === 'running' || sportType === 'Run') && (
                   <RunningSvg />
@@ -994,6 +1074,7 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
                 summary={toDisplaySummary(dataList[0].summary)}
                 dailyDistances={dataList[0].summary.dailyDistances}
                 interval={interval}
+                cardWidth={cardWidth}
                 activities={
                   interval === 'day'
                     ? dataList[0].summary.activities
@@ -1049,6 +1130,7 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
                             summary={toDisplaySummary(cardData.summary)}
                             dailyDistances={cardData.summary.dailyDistances}
                             interval={interval}
+                            cardWidth={cardWidth}
                             activities={
                               interval === 'day'
                                 ? cardData.summary.activities

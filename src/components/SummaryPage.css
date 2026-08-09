@@ -1,10 +1,14 @@
 /* Align classic ActivityList with dashboard / dashboard_pro tokens.
-   Light: run orange · Dark: accent purple (same as site filter=all). */
+   Accent follows nested data-filter from ActivityList sportType (all/Run/Ride). */
 
 .summary-page-root {
   --color-summary-fg: var(--color-text);
-  --color-summary-accent: var(--color-run);
-  --color-summary-accent-hover: color-mix(in srgb, var(--color-run) 82%, #000);
+  --color-summary-accent: var(--color-accent);
+  --color-summary-accent-hover: color-mix(
+    in srgb,
+    var(--color-accent) 82%,
+    #000
+  );
   --color-summary-on-accent: #ffffff;
   --color-summary-border: var(--color-border);
   --color-summary-chart-bg: color-mix(
@@ -13,11 +17,36 @@
     var(--color-card)
   );
   --color-summary-radius: 12px;
+  --color-summary-chip-radius: 9999px;
   --color-summary-card-shadow: none;
+  --color-summary-card-hover-border: color-mix(
+    in srgb,
+    var(--color-accent) 30%,
+    transparent
+  );
+  --color-summary-card-hover-bg: color-mix(
+    in srgb,
+    var(--color-accent) 5%,
+    var(--color-card)
+  );
+  --color-summary-card-lift: 2px;
+  --color-summary-chip-bg: var(--color-border);
+  --color-summary-chip-fg: var(--color-muted);
+  --color-summary-title-size: 1.125rem;
+  --color-summary-home-bg: color-mix(
+    in srgb,
+    var(--color-accent) 10%,
+    transparent
+  );
+  --color-summary-home-border: color-mix(
+    in srgb,
+    var(--color-accent) 40%,
+    transparent
+  );
 
-  --color-brand: var(--color-run);
-  --color-primary: var(--color-run);
-  --color-secondary: var(--color-run);
+  --color-brand: var(--color-accent);
+  --color-primary: var(--color-accent);
+  --color-secondary: var(--color-accent);
   --color-background: var(--color-bg);
   --color-tx: var(--color-text);
   --color-text-primary: var(--color-text);
@@ -25,12 +54,25 @@
   --color-run-table-thead: var(--color-muted);
   --color-run-row-hover-background: var(--color-card);
   --color-activity-card: var(--color-border);
-  --color-scrollbar-thumb: var(--color-run);
-  --color-scrollbar-thumb-hover: color-mix(in srgb, var(--color-run) 82%, #000);
+  --color-scrollbar-thumb: color-mix(
+    in srgb,
+    var(--color-text) 22%,
+    transparent
+  );
+  --color-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--color-text) 40%,
+    transparent
+  );
+  --color-summary-scrollbar: color-mix(
+    in srgb,
+    var(--color-text) 22%,
+    transparent
+  );
   --svg-color-inactive-cell: var(--color-border);
-  --svg-color-active-cell: var(--color-run);
+  --svg-color-active-cell: var(--color-accent);
   --svg-special-color: var(--color-run);
-  --svg-special-color2: var(--color-all);
+  --svg-special-color2: var(--color-accent);
 
   color: var(--color-text);
   background-color: var(--color-bg);
@@ -39,7 +81,6 @@
 }
 
 .dark .summary-page-root {
-  --color-summary-accent: var(--color-accent);
   --color-summary-accent-hover: color-mix(
     in srgb,
     var(--color-accent) 78%,
@@ -50,18 +91,21 @@
     var(--color-card) 88%,
     var(--color-bg)
   );
-  --color-brand: var(--color-accent);
-  --color-primary: var(--color-accent);
-  --color-secondary: var(--color-accent);
-  --color-scrollbar-thumb: var(--color-accent);
+  --color-summary-card-hover-bg: color-mix(
+    in srgb,
+    var(--color-accent) 8%,
+    var(--color-card)
+  );
   --color-scrollbar-thumb-hover: color-mix(
     in srgb,
-    var(--color-accent) 78%,
-    #fff
+    var(--color-text) 45%,
+    transparent
   );
-  --svg-color-active-cell: var(--color-accent);
-  --svg-special-color: var(--color-run);
-  --svg-special-color2: var(--color-accent);
+  --color-summary-scrollbar: color-mix(
+    in srgb,
+    var(--color-text) 28%,
+    transparent
+  );
 }
 
 .summary-page-root .svg-color-bg {

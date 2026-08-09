@@ -27,6 +27,9 @@
 [data-filter='Run'] {
   --color-accent: #f97316;
 }
+[data-filter='Ride'] {
+  --color-accent: #3b82f6;
+}
 
 body {
   background-color: var(--color-bg);
