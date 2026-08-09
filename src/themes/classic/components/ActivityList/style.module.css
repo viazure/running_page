@@ -329,23 +329,41 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .yearSelector {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
+  flex-shrink: 0;
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
-  margin-bottom: 16px;
-  padding: 4px 0;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 4px 0 8px;
+  background: color-mix(in srgb, var(--color-background) 94%, transparent);
 }
 
+/* Classic capped at intrinsic mm size (~too small on wide screens).
+   Full-bleed was too large — use a middle width and let Life area scroll. */
 .yearSummarySvg {
-  max-width: 100%;
-  height: auto;
-  max-height: 80vh;
+  width: min(100%, 680px) !important;
+  height: auto !important;
+  max-height: none;
+}
+
+.lifeSvgWrap {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 100%;
 }
 
 .summaryInner {
@@ -378,8 +396,9 @@
 
 .lifeContainer > svg,
 .lifeContainer :global(svg) {
-  max-width: 100%;
-  height: auto;
+  width: min(100%, 680px) !important;
+  height: auto !important;
+  max-height: none;
 }
 
 @media (max-width: 640px) {

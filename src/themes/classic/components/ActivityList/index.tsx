@@ -1035,23 +1035,25 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
               </button>
             ))}
           </div>
-          <Suspense fallback={<div>Loading SVG...</div>}>
-            {SelectedYearSvg ? (
-              <SelectedYearSvg className={styles.yearSummarySvg} />
-            ) : (
-              <>
-                {(sportType === 'running' || sportType === 'Run') && (
-                  <RunningSvg />
-                )}
-                {sportType === 'walking' && <WalkingSvg />}
-                {sportType === 'hiking' && <HikingSvg />}
-                {sportType === 'cycling' && <CyclingSvg />}
-                {sportType === 'swimming' && <SwimmingSvg />}
-                {sportType === 'skiing' && <SkiingSvg />}
-                {sportType === 'all' && <AllSvg />}
-              </>
-            )}
-          </Suspense>
+          <div className={styles.lifeSvgWrap}>
+            <Suspense fallback={<div>Loading SVG...</div>}>
+              {SelectedYearSvg ? (
+                <SelectedYearSvg className={styles.yearSummarySvg} />
+              ) : (
+                <>
+                  {(sportType === 'running' || sportType === 'Run') && (
+                    <RunningSvg />
+                  )}
+                  {sportType === 'walking' && <WalkingSvg />}
+                  {sportType === 'hiking' && <HikingSvg />}
+                  {sportType === 'cycling' && <CyclingSvg />}
+                  {sportType === 'swimming' && <SwimmingSvg />}
+                  {sportType === 'skiing' && <SkiingSvg />}
+                  {sportType === 'all' && <AllSvg />}
+                </>
+              )}
+            </Suspense>
+          </div>
         </div>
       )}
 
