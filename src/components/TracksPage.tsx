@@ -868,10 +868,11 @@ export function TracksPage({
       </div>
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr]">
-        {/* Left: stats + map */}
-        <div className="flex flex-col gap-4">
+        {/* Mobile: contents so map can sticky while track wall scrolls.
+            Desktop: stacked left column. */}
+        <div className="contents lg:flex lg:flex-col lg:gap-4">
           {/* Stats card */}
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+          <div className="order-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 lg:order-none">
             <p className="mb-3 text-[10px] tracking-wider text-[var(--color-muted)] uppercase">
               {selectedYear ?? (locale === 'zh' ? '全部' : 'Total')}
             </p>
@@ -919,7 +920,7 @@ export function TracksPage({
 
           {/* Activity detail — only when a single track is selected */}
           {selectedActivity && (
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">
+            <div className="order-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:order-none">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] tracking-wider text-[var(--color-muted)] uppercase">
                   {locale === 'zh' ? '已选记录' : 'Selected'}
@@ -1024,19 +1025,21 @@ export function TracksPage({
             </div>
           )}
 
-          {/* Map */}
-          <div className="h-[220px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] md:h-[360px]">
-            <TrackMap
-              activity={selectedActivity}
-              activities={withPolyline}
-              dark={dark}
-              lightsOff={lightsOff}
-            />
+          {/* Map — sticky on mobile while browsing the track wall */}
+          <div className="sticky top-16 z-40 order-2 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:py-0">
+            <div className="h-[220px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-md md:h-[360px] lg:shadow-none">
+              <TrackMap
+                activity={selectedActivity}
+                activities={withPolyline}
+                dark={dark}
+                lightsOff={lightsOff}
+              />
+            </div>
           </div>
         </div>
 
         {/* Right: track grid with year filter inside */}
-        <div className="min-w-0">
+        <div className="order-4 min-w-0 lg:order-none">
           <div
             ref={captureRef}
             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
