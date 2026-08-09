@@ -164,10 +164,7 @@
 }
 
 .smallHomeButton:hover {
-  background-color: var(
-    --color-summary-accent-hover,
-    var(--color-secondary)
-  );
+  background-color: var(--color-summary-accent-hover, var(--color-secondary));
 }
 
 .lifeContainer {

@@ -4,11 +4,7 @@
 .summary-page-root {
   --color-summary-fg: var(--color-text);
   --color-summary-accent: var(--color-run);
-  --color-summary-accent-hover: color-mix(
-    in srgb,
-    var(--color-run) 82%,
-    #000
-  );
+  --color-summary-accent-hover: color-mix(in srgb, var(--color-run) 82%, #000);
   --color-summary-on-accent: #ffffff;
   --color-summary-border: var(--color-border);
   --color-summary-chart-bg: color-mix(
@@ -30,11 +26,7 @@
   --color-run-row-hover-background: var(--color-card);
   --color-activity-card: var(--color-border);
   --color-scrollbar-thumb: var(--color-run);
-  --color-scrollbar-thumb-hover: color-mix(
-    in srgb,
-    var(--color-run) 82%,
-    #000
-  );
+  --color-scrollbar-thumb-hover: color-mix(in srgb, var(--color-run) 82%, #000);
   --svg-color-inactive-cell: var(--color-border);
   --svg-color-active-cell: var(--color-run);
   --svg-special-color: var(--color-run);
