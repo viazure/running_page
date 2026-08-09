@@ -6,7 +6,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { CAN_PRIVACY_UNLOCK, PRIVACY_UNLOCK_SEQUENCE } from '@/core/privacyUnlock';
+import {
+  CAN_PRIVACY_UNLOCK,
+  PRIVACY_UNLOCK_SEQUENCE,
+} from '@/core/privacyUnlock';
 
 const STORAGE_KEY = 'privacy_unlocked';
 

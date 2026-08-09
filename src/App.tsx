@@ -7,39 +7,33 @@ import {
 import { LocaleProvider } from './hooks/useLocale';
 import { THEME_PRESET } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PageSkeleton } from './components/PageSkeleton';
 
-// 主题注册表 — 新增主题时在此处注册，并在 src/themes/ 下创建对应文件夹
-const themes: Record<string, LazyExoticComponent<ComponentType>> = {
-  dashboard: lazy(() => import('./themes/dashboard')),
-  dashboard_pro: lazy(() => import('./themes/dashboard_pro')),
-  classic: lazy(() => import('./themes/classic')),
-  // 在此处添加自定义主题，例如：
-  // 'my-theme': lazy(() => import('./themes/my-theme')),
+type ThemeModule = { default: ComponentType };
+
+const themeLoaders: Record<string, () => Promise<ThemeModule>> = {
+  dashboard: () => import('./themes/dashboard'),
+  dashboard_pro: () => import('./themes/dashboard_pro'),
+  classic: () => import('./themes/classic'),
 };
 
-const ThemeComponent = themes[THEME_PRESET] ?? themes['dashboard'];
+const themes: Record<string, LazyExoticComponent<ComponentType>> = {
+  dashboard: lazy(themeLoaders.dashboard),
+  dashboard_pro: lazy(themeLoaders.dashboard_pro),
+  classic: lazy(themeLoaders.classic),
+};
+
+const preset = THEME_PRESET in themes ? THEME_PRESET : 'dashboard';
+const ThemeComponent = themes[preset];
+
+// Start downloading the active theme as soon as App module evaluates
+void themeLoaders[preset]();
 
 export default function App() {
   return (
     <LocaleProvider>
       <ErrorBoundary>
-        <Suspense
-          fallback={
-            <div
-              className="flex min-h-screen items-center justify-center"
-              style={{ backgroundColor: 'var(--color-bg, #0d1117)' }}
-            >
-              <div
-                style={{
-                  color: 'var(--color-muted, #8b949e)',
-                  fontSize: '0.875rem',
-                }}
-              >
-                Loading...
-              </div>
-            </div>
-          }
-        >
+        <Suspense fallback={<PageSkeleton />}>
           <ThemeComponent />
         </Suspense>
       </ErrorBoundary>

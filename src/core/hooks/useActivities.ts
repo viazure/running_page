@@ -177,6 +177,11 @@ const loadActivityData = () => {
   return activityDataPromise;
 };
 
+/** Start fetching activities.json without Suspense (call early from main). */
+export function preloadActivityData(): Promise<Activity[]> {
+  return loadActivityData();
+}
+
 export const getActivityData = () => {
   if (activityDataError) throw activityDataError;
   if (activityDataCache) return activityDataCache;

@@ -9,7 +9,8 @@ type Page = 'home' | 'tracks';
 interface HeaderProps {
   dark: boolean;
   toggleTheme: () => void;
-  activities: Activity[];
+  /** Unused by Header; kept optional for call-site compatibility */
+  activities?: Activity[];
   page: Page;
   onNavigate: (p: Page) => void;
   /** Enable logo multi-tap privacy unlock (still navigates home on click) */
@@ -28,25 +29,25 @@ export function Header({
 }: HeaderProps) {
   const { locale, setLocale, t } = useLocale();
   const toggleUnlock = usePrivacyUnlockToggle();
-  const logoTapCount = useRef(0);
+  const logoTapCountRef = useRef(0);
   const logoTapWindowRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogoClick = useCallback(
     (e: MouseEvent) => {
       onNavigate('home');
       if (!enablePrivacyUnlock) return;
-      logoTapCount.current += 1;
-      if (logoTapCount.current >= LOGO_TAP_TARGET) {
+      logoTapCountRef.current += 1;
+      if (logoTapCountRef.current >= LOGO_TAP_TARGET) {
         if (logoTapWindowRef.current) {
           clearTimeout(logoTapWindowRef.current);
           logoTapWindowRef.current = null;
         }
-        logoTapCount.current = 0;
+        logoTapCountRef.current = 0;
         e.preventDefault();
         toggleUnlock();
-      } else if (logoTapCount.current === 1) {
+      } else if (logoTapCountRef.current === 1) {
         logoTapWindowRef.current = setTimeout(() => {
-          logoTapCount.current = 0;
+          logoTapCountRef.current = 0;
           logoTapWindowRef.current = null;
         }, LOGO_TAP_WINDOW_MS);
       }
