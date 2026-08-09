@@ -81,7 +81,12 @@ export default defineConfig({
       },
     }),
   ],
-  base: process.env.PATH_PREFIX ? `${process.env.PATH_PREFIX}/` : '/',
+  // PATH_PREFIX=/ must not become base '//' (protocol-relative → broken assets / white screen)
+  base: (() => {
+    const prefix = process.env.PATH_PREFIX;
+    if (!prefix || prefix === '/') return '/';
+    return prefix.endsWith('/') ? prefix : `${prefix}/`;
+  })(),
   define: {
     'import.meta.env.VERCEL': JSON.stringify(process.env.VERCEL),
   },
