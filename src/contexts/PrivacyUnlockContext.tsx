@@ -6,12 +6,13 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { PRIVACY_MODE, PRIVACY_UNLOCK_SEQUENCE } from '@/core/privacyUnlock';
+import { CAN_PRIVACY_UNLOCK, PRIVACY_UNLOCK_SEQUENCE } from '@/core/privacyUnlock';
 
 const STORAGE_KEY = 'privacy_unlocked';
 
 function getStored(): boolean {
   if (typeof window === 'undefined') return false;
+  if (!CAN_PRIVACY_UNLOCK) return false;
   return sessionStorage.getItem(STORAGE_KEY) === 'true';
 }
 
@@ -55,7 +56,7 @@ export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    if (!PRIVACY_MODE || !PRIVACY_UNLOCK_SEQUENCE.length) return;
+    if (!CAN_PRIVACY_UNLOCK || !PRIVACY_UNLOCK_SEQUENCE.length) return;
 
     const sequence = PRIVACY_UNLOCK_SEQUENCE;
     const len = sequence.length;
@@ -97,13 +98,13 @@ export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
   }, [persist]);
 
   const toggleUnlock = useCallback(() => {
-    if (!PRIVACY_MODE) return;
+    if (!CAN_PRIVACY_UNLOCK) return;
     persist(!getStored());
   }, [persist]);
 
   const value = React.useMemo(
     () => ({
-      isUnlocked: PRIVACY_MODE ? isUnlocked : false,
+      isUnlocked: CAN_PRIVACY_UNLOCK ? isUnlocked : false,
       toggleUnlock,
     }),
     [isUnlocked, toggleUnlock]

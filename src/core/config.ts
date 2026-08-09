@@ -33,6 +33,10 @@ interface AppConfig {
   theme: 'light' | 'dark' | 'system';
   theme_preset: string;
   privacy_mode?: boolean;
+  /** Allow temporary unlock of privacy mode (easter egg). Default true. */
+  privacy_unlock?: boolean;
+  /** When privacy is locked, replace activity.name with period titles */
+  privacy_anonymous_titles?: boolean;
   goals: Record<string, GoalConfig>;
   avatar?: string;
   mapbox_token?: string;
@@ -45,8 +49,16 @@ export const DEFAULT_LOCALE: Locale = config.locale ?? 'zh';
 export const DEFAULT_THEME: 'light' | 'dark' | 'system' =
   config.theme ?? 'system';
 export const THEME_PRESET: string = config.theme_preset ?? 'default';
-/** When true: lights-off map, anonymous titles, unlock sequence available */
+/** When true: lights-off map, unlock sequence available if enabled */
 export const PRIVACY_MODE: boolean = config.privacy_mode ?? true;
+/** When false: privacy stays locked; unlock triggers are disabled */
+export const PRIVACY_UNLOCK: boolean = config.privacy_unlock ?? true;
+/**
+ * When true (default): locked privacy shows period titles (清晨跑步…);
+ * unlocked / privacy_mode false shows original activity.name.
+ */
+export const PRIVACY_ANONYMOUS_TITLES: boolean =
+  config.privacy_anonymous_titles ?? true;
 export const GOALS: Record<string, GoalConfig> = config.goals ?? {};
 export const DEFAULT_GOAL: GoalConfig = GOALS.all ?? {
   yearly: 2000,

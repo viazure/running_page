@@ -29,9 +29,16 @@ theme: system
 # 自定义主题：在 src/themes/<name>/ 下创建主题，并在 src/App.tsx 注册后填写对应名称
 theme_preset: dashboard_pro
 
-# 隐私模式：true 时默认关灯底图、匿名活动名、可连点 Logo / 魂斗罗键序解锁
+# 隐私模式：true 时默认关灯底图、匿名活动名
 # false 时始终显示完整地图与真实活动名（dashboard_pro / classic 共用）
 privacy_mode: true
+
+# 是否允许临时解除隐私模式（关闭后隐私始终锁定，无法被触发解除）
+privacy_unlock: true
+
+# 隐私锁定时是否用时段匿名标题（清晨跑步等）；解锁后显示原活动名
+# false：始终显示原活动名（仅地图关灯受隐私影响）
+privacy_anonymous_titles: true
 
 # 顶栏外链（dashboard / dashboard_pro Header 读取；支持中英双语名称）
 nav_links:

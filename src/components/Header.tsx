@@ -66,11 +66,7 @@ export function Header({
           type="button"
           onClick={handleLogoClick}
           className="flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0"
-          title={
-            enablePrivacyUnlock
-              ? 'Home · tap logo 7× to toggle privacy unlock'
-              : t('home')
-          }
+          title={t('home')}
         >
           <span className="text-xl font-bold text-[var(--color-text)]">
             RUNNING<span className="text-[var(--color-run)]">.</span>PAGE

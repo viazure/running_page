@@ -21,8 +21,9 @@ import {
   PrivacyUnlockProvider,
   usePrivacyUnlock,
 } from '@/contexts/PrivacyUnlockContext';
-import { privacyActivityTitle } from '@/core/privacyTitles';
-import { PRIVACY_MODE } from '@/core/config';
+import { resolveActivityTitle } from '@/core/privacyTitles';
+import { PRIVACY_MODE, PRIVACY_ANONYMOUS_TITLES } from '@/core/config';
+import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 
 const RouteMap = lazy(() =>
   import('@/components/RouteMap').then((m) => ({ default: m.RouteMap }))
@@ -61,9 +62,9 @@ function DashboardProInner() {
   const filtered = useFilteredActivities(activities, filter, year);
   const heatmapYear = year ?? years[0] ?? new Date().getFullYear();
   const privacyActive = PRIVACY_MODE && !isUnlocked;
-  const activityTitle = PRIVACY_MODE
-    ? (a: Activity) => privacyActivityTitle(a, locale)
-    : undefined;
+  const useAnonymousTitles = privacyActive && PRIVACY_ANONYMOUS_TITLES;
+  const activityTitle = (a: Activity) =>
+    resolveActivityTitle(a, locale, useAnonymousTitles);
 
   const provinceFiltered = useMemo(() => {
     if (!selectedProvince) return filtered;
@@ -80,7 +81,7 @@ function DashboardProInner() {
         activities={activities}
         page={page}
         onNavigate={setPage}
-        enablePrivacyUnlock={PRIVACY_MODE}
+        enablePrivacyUnlock={CAN_PRIVACY_UNLOCK}
       />
 
       {page === 'tracks' ? (

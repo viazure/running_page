@@ -40,9 +40,25 @@ export function privacyActivityTitle(
   const hour = +activity.start_date_local.slice(11, 13);
   if (km > 20 && km < 40) return t.half;
   if (km >= 40) return t.full;
-  if (hour >= 0 && hour <= 10) return t.morning;
-  if (hour > 10 && hour <= 14) return t.midday;
-  if (hour > 14 && hour <= 18) return t.afternoon;
-  if (hour > 18 && hour <= 21) return t.evening;
+  // Everyday Chinese sense: 傍晚 ≈ sunset window; 20:00+ is 夜晚
+  if (hour >= 5 && hour <= 10) return t.morning;
+  if (hour >= 11 && hour <= 13) return t.midday;
+  if (hour >= 14 && hour <= 17) return t.afternoon;
+  if (hour >= 18 && hour <= 19) return t.evening;
   return t.night;
+}
+
+/**
+ * Display title for lists / profile.
+ * anonymous=true → period titles; otherwise activity.name, with period fallback if empty.
+ */
+export function resolveActivityTitle(
+  activity: Activity,
+  locale: Locale = 'zh',
+  anonymous = false
+): string {
+  if (anonymous) return privacyActivityTitle(activity, locale);
+  const name = activity.name?.trim();
+  if (name) return name;
+  return privacyActivityTitle(activity, locale);
 }
