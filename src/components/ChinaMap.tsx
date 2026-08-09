@@ -8,6 +8,7 @@ interface ChinaMapProps {
   filter: SportFilter;
   onSelectProvince?: (province: string | null) => void;
   selectedProvince?: string | null;
+  className?: string;
 }
 
 type GeoFeature = {
@@ -19,8 +20,9 @@ type GeoFeature = {
   };
 };
 
-// Simple equirectangular projection bounded to China
-const BOUNDS = { minLng: 73, maxLng: 136, minLat: 15, maxLat: 54 };
+// Simple equirectangular projection bounded to China (tight for larger visual scale)
+const BOUNDS = { minLng: 73.5, maxLng: 135.5, minLat: 17.8, maxLat: 53.8 };
+const MAP_SCALE = 1.18;
 
 function project(
   lng: number,
@@ -62,13 +64,14 @@ export function ChinaMap({
   filter,
   onSelectProvince,
   selectedProvince,
+  className = '',
 }: ChinaMapProps) {
   const { locale } = useLocale();
   const [hoveredProvince, setHoveredProvince] = useState<string | null>(null);
   const [features, setFeatures] = useState<GeoFeature[]>([]);
 
-  const SVG_W = 260;
-  const SVG_H = 190;
+  const SVG_W = 240;
+  const SVG_H = 174;
 
   // Lazy-load GeoJSON to keep initial bundle small
   useEffect(() => {
@@ -101,10 +104,12 @@ export function ChinaMap({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+    <div
+      className={`flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3.5 ${className || 'h-full'}`}
+    >
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-balance">
           {locale === 'zh' ? '足迹地图' : 'Footprint Map'}
         </h2>
         <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
@@ -142,64 +147,65 @@ export function ChinaMap({
         </div>
       </div>
 
-      {/* SVG Map — aspect-ratio wrapper prevents stretching */}
-      <div
-        className="relative touch-manipulation"
-        style={{ aspectRatio: `${SVG_W} / ${SVG_H}` }}
-      >
+      {/* Mobile: keep aspect; desktop: fill remaining height to align with heatmap */}
+      <div className="relative aspect-[240/174] min-h-[120px] min-w-0 flex-1 touch-manipulation lg:aspect-auto">
         <svg
           key={filter}
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           preserveAspectRatio="xMidYMid meet"
           width="100%"
           height="100%"
-          style={{ display: 'block', position: 'absolute', inset: 0 }}
+          className="absolute inset-0 block size-full"
         >
-          {features.map((feature) => {
-            const name = feature.properties.name;
-            const count = provinceCount.get(name) ?? 0;
-            const visited = count > 0;
-            const isHovered = hoveredProvince === name;
-            const isSelected = selectedProvince === name;
+          <g
+            transform={`translate(${SVG_W / 2} ${SVG_H / 2}) scale(${MAP_SCALE}) translate(${-SVG_W / 2} ${-SVG_H / 2})`}
+          >
+            {features.map((feature) => {
+              const name = feature.properties.name;
+              const count = provinceCount.get(name) ?? 0;
+              const visited = count > 0;
+              const isHovered = hoveredProvince === name;
+              const isSelected = selectedProvince === name;
 
-            let fill: string;
-            if (visited) {
-              if (isSelected) {
-                fill = 'var(--color-accent)';
-              } else if (isHovered) {
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 80%, transparent)';
-              } else if (selectedProvince) {
-                // dim other provinces when one is selected
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 25%, transparent)';
+              let fill: string;
+              if (visited) {
+                if (isSelected) {
+                  fill = 'var(--color-accent)';
+                } else if (isHovered) {
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 80%, transparent)';
+                } else if (selectedProvince) {
+                  // dim other provinces when one is selected
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 25%, transparent)';
+                } else {
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 55%, transparent)';
+                }
               } else {
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 55%, transparent)';
+                fill = 'var(--color-border)';
               }
-            } else {
-              fill = 'var(--color-border)';
-            }
 
-            return (
-              <path
-                key={feature.properties.adcode}
-                d={featureToPath(feature, SVG_W, SVG_H)}
-                fill={fill}
-                stroke="var(--color-bg)"
-                strokeWidth="0.75"
-                className={`transition-all duration-150 ${visited ? 'cursor-pointer' : 'cursor-default'}`}
-                onMouseEnter={() => setHoveredProvince(name)}
-                onMouseLeave={() => setHoveredProvince(null)}
-                onClick={() => handleClick(name)}
-              />
-            );
-          })}
+              return (
+                <path
+                  key={feature.properties.adcode}
+                  d={featureToPath(feature, SVG_W, SVG_H)}
+                  fill={fill}
+                  stroke="var(--color-bg)"
+                  strokeWidth="0.75"
+                  className={`transition-all duration-150 ${visited ? 'cursor-pointer' : 'cursor-default'}`}
+                  onMouseEnter={() => setHoveredProvince(name)}
+                  onMouseLeave={() => setHoveredProvince(null)}
+                  onClick={() => handleClick(name)}
+                />
+              );
+            })}
+          </g>
         </svg>
       </div>
 
       {/* Tooltip */}
-      <div className="mt-1.5 h-4 text-xs text-[var(--color-muted)]">
+      <div className="mt-1.5 h-4 shrink-0 text-xs text-[var(--color-muted)]">
         {displayProvince && (
           <>
             <span className="font-medium text-[var(--color-text)]">

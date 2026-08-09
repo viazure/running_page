@@ -41,6 +41,10 @@ interface AppConfig {
   avatar?: string;
   mapbox_token?: string;
   nav_links?: NavLink[];
+  /** Optional blog URL — shown as emphasized CTA on the far right when set */
+  blog_url?: string;
+  /** Optional GitHub repo URL — shown in footer when set */
+  github_url?: string;
 }
 
 const config = rawConfig as unknown as AppConfig;
@@ -68,6 +72,8 @@ export const DEFAULT_GOAL: GoalConfig = GOALS.all ?? {
 };
 export const AVATAR: string = config.avatar ?? '';
 export const NAV_LINKS: NavLink[] = config.nav_links ?? [];
+export const BLOG_URL: string = (config.blog_url ?? '').trim();
+export const GITHUB_URL: string = (config.github_url ?? '').trim();
 export const MAPBOX_TOKEN: string =
   import.meta.env.VITE_MAPBOX_TOKEN ||
   import.meta.env.MAPBOX_TOKEN ||

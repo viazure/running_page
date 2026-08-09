@@ -9,9 +9,6 @@ import {
 } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
 
-const MAX_VISIBLE_YEARS_DESKTOP = 10;
-const MAX_VISIBLE_YEARS_MOBILE = 4;
-
 interface HeatmapProps {
   activities: Activity[];
   year: number;
@@ -94,37 +91,8 @@ export function ContributionHeatmap({
   useEffect(() => {
     setSelectedYear(defaultYear);
   }, [defaultYear]);
-  // yearWindowEnd: index into allYears of the last visible year (0-based, most-recent-first)
-  const [maxVisibleYears, setMaxVisibleYears] = useState(
-    MAX_VISIBLE_YEARS_DESKTOP
-  );
-  const [yearWindowEnd, setYearWindowEnd] = useState(
-    Math.min(MAX_VISIBLE_YEARS_DESKTOP - 1, Math.max(0, allYears.length - 1))
-  );
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
-
-  // Fewer year pills on narrow screens so the switcher stays on one row
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const sync = () => {
-      setMaxVisibleYears(
-        mq.matches ? MAX_VISIBLE_YEARS_MOBILE : MAX_VISIBLE_YEARS_DESKTOP
-      );
-    };
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
-
-  useEffect(() => {
-    setYearWindowEnd((prev) =>
-      Math.min(
-        Math.max(prev, maxVisibleYears - 1),
-        Math.max(0, allYears.length - 1)
-      )
-    );
-  }, [maxVisibleYears, allYears.length]);
 
   const isGym = false;
   const isAll = filter === 'all';
@@ -311,18 +279,6 @@ export function ContributionHeatmap({
     setSelectedYear(yr);
   };
 
-  // Visible year window
-  const yearWindowStart = Math.max(0, yearWindowEnd - maxVisibleYears + 1);
-  const visibleYears = allYears.slice(yearWindowStart, yearWindowEnd + 1);
-  const canScrollLeft = yearWindowStart > 0;
-  const canScrollRight = yearWindowEnd < allYears.length - 1;
-
-  const shiftWindow = (dir: -1 | 1) => {
-    setYearWindowEnd((prev) =>
-      Math.min(Math.max(prev + dir, maxVisibleYears - 1), allYears.length - 1)
-    );
-  };
-
   const handleExport = async () => {
     if (!captureRef.current || exporting) return;
     setExporting(true);
@@ -409,79 +365,33 @@ export function ContributionHeatmap({
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="shrink-0 text-lg font-semibold">{heatmapTitle}</h2>
-        <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto">
-          {/* ALL button */}
-          <button
-            onClick={() => handleSelectYear('all')}
-            className={`shrink-0 rounded px-2.5 py-1 text-xs font-medium transition-all ${
-              selectedYear === 'all'
-                ? 'bg-[var(--color-accent)] text-white'
-                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
-            }`}
-          >
-            {locale === 'zh' ? '全部' : 'ALL'}
-          </button>
-
-          <span className="h-3 w-px shrink-0 bg-[var(--color-border)]" />
-
-          {/* Left arrow */}
-          <button
-            onClick={() => shiftWindow(-1)}
-            disabled={!canScrollLeft}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-20"
-          >
-            <svg
-              className="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-
-          {/* Visible year buttons */}
-          {visibleYears.map((y) => (
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Year tabs — swipe/scroll like ActivityLog */}
+          <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
-              key={y}
-              onClick={() => handleSelectYear(y)}
-              className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-all ${
-                selectedYear === y
+              onClick={() => handleSelectYear('all')}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                selectedYear === 'all'
                   ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+                  : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
               }`}
             >
-              {y}
+              {locale === 'zh' ? '全部' : 'All'}
             </button>
-          ))}
-
-          {/* Right arrow */}
-          <button
-            onClick={() => shiftWindow(1)}
-            disabled={!canScrollRight}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-20"
-          >
-            <svg
-              className="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-
-          <span className="h-3 w-px shrink-0 bg-[var(--color-border)]" />
+            {allYears.map((y) => (
+              <button
+                key={y}
+                onClick={() => handleSelectYear(y)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  selectedYear === y
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
 
           {/* Export button */}
           <button

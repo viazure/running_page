@@ -20,6 +20,7 @@ interface RouteMapProps {
   onClearSelection?: () => void;
   /** Hide basemap tiles; keep route lines (classic privacy lights-off) */
   lightsOff?: boolean;
+  className?: string;
 }
 
 function applyLightsOff(map: mapboxgl.Map, lightsOff: boolean) {
@@ -48,6 +49,7 @@ export function RouteMap({
   dark,
   onClearSelection,
   lightsOff = false,
+  className = '',
 }: RouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -262,7 +264,7 @@ export function RouteMap({
 
   return (
     <div
-      className="route-map-hover-ctrls relative h-[220px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] md:h-[380px]"
+      className={`route-map-hover-ctrls relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] ${className || 'h-[220px] md:h-[380px]'}`}
       style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
     >
       {selectedActivity && (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import * as polyline from '@mapbox/polyline';
 import mapboxgl from 'mapbox-gl';
@@ -17,6 +17,7 @@ import {
   mapboxBasemapStyle,
   MAP_STYLE_LOAD_TIMEOUT_MS,
 } from '../core/mapStyle';
+import { RouteAnimator, type Coordinate } from '../utils/routeAnimation';
 import './RouteMap.css';
 
 type SportType = 'Run';
@@ -28,6 +29,7 @@ interface TracksPageProps {
   onSelectActivity?: (a: Activity | null) => void;
   getTitle?: (a: Activity) => string;
   lightsOff?: boolean;
+  dark?: boolean;
 }
 
 function renderTrackSVG(summaryPolyline: string, size = 80): string {
@@ -102,6 +104,20 @@ function TrackThumb({
   );
 }
 
+function calculateBearing(start: Coordinate, end: Coordinate): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const lat1 = toRad(start[1]);
+  const lon1 = toRad(start[0]);
+  const lat2 = toRad(end[1]);
+  const lon2 = toRad(end[0]);
+  const dLon = lon2 - lon1;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
 function TrackMap({
   activity,
   activities,
@@ -119,13 +135,57 @@ function TrackMap({
   const activityRef = useRef(activity);
   const activitiesRef = useRef(activities);
   const lightsOffRef = useRef(lightsOff);
+  const animatorRef = useRef<RouteAnimator | null>(null);
+  const chaseRafRef = useRef<number | null>(null);
+  const chaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
+  const styleIdleRef = useRef(false);
+  const animTokenRef = useRef(0);
+  const animKeyRef = useRef<string | null>(null);
   const useBlank = lightsOff || !MAPBOX_TOKEN;
   const bg = dark !== false ? '#0d1117' : '#f6f8fa';
   const style = useBlank
     ? blankMapStyle(bg)
     : mapboxBasemapStyle(dark !== false);
 
-  const ROUTE_LAYER_IDS = new Set(['selected', 'all-routes']);
+  const ROUTE_LAYER_IDS = new Set([
+    'selected',
+    'all-routes',
+    'animated-run',
+    'highlight-run',
+    '3d-buildings',
+  ]);
+
+  const stopAnimations = () => {
+    animTokenRef.current += 1;
+    animatorRef.current?.stop();
+    animatorRef.current = null;
+    if (chaseRafRef.current != null) {
+      cancelAnimationFrame(chaseRafRef.current);
+      chaseRafRef.current = null;
+    }
+    if (chaseTimeoutRef.current != null) {
+      clearTimeout(chaseTimeoutRef.current);
+      chaseTimeoutRef.current = null;
+    }
+  };
+
+  const isAnimating = () =>
+    chaseRafRef.current != null ||
+    chaseTimeoutRef.current != null ||
+    animatorRef.current != null;
+
+  const removeRouteLayers = (m: mapboxgl.Map) => {
+    for (const id of [
+      'selected',
+      'all-routes',
+      'animated-run',
+      'highlight-run',
+    ]) {
+      if (m.getLayer(id)) m.removeLayer(id);
+      if (m.getSource(id)) m.removeSource(id);
+    }
+  };
 
   const applyLightsOff = (m: mapboxgl.Map, off: boolean) => {
     const styleJson = m.getStyle();
@@ -139,115 +199,397 @@ function TrackMap({
     }
   };
 
+  const injectTerrain = (m: mapboxgl.Map, isDark: boolean) => {
+    if (lightsOffRef.current || useBlank) return;
+    try {
+      if (!m.getSource('mapbox-dem')) {
+        m.addSource('mapbox-dem', {
+          type: 'raster-dem',
+          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          tileSize: 512,
+          maxzoom: 14,
+        });
+        m.setTerrain({ source: 'mapbox-dem', exaggeration: 1 });
+      }
+      if (!m.getLayer('3d-buildings') && m.getSource('composite')) {
+        m.addLayer({
+          id: '3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', 'extrude', 'true'],
+          type: 'fill-extrusion',
+          minzoom: 14,
+          paint: {
+            'fill-extrusion-color': isDark ? '#1C1C1E' : '#eaeaf1',
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'min_height'],
+            'fill-extrusion-opacity': 0.6,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('3D terrain unavailable, falling back to 2D', e);
+    }
+  };
+
+  const setHighlightLine = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    color: string
+  ) => {
+    const data = {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: { type: 'LineString' as const, coordinates: coords },
+    };
+    if (m.getSource('highlight-run')) {
+      (m.getSource('highlight-run') as mapboxgl.GeoJSONSource).setData(data);
+      return;
+    }
+    m.addSource('highlight-run', { type: 'geojson', data });
+    m.addLayer({
+      id: 'highlight-run',
+      type: 'line',
+      source: 'highlight-run',
+      paint: {
+        'line-color': color,
+        'line-width': 4,
+        'line-opacity': 1,
+      },
+    });
+  };
+
+  const setAnimatedLine = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    color: string
+  ) => {
+    const data = {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: { type: 'LineString' as const, coordinates: coords },
+    };
+    if (m.getSource('animated-run')) {
+      (m.getSource('animated-run') as mapboxgl.GeoJSONSource).setData(data);
+      return;
+    }
+    m.addSource('animated-run', { type: 'geojson', data });
+    m.addLayer({
+      id: 'animated-run',
+      type: 'line',
+      source: 'animated-run',
+      paint: {
+        'line-color': color,
+        'line-width': 3,
+        'line-opacity': 0.95,
+      },
+    });
+  };
+
+  const startPrivacyAnimation = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    color: string
+  ) => {
+    stopAnimations();
+    setAnimatedLine(m, [coords[0]], color);
+    const bounds = new mapboxgl.LngLatBounds();
+    coords.forEach((c) => bounds.extend(c));
+    m.easeTo({ pitch: 0, bearing: 0, duration: 200 });
+    m.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 200 });
+    animatorRef.current = new RouteAnimator(
+      coords,
+      (pts: Coordinate[]) => {
+        if (pts.length > 0) setAnimatedLine(m, pts, color);
+      },
+      () => {
+        animatorRef.current = null;
+      }
+    );
+    animatorRef.current.start();
+  };
+
+  const startChaseAnimation = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    color: string,
+    distanceKm: number,
+    runId: string
+  ) => {
+    stopAnimations();
+    // Ensure 3D layers exist before pitching the camera
+    injectTerrain(m, dark !== false);
+    const token = animTokenRef.current;
+    if (m.getLayer('all-routes')) {
+      m.setPaintProperty('all-routes', 'line-opacity', 0.15);
+    }
+
+    const totalPoints = coords.length;
+    const cumulative = new Float32Array(totalPoints);
+    cumulative[0] = 0;
+    for (let i = 1; i < totalPoints; i++) {
+      const dx = coords[i][0] - coords[i - 1][0];
+      const dy = coords[i][1] - coords[i - 1][1];
+      cumulative[i] = cumulative[i - 1] + Math.sqrt(dx * dx + dy * dy);
+    }
+    const totalGeo = cumulative[totalPoints - 1] || 1;
+    let currentBearing = calculateBearing(
+      coords[0],
+      coords[Math.min(5, totalPoints - 1)]
+    );
+
+    // ~850 m/s along-track → longer chase so tiles/buildings can catch up
+    const durationMs = (((distanceKm || 5) * 1000) / 850) * 1000;
+    const duration = Math.min(Math.max(6000, durationMs), 22000);
+    let startTime: number | null = null;
+    let chaseStarted = false;
+
+    const animate = (timestamp: number) => {
+      if (animTokenRef.current !== token) return;
+      if (activeRunIdRef.current !== runId) return;
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const targetDist = progress * totalGeo;
+
+      let l = 0;
+      let r = totalPoints - 1;
+      let idx = 0;
+      while (l <= r) {
+        const mid = (l + r) >> 1;
+        if (cumulative[mid] <= targetDist) {
+          idx = mid;
+          l = mid + 1;
+        } else {
+          r = mid - 1;
+        }
+      }
+      if (idx >= totalPoints - 1) idx = totalPoints - 2;
+
+      const segLen = cumulative[idx + 1] - cumulative[idx];
+      const remainder =
+        segLen > 0 ? (targetDist - cumulative[idx]) / segLen : 0;
+
+      if (progress < 1 && coords[idx] && coords[idx + 1]) {
+        const currentPos: Coordinate = [
+          coords[idx][0] + (coords[idx + 1][0] - coords[idx][0]) * remainder,
+          coords[idx][1] + (coords[idx + 1][1] - coords[idx][1]) * remainder,
+        ];
+        const lineCoords = coords.slice(0, idx + 1);
+        lineCoords.push(currentPos);
+        setHighlightLine(m, lineCoords, color);
+
+        let lookAhead = idx;
+        while (
+          lookAhead < totalPoints - 1 &&
+          cumulative[lookAhead] < targetDist + totalGeo * 0.05
+        ) {
+          lookAhead++;
+        }
+        const targetBearing = calculateBearing(currentPos, coords[lookAhead]);
+        currentBearing +=
+          (((targetBearing - currentBearing + 540) % 360) - 180) * 0.05;
+
+        m.easeTo({
+          center: currentPos,
+          bearing: currentBearing,
+          pitch: 70,
+          zoom: 16.5,
+          duration: 48,
+          easing: (t) => t,
+        });
+        chaseRafRef.current = requestAnimationFrame(animate);
+      } else {
+        setHighlightLine(m, coords, color);
+        chaseTimeoutRef.current = setTimeout(() => {
+          if (animTokenRef.current !== token) return;
+          if (activeRunIdRef.current !== runId) return;
+          const endCam = m.cameraForBounds(
+            [
+              [
+                Math.min(...coords.map((p) => p[0])),
+                Math.min(...coords.map((p) => p[1])),
+              ],
+              [
+                Math.max(...coords.map((p) => p[0])),
+                Math.max(...coords.map((p) => p[1])),
+              ],
+            ],
+            { padding: 60 }
+          );
+          if (endCam) {
+            m.easeTo({ ...endCam, pitch: 0, bearing: 0, duration: 1800 });
+          }
+        }, 1200);
+      }
+    };
+
+    const beginChase = () => {
+      if (chaseStarted || animTokenRef.current !== token) return;
+      chaseStarted = true;
+      if (chaseTimeoutRef.current != null) {
+        clearTimeout(chaseTimeoutRef.current);
+        chaseTimeoutRef.current = null;
+      }
+      chaseRafRef.current = requestAnimationFrame(animate);
+    };
+
+    m.flyTo({
+      center: coords[0],
+      bearing: currentBearing,
+      pitch: 70,
+      zoom: 16,
+      duration: 3200,
+      essential: true,
+    });
+
+    // Wait for flyTo + first idle (tiles) before chasing; fallback if idle is sticky
+    m.once('moveend', () => {
+      if (animTokenRef.current !== token) return;
+      m.once('idle', beginChase);
+      chaseTimeoutRef.current = setTimeout(beginChase, 1800);
+    });
+  };
+
   useEffect(() => {
     activityRef.current = activity;
     activitiesRef.current = activities;
     lightsOffRef.current = lightsOff;
   });
 
-  const updateRoutes = useRef(() => {
-    const m = map.current;
-    if (!m || !mapReady.current) return;
-    const act = activityRef.current;
-    const acts = activitiesRef.current;
-    ['selected', 'all-routes'].forEach((id) => {
-      if (m.getLayer(id)) m.removeLayer(id);
-      if (m.getSource(id)) m.removeSource(id);
-    });
-    if (act?.summary_polyline) {
-      const coords = polyline
-        .decode(act.summary_polyline)
-        .map(([lat, lng]) => [lng, lat]);
-      m.addSource('selected', {
+  const updateRoutesRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    updateRoutesRef.current = () => {
+      const m = map.current;
+      if (!m || !mapReady.current) return;
+      const act = activityRef.current;
+      const acts = activitiesRef.current;
+      const privacy = lightsOffRef.current;
+      const blank = lightsOffRef.current || !MAPBOX_TOKEN;
+
+      if (act?.summary_polyline && act.summary_polyline.length > 20) {
+        const runId = String(act.run_id);
+        const animKey = `${runId}|${privacy ? 1 : 0}|${blank ? 1 : 0}`;
+        // Avoid restarting an already-running chase for the same selection
+        if (animKeyRef.current === animKey && isAnimating()) {
+          return;
+        }
+
+        stopAnimations();
+        removeRouteLayers(m);
+
+        const coords = polyline
+          .decode(act.summary_polyline)
+          .map(([lat, lng]) => [lng, lat] as Coordinate);
+        const color = getColor(act);
+        activeRunIdRef.current = runId;
+        animKeyRef.current = animKey;
+
+        // Dim overview under selected route
+        const features = acts
+          .filter((a) => a.summary_polyline)
+          .map((a) => ({
+            type: 'Feature' as const,
+            properties: { type: a.type, color: getColor(a) },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: polyline
+                .decode(a.summary_polyline!)
+                .map(([lat, lng]) => [lng, lat]),
+            },
+          }));
+        if (features.length) {
+          m.addSource('all-routes', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          });
+          m.addLayer({
+            id: 'all-routes',
+            type: 'line',
+            source: 'all-routes',
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': privacy ? 2 : 1.2,
+              'line-opacity': privacy ? 0.35 : 0.2,
+            },
+          });
+        }
+
+        if (privacy || blank) {
+          startPrivacyAnimation(m, coords, color);
+        } else {
+          startChaseAnimation(m, coords, color, act.distance / 1000, runId);
+        }
+        applyLightsOff(m, privacy);
+        return;
+      }
+
+      animKeyRef.current = null;
+      activeRunIdRef.current = null;
+      stopAnimations();
+      removeRouteLayers(m);
+
+      if (m.getTerrain()) {
+        try {
+          m.setTerrain(null);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const features = acts
+        .filter((a) => a.summary_polyline)
+        .map((a) => ({
+          type: 'Feature' as const,
+          properties: { type: a.type, color: getColor(a) },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: polyline
+              .decode(a.summary_polyline!)
+              .map(([lat, lng]) => [lng, lat]),
+          },
+        }));
+      if (!features.length) {
+        applyLightsOff(m, privacy);
+        return;
+      }
+      m.addSource('all-routes', {
         type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'LineString', coordinates: coords },
-        },
+        data: { type: 'FeatureCollection', features },
       });
       m.addLayer({
-        id: 'selected',
+        id: 'all-routes',
         type: 'line',
-        source: 'selected',
+        source: 'all-routes',
         paint: {
-          'line-color': getColor(act),
-          'line-width': 3,
-          'line-opacity': 0.9,
+          'line-color': ['get', 'color'],
+          'line-width': privacy ? 2 : 1.2,
+          'line-opacity': privacy ? 0.85 : 0.5,
         },
       });
-      const bounds = new mapboxgl.LngLatBounds();
-      coords.forEach((c) => bounds.extend(c as [number, number]));
-      m.fitBounds(bounds, {
-        padding: 50,
-        maxZoom: 14,
-        duration: lightsOffRef.current ? 200 : 800,
-      });
-      applyLightsOff(m, lightsOffRef.current);
-      return;
-    }
-    const features = acts
-      .filter((a) => a.summary_polyline)
-      .map((a) => ({
-        type: 'Feature' as const,
-        properties: { type: a.type },
-        geometry: {
-          type: 'LineString' as const,
-          coordinates: polyline
-            .decode(a.summary_polyline!)
-            .map(([lat, lng]) => [lng, lat]),
-        },
-      }));
-    if (!features.length) {
-      applyLightsOff(m, lightsOffRef.current);
-      return;
-    }
-    m.addSource('all-routes', {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features },
-    });
-    m.addLayer({
-      id: 'all-routes',
-      type: 'line',
-      source: 'all-routes',
-      paint: {
-        'line-color': [
-          'match',
-          ['get', 'type'],
-          'Run',
-          '#f97316',
-          'Ride',
-          '#3b82f6',
-          'Hike',
-          '#22c55e',
-          '#a855f7',
-        ],
-        'line-width': lightsOffRef.current ? 2 : 1.2,
-        'line-opacity': lightsOffRef.current ? 0.85 : 0.5,
-      },
-    });
-    const allCoords = features.flatMap(
-      (f) => f.geometry.coordinates as [number, number][]
-    );
-    if (!allCoords.length) {
-      applyLightsOff(m, lightsOffRef.current);
-      return;
-    }
-    const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
-    const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
-    const t = Math.floor(lngs.length * 0.1);
-    m.fitBounds(
-      new mapboxgl.LngLatBounds(
-        [lngs[t], lats[t]],
-        [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
-      ),
-      {
-        padding: 30,
-        maxZoom: 13,
-        duration: lightsOffRef.current ? 200 : 800,
+      const allCoords = features.flatMap(
+        (f) => f.geometry.coordinates as [number, number][]
+      );
+      if (!allCoords.length) {
+        applyLightsOff(m, privacy);
+        return;
       }
-    );
-    applyLightsOff(m, lightsOffRef.current);
+      const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
+      const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
+      const t = Math.floor(lngs.length * 0.1);
+      m.easeTo({ pitch: 0, bearing: 0, duration: privacy ? 200 : 600 });
+      m.fitBounds(
+        new mapboxgl.LngLatBounds(
+          [lngs[t], lats[t]],
+          [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
+        ),
+        {
+          padding: 30,
+          maxZoom: 13,
+          duration: privacy ? 200 : 800,
+        }
+      );
+      applyLightsOff(m, privacy);
+    };
   });
 
   useEffect(() => {
@@ -255,45 +597,80 @@ function TrackMap({
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
     mapReady.current = false;
-    map.current = new mapboxgl.Map({
+    styleIdleRef.current = false;
+    animKeyRef.current = null;
+    stopAnimations();
+    const mapInstance = new mapboxgl.Map({
       container: mapContainer.current,
       style,
       center: [108, 35],
       zoom: 3,
+      pitch: 0,
+      maxPitch: 85,
       attributionControl: !useBlank,
     });
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.current.on('style.load', () => {
-      mapReady.current = true;
-      updateRoutes.current();
-    });
+    map.current = mapInstance;
+    mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     let timedOut = false;
+    let styleSettled = false;
     const timer = window.setTimeout(() => {
-      if (!map.current || map.current.isStyleLoaded() || timedOut) return;
+      if (
+        timedOut ||
+        styleSettled ||
+        !map.current ||
+        map.current !== mapInstance
+      )
+        return;
+      if (mapInstance.isStyleLoaded()) return;
       timedOut = true;
       console.warn(
         'Track map style load timed out; falling back to blank basemap'
       );
-      map.current.setStyle(blankMapStyle(bg));
+      mapInstance.setStyle(blankMapStyle(bg));
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
+    mapInstance.on('style.load', () => {
+      if (map.current !== mapInstance) return;
+      // First successful style.load cancels blank fallback so we don't
+      // tear down a working basemap (and 3D buildings) mid-animation.
+      if (!timedOut) {
+        styleSettled = true;
+        window.clearTimeout(timer);
+      }
+      mapReady.current = true;
+      styleIdleRef.current = false;
+      mapInstance.once('idle', () => {
+        if (map.current !== mapInstance) return;
+        styleIdleRef.current = true;
+        injectTerrain(mapInstance, dark !== false);
+        updateRoutesRef.current();
+      });
+    });
 
     return () => {
       window.clearTimeout(timer);
-      map.current?.remove();
-      map.current = null;
+      stopAnimations();
+      mapInstance.remove();
+      if (map.current === mapInstance) {
+        map.current = null;
+      }
       mapReady.current = false;
+      styleIdleRef.current = false;
+      animKeyRef.current = null;
     };
   }, [dark, useBlank]);
 
   useEffect(() => {
-    if (mapReady.current) updateRoutes.current();
+    if (mapReady.current && styleIdleRef.current) {
+      updateRoutesRef.current();
+    }
   }, [activity, activities]);
 
   useEffect(() => {
     if (!map.current?.isStyleLoaded()) return;
     applyLightsOff(map.current, lightsOff);
-    if (map.current.getLayer('all-routes')) {
+    if (map.current.getLayer('all-routes') && !activityRef.current) {
       map.current.setPaintProperty(
         'all-routes',
         'line-width',
@@ -320,8 +697,10 @@ function TrackMap({
 function getColor(a: Activity): string {
   if (a.type === 'Run') {
     const km = a.distance / 1000;
-    return km >= 40 ? '#ef4444' : km >= 20 ? '#f97316' : '#f97316';
+    return km > 20 ? '#ef4444' : '#f97316';
   }
+  if (a.type === 'Ride') return '#3b82f6';
+  if (a.type === 'Hike') return '#22c55e';
   return '#a855f7';
 }
 
@@ -331,6 +710,7 @@ export function TracksPage({
   onSelectActivity,
   getTitle,
   lightsOff = false,
+  dark = true,
 }: TracksPageProps) {
   const { locale } = useLocale();
   const allYears = getAvailableYears(activities);
@@ -649,7 +1029,7 @@ export function TracksPage({
             <TrackMap
               activity={selectedActivity}
               activities={withPolyline}
-              dark
+              dark={dark}
               lightsOff={lightsOff}
             />
           </div>

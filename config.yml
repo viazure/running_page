@@ -40,11 +40,14 @@ privacy_unlock: true
 # false：始终显示原活动名（仅地图关灯受隐私影响）
 privacy_anonymous_titles: true
 
-# 顶栏外链（dashboard / dashboard_pro Header 读取；支持中英双语名称）
-nav_links:
-  - name_zh: 博客
-    name_en: Blog
-    url: https://viazure.cc
+# 博客 URL（可选；配置后顶栏最右侧显示强调入口，未配置则不显示）
+blog_url: 'https://viazure.cc'
+
+# 顶栏其它外链（可选；显示在页面导航旁）
+nav_links: []
+
+# 页脚 GitHub 仓库链接（可选；配置后 copyright 旁显示）
+github_url: 'https://github.com/viazure/running_page'
 
 # ── 运动目标 ──────────────────────────────────────────────────────────────────
 # unit: distance → 单位 km

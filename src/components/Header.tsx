@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type MouseEvent } from 'react';
 import type { Activity } from '../types';
 import { useLocale } from '../hooks/useLocale';
-import { NAV_LINKS, navLinkLabel } from '../config';
+import { NAV_LINKS, BLOG_URL, navLinkLabel } from '../config';
 import { usePrivacyUnlockToggle } from '../contexts/PrivacyUnlockContext';
 
 type Page = 'home' | 'tracks' | 'summary';
@@ -21,6 +21,29 @@ interface HeaderProps {
 
 const LOGO_TAP_TARGET = 7;
 const LOGO_TAP_WINDOW_MS = 2000;
+
+function ExternalLinkIcon({
+  className = 'h-3.5 w-3.5',
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+      />
+    </svg>
+  );
+}
 
 export function Header({
   dark,
@@ -68,6 +91,8 @@ export function Header({
     onNavigate(p);
     setMenuOpen(false);
   };
+
+  const blogLabel = locale === 'zh' ? '博客' : 'Blog';
 
   const themeButton = (
     <button
@@ -118,6 +143,31 @@ export function Header({
     </button>
   );
 
+  const blogLinkDesktop = BLOG_URL ? (
+    <a
+      href={BLOG_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-2.5 py-1 text-sm font-medium text-[var(--color-accent)] transition-colors hover:border-[var(--color-accent)] hover:bg-[var(--color-accent)]/20"
+    >
+      <ExternalLinkIcon />
+      {blogLabel}
+    </a>
+  ) : null;
+
+  const blogLinkMobile = BLOG_URL ? (
+    <a
+      href={BLOG_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={() => setMenuOpen(false)}
+      className="inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10"
+    >
+      <ExternalLinkIcon />
+      {blogLabel}
+    </a>
+  ) : null;
+
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-bg)]/70 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-4 md:px-6">
@@ -132,7 +182,7 @@ export function Header({
           </span>
         </button>
 
-        {/* Desktop nav */}
+        {/* Desktop nav: pages + optional nav_links … theme + locale + blog */}
         <div className="hidden items-center gap-5 md:flex">
           {navItems.map((item) => (
             <button
@@ -161,6 +211,7 @@ export function Header({
           ))}
           {themeButton}
           {localeButton}
+          {blogLinkDesktop}
         </div>
 
         {/* Mobile: theme + locale + menu toggle */}
@@ -241,6 +292,7 @@ export function Header({
                 {navLinkLabel(link, locale)}
               </a>
             ))}
+            {blogLinkMobile}
           </div>
         </nav>
       )}

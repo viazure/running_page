@@ -45,9 +45,9 @@ export function PageSkeleton() {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px]">
           <div className="min-w-0 space-y-6">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <Block className="h-24" />
               <Block className="h-24" />
               <Block className="col-span-2 h-24 sm:col-span-1" />
@@ -70,9 +70,9 @@ export function PageSkeleton() {
 export function DashboardContentSkeleton() {
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px]">
         <div className="min-w-0 space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <Block className="h-24" />
             <Block className="h-24" />
             <Block className="col-span-2 h-24 sm:col-span-1" />

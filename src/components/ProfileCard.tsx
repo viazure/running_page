@@ -6,19 +6,26 @@ import {
   extractProvince,
 } from '../hooks/useActivities';
 import { AVATAR } from '../config';
+import {
+  computePersonalBests,
+  personalBestLabels,
+  PersonalBestDivider,
+  PersonalBestGrid,
+} from './PersonalBest';
 
 interface ProfileCardProps {
   activities: Activity[];
   filter?: SportFilter;
   getTitle?: (a: Activity) => string;
   hideLocationStats?: boolean;
+  onSelectActivity?: (a: Activity | null) => void;
 }
 
 export function ProfileCard({
   activities,
   filter = 'all',
-  getTitle,
   hideLocationStats = false,
+  onSelectActivity,
 }: ProfileCardProps) {
   const { t, locale } = useLocale();
 
@@ -67,26 +74,9 @@ export function ProfileCard({
 
   const formatHours = (secs: number) => `${(secs / 3600).toFixed(1)}h`;
 
-  const latest =
-    activities.length > 0
-      ? [...activities].sort(
-          (a, b) =>
-            new Date(b.start_date_local).getTime() -
-            new Date(a.start_date_local).getTime()
-        )[0]
-      : null;
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    if (locale === 'zh') {
-      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-    }
-    return d.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const bests = computePersonalBests(activities);
+  const hasBests = bests.some((b) => b.activity !== null);
+  const pbLabels = personalBestLabels(locale);
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
@@ -164,7 +154,8 @@ export function ProfileCard({
             )}
             {hideLocationStats && (
               <span>
-                {totalCount.toLocaleString()} {t('activities')}
+                {totalCount.toLocaleString()}{' '}
+                {locale === 'zh' ? t('activities') : t('activitiesLabel')}
               </span>
             )}
           </p>
@@ -188,7 +179,7 @@ export function ProfileCard({
                 d="M13 10V3L4 14h7v7l9-11h-7z"
               />
             </svg>
-            {t('activities')}
+            {t('activitiesLabel')}
           </p>
           <p className="text-lg font-bold">{totalCount.toLocaleString()}</p>
         </div>
@@ -207,7 +198,7 @@ export function ProfileCard({
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            {t('years')}
+            {t('yearsLabel')}
           </p>
           <p className="text-lg font-bold">{yearsActive}</p>
         </div>
@@ -226,29 +217,23 @@ export function ProfileCard({
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            {locale === 'zh' ? '时间' : 'Time'}
+            {t('timeLabel')}
           </p>
           <p className="text-lg font-bold">{formatHours(totalSeconds)}</p>
         </div>
       </div>
 
-      {/* Latest Activity */}
-      {latest && (
-        <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-          <p className="mb-1 text-xs text-[var(--color-muted)]">
-            {locale === 'zh' ? '最近活动' : 'Latest Activity'}
-          </p>
-          <p className="truncate text-sm font-medium">
-            {latest.type === 'Run' ? '🏃 ' : '🚴 '}
-            {getTitle
-              ? getTitle(latest)
-              : latest.name || (latest.type === 'Run' ? 'Run' : 'Ride')}
-            <span className="font-normal text-[var(--color-muted)]">
-              {' '}
-              · {formatDistance(latest.distance)} km ·{' '}
-              {formatDate(latest.start_date_local)}
-            </span>
-          </p>
+      {/* Personal records — dashed label divider */}
+      {hasBests && (
+        <div className="mt-4">
+          <PersonalBestDivider />
+          <div className="mt-2">
+            <PersonalBestGrid
+              bests={bests}
+              labels={pbLabels}
+              onSelectActivity={onSelectActivity}
+            />
+          </div>
         </div>
       )}
     </div>
