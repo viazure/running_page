@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Activity, SportFilter } from '../types';
 import { formatDuration, formatPace } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
@@ -11,6 +11,7 @@ interface ActivityLogProps {
   selectedActivity?: Activity | null;
   onSelectActivity?: (a: Activity | null) => void;
   filter?: SportFilter;
+  getTitle?: (a: Activity) => string;
 }
 
 const PAGE_SIZE = 16;
@@ -32,45 +33,46 @@ export function ActivityLog({
   selectedActivity,
   onSelectActivity,
   filter = 'all',
+  getTitle,
 }: ActivityLogProps) {
   const { t } = useLocale();
   const [page, setPage] = useState(0);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
 
-  const distFiltered = activities.filter((a) => {
-    const km = a.distance / 1000;
-    switch (distFilter) {
-      case '10':
-        return km >= 10 && km < 20;
-      case '20':
-        return km >= 20 && km < 40;
-      case '40':
-        return km >= 40;
-      default:
-        return true;
-    }
-  });
-
-  const sorted = [...distFiltered].sort(
-    (a, b) =>
-      new Date(b.start_date_local).getTime() -
-      new Date(a.start_date_local).getTime()
-  );
-
-  useEffect(() => {
-    if (selectedActivity) {
-      const idx = sorted.findIndex((a) => a.run_id === selectedActivity.run_id);
-      if (idx >= 0) {
-        setPage(Math.floor(idx / PAGE_SIZE));
-      } else {
-        setDistFilter('all');
+  const sorted = useMemo(() => {
+    const distFiltered = activities.filter((a) => {
+      const km = a.distance / 1000;
+      switch (distFilter) {
+        case '10':
+          return km >= 10 && km < 20;
+        case '20':
+          return km >= 20 && km < 40;
+        case '40':
+          return km >= 40;
+        default:
+          return true;
       }
-    }
-    // `sorted` is in deps so the page refreshes when the list changes (year/filter switch)
-    // even if the selected run_id stays the same — avoids stale closure. M6 fix.
-  }, [selectedActivity?.run_id, sorted]);
+    });
+    return [...distFiltered].sort(
+      (a, b) =>
+        new Date(b.start_date_local).getTime() -
+        new Date(a.start_date_local).getTime()
+    );
+  }, [activities, distFilter]);
 
-  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  // Jump to the page that contains the selection when selection / list changes.
+  // `sorted` is memoized so this does not re-fire on every render and block pagination.
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const idx = sorted.findIndex((a) => a.run_id === selectedActivity.run_id);
+    if (idx >= 0) {
+      setPage(Math.floor(idx / PAGE_SIZE));
+    } else if (distFilter !== 'all') {
+      setDistFilter('all');
+    }
+  }, [selectedActivity, sorted, distFilter]);
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE) || 1;
   const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
@@ -170,7 +172,9 @@ export function ActivityLog({
                     {typeIcon(a.type)} {a.type}
                   </span>
                 </td>
-                <td className="py-3">{a.name || t('run')}</td>
+                <td className="py-3">
+                  {getTitle ? getTitle(a) : a.name || t('run')}
+                </td>
                 <td className="py-3 font-mono font-medium">
                   {(a.distance / 1000).toFixed(1)}
                   <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">

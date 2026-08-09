@@ -1,0 +1,11 @@
+/* Mapbox zoom / compass / fullscreen: hidden until pointer is over the control corner */
+@media (hover: hover) and (pointer: fine) {
+  .route-map-hover-ctrls .mapboxgl-ctrl-top-right {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .route-map-hover-ctrls .mapboxgl-ctrl-top-right:hover {
+    opacity: 1;
+  }
+}

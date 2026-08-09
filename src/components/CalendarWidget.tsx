@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Activity } from '../types';
 import { formatDistance } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
 
 interface CalendarWidgetProps {
   activities: Activity[];
+  selectedActivity?: Activity | null;
   onSelectActivity: (activity: Activity | null) => void;
 }
 
 export function CalendarWidget({
   activities,
+  selectedActivity,
   onSelectActivity,
 }: CalendarWidgetProps) {
   const { t } = useLocale();
@@ -17,6 +19,21 @@ export function CalendarWidget({
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+
+  // Activity → calendar: jump to the selected run's month
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const d = new Date(selectedActivity.start_date_local);
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+  }, [selectedActivity?.run_id]);
+
+  const selectedDay = useMemo(() => {
+    if (!selectedActivity) return null;
+    const d = new Date(selectedActivity.start_date_local);
+    if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) return null;
+    return d.getDate();
+  }, [selectedActivity, viewYear, viewMonth]);
 
   const { days, monthDistance, monthCount } = useMemo(() => {
     const firstDaySun = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
@@ -127,11 +144,23 @@ export function CalendarWidget({
         {days.map((d, i) => {
           const circleSize = getCircleSize(d.distance);
           const isHovered = hoveredDay === i && d.distance > 0;
+          const isSelected = selectedDay != null && d.day === selectedDay;
           return (
             <div
               key={i}
               onClick={() => {
-                if (d.activities.length > 0) onSelectActivity(d.activities[0]);
+                if (d.activities.length === 0) return;
+                const match =
+                  selectedActivity &&
+                  d.activities.find(
+                    (a) => a.run_id === selectedActivity.run_id
+                  );
+                // Toggle off if clicking the already-selected day/run
+                if (match && isSelected) {
+                  onSelectActivity(null);
+                  return;
+                }
+                onSelectActivity(match ?? d.activities[0]);
               }}
               onMouseEnter={() => d.distance > 0 && setHoveredDay(i)}
               onMouseLeave={() => setHoveredDay(null)}
@@ -148,24 +177,30 @@ export function CalendarWidget({
                   {/* Sized circle */}
                   {circleSize > 0 && (
                     <div
-                      className="absolute rounded-full bg-[var(--color-accent)]/25 transition-all duration-200"
+                      className={`absolute rounded-full transition-all duration-200 ${
+                        isSelected
+                          ? 'bg-[var(--color-accent)]/45 ring-2 ring-[var(--color-accent)]'
+                          : 'bg-[var(--color-accent)]/25'
+                      }`}
                       style={{
                         width: `${circleSize}px`,
                         height: `${circleSize}px`,
                       }}
                     />
                   )}
-                  {/* Label: show km by default, show date on hover */}
+                  {/* Label: show km by default, show date on hover / selection */}
                   <span
                     className={`relative text-[10px] leading-none font-medium transition-all ${
-                      isHovered
-                        ? 'text-[var(--color-text)]'
-                        : d.activities.length > 0
-                          ? 'text-[var(--color-accent)]'
-                          : 'text-[var(--color-muted)]'
+                      isSelected
+                        ? 'text-[var(--color-accent)]'
+                        : isHovered
+                          ? 'text-[var(--color-text)]'
+                          : d.activities.length > 0
+                            ? 'text-[var(--color-accent)]'
+                            : 'text-[var(--color-muted)]'
                     }`}
                   >
-                    {isHovered
+                    {isHovered || isSelected
                       ? d.day
                       : d.activities.length > 0
                         ? `${(d.distance / 1000).toFixed(0)}k`

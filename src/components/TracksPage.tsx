@@ -12,6 +12,12 @@ import {
 } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
 import { MAPBOX_TOKEN } from '../config';
+import {
+  blankMapStyle,
+  mapboxBasemapStyle,
+  MAP_STYLE_LOAD_TIMEOUT_MS,
+} from '../core/mapStyle';
+import './RouteMap.css';
 
 type SportType = 'Run';
 
@@ -20,6 +26,8 @@ interface TracksPageProps {
   filter: string;
   onBack: () => void;
   onSelectActivity?: (a: Activity | null) => void;
+  getTitle?: (a: Activity) => string;
+  lightsOff?: boolean;
 }
 
 function renderTrackSVG(summaryPolyline: string, size = 80): string {
@@ -54,22 +62,26 @@ function TrackThumb({
   color,
   selected,
   onClick,
+  title,
 }: {
   activity: Activity;
   color: string;
   selected: boolean;
   onClick: () => void;
+  title?: string;
 }) {
   const size = 80;
   const points = activity.summary_polyline
     ? renderTrackSVG(activity.summary_polyline, size)
     : '';
   if (!points) return null;
+  const label =
+    title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
   return (
     <div
       className={`group relative cursor-pointer rounded transition-all ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
       onClick={onClick}
-      title={`${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`}
+      title={label}
     >
       <svg
         width={size}
@@ -94,31 +106,45 @@ function TrackMap({
   activity,
   activities,
   dark,
+  lightsOff = false,
 }: {
   activity: Activity | null;
   activities: Activity[];
   dark?: boolean;
+  lightsOff?: boolean;
 }) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const mapReady = useRef(false);
   const activityRef = useRef(activity);
   const activitiesRef = useRef(activities);
-  const style =
-    dark !== false
-      ? 'mapbox://styles/mapbox/dark-v11'
-      : 'mapbox://styles/mapbox/light-v11';
+  const lightsOffRef = useRef(lightsOff);
+  const useBlank = lightsOff || !MAPBOX_TOKEN;
+  const bg = dark !== false ? '#0d1117' : '#f6f8fa';
+  const style = useBlank
+    ? blankMapStyle(bg)
+    : mapboxBasemapStyle(dark !== false);
 
-  // Keep the latest props in refs via an effect (not during render) so the
-  // stable updateRoutes callback below can read them at event time. This is
-  // the React-recommended alternative to writing ref.current during render
-  // (react-hooks/refs).
+  const ROUTE_LAYER_IDS = new Set(['selected', 'all-routes']);
+
+  const applyLightsOff = (m: mapboxgl.Map, off: boolean) => {
+    const styleJson = m.getStyle();
+    if (!styleJson?.layers) return;
+    for (const layer of styleJson.layers) {
+      if (ROUTE_LAYER_IDS.has(layer.id) || layer.id === 'background') {
+        m.setLayoutProperty(layer.id, 'visibility', 'visible');
+        continue;
+      }
+      m.setLayoutProperty(layer.id, 'visibility', off ? 'none' : 'visible');
+    }
+  };
+
   useEffect(() => {
     activityRef.current = activity;
     activitiesRef.current = activities;
+    lightsOffRef.current = lightsOff;
   });
 
-  // Stable callback ref — always reads latest data from refs
   const updateRoutes = useRef(() => {
     const m = map.current;
     if (!m || !mapReady.current) return;
@@ -152,7 +178,12 @@ function TrackMap({
       });
       const bounds = new mapboxgl.LngLatBounds();
       coords.forEach((c) => bounds.extend(c as [number, number]));
-      m.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+      m.fitBounds(bounds, {
+        padding: 50,
+        maxZoom: 14,
+        duration: lightsOffRef.current ? 200 : 800,
+      });
+      applyLightsOff(m, lightsOffRef.current);
       return;
     }
     const features = acts
@@ -167,7 +198,10 @@ function TrackMap({
             .map(([lat, lng]) => [lng, lat]),
         },
       }));
-    if (!features.length) return;
+    if (!features.length) {
+      applyLightsOff(m, lightsOffRef.current);
+      return;
+    }
     m.addSource('all-routes', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features },
@@ -188,14 +222,17 @@ function TrackMap({
           '#22c55e',
           '#a855f7',
         ],
-        'line-width': 1.2,
-        'line-opacity': 0.5,
+        'line-width': lightsOffRef.current ? 2 : 1.2,
+        'line-opacity': lightsOffRef.current ? 0.85 : 0.5,
       },
     });
     const allCoords = features.flatMap(
       (f) => f.geometry.coordinates as [number, number][]
     );
-    if (!allCoords.length) return;
+    if (!allCoords.length) {
+      applyLightsOff(m, lightsOffRef.current);
+      return;
+    }
     const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
     const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
     const t = Math.floor(lngs.length * 0.1);
@@ -204,43 +241,80 @@ function TrackMap({
         [lngs[t], lats[t]],
         [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
       ),
-      { padding: 30, maxZoom: 13 }
+      {
+        padding: 30,
+        maxZoom: 13,
+        duration: lightsOffRef.current ? 200 : 800,
+      }
     );
+    applyLightsOff(m, lightsOffRef.current);
   });
 
-  // Init map once
   useEffect(() => {
     if (!mapContainer.current) return;
-    if (map.current) {
-      map.current.setStyle(style);
-      return;
-    }
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
+
     mapReady.current = false;
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style,
       center: [108, 35],
       zoom: 3,
+      attributionControl: !useBlank,
     });
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.current.on('style.load', () => {
       mapReady.current = true;
       updateRoutes.current();
     });
+
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      if (!map.current || map.current.isStyleLoaded() || timedOut) return;
+      timedOut = true;
+      console.warn(
+        'Track map style load timed out; falling back to blank basemap'
+      );
+      map.current.setStyle(blankMapStyle(bg));
+    }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
     return () => {
+      window.clearTimeout(timer);
       map.current?.remove();
       map.current = null;
       mapReady.current = false;
     };
-  }, [dark]);
+  }, [dark, useBlank]);
 
-  // Re-render routes when selection or data changes
   useEffect(() => {
     if (mapReady.current) updateRoutes.current();
   }, [activity, activities]);
 
-  return <div ref={mapContainer} className="h-full w-full" />;
+  useEffect(() => {
+    if (!map.current?.isStyleLoaded()) return;
+    applyLightsOff(map.current, lightsOff);
+    if (map.current.getLayer('all-routes')) {
+      map.current.setPaintProperty(
+        'all-routes',
+        'line-width',
+        lightsOff ? 2 : 1.2
+      );
+      map.current.setPaintProperty(
+        'all-routes',
+        'line-opacity',
+        lightsOff ? 0.85 : 0.5
+      );
+    }
+  }, [lightsOff]);
+
+  return (
+    <div
+      className="route-map-hover-ctrls h-full w-full"
+      style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
+    >
+      <div ref={mapContainer} className="h-full w-full" />
+    </div>
+  );
 }
 
 function getColor(a: Activity): string {
@@ -255,6 +329,8 @@ export function TracksPage({
   activities,
   onBack,
   onSelectActivity,
+  getTitle,
+  lightsOff = false,
 }: TracksPageProps) {
   const { locale } = useLocale();
   const allYears = getAvailableYears(activities);
@@ -488,7 +564,7 @@ export function TracksPage({
                 </button>
               </div>
               <p className="mb-0.5 truncate text-xs font-semibold">
-                {selectedActivity.name}
+                {getTitle ? getTitle(selectedActivity) : selectedActivity.name}
               </p>
               <p className="mb-2 text-[10px] text-[var(--color-muted)]">
                 {new Date(selectedActivity.start_date_local).toLocaleDateString(
@@ -577,6 +653,7 @@ export function TracksPage({
               activity={selectedActivity}
               activities={withPolyline}
               dark
+              lightsOff={lightsOff}
             />
           </div>
         </div>
@@ -745,6 +822,11 @@ export function TracksPage({
                         color={color}
                         selected={selectedActivity?.run_id === a.run_id}
                         onClick={() => handleSelectTrack(a)}
+                        title={
+                          getTitle
+                            ? `${getTitle(a)} — ${(a.distance / 1000).toFixed(1)} km`
+                            : undefined
+                        }
                       />
                       {count > 1 && (
                         <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-[var(--color-bg)]/80 px-1 py-0.5 text-[9px] leading-none font-bold text-[var(--color-muted)]">

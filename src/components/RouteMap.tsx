@@ -1,15 +1,45 @@
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import './RouteMap.css';
 import * as polyline from '@mapbox/polyline';
 import type { Activity } from '../types';
 import { MAPBOX_TOKEN } from '../config';
+import {
+  blankMapStyle,
+  mapboxBasemapStyle,
+  MAP_STYLE_LOAD_TIMEOUT_MS,
+} from '../core/mapStyle';
+
+const ROUTE_LAYER_IDS = new Set(['routes', 'selected']);
 
 interface RouteMapProps {
   activities: Activity[];
   selectedActivity?: Activity | null;
   dark?: boolean;
   onClearSelection?: () => void;
+  /** Hide basemap tiles; keep route lines (classic privacy lights-off) */
+  lightsOff?: boolean;
+}
+
+function applyLightsOff(map: mapboxgl.Map, lightsOff: boolean) {
+  const styleJson = map.getStyle();
+  if (!styleJson?.layers) return;
+  for (const layer of styleJson.layers) {
+    if (ROUTE_LAYER_IDS.has(layer.id)) {
+      map.setLayoutProperty(layer.id, 'visibility', 'visible');
+      continue;
+    }
+    if (layer.id === 'background') {
+      map.setLayoutProperty(layer.id, 'visibility', 'visible');
+      continue;
+    }
+    map.setLayoutProperty(
+      layer.id,
+      'visibility',
+      lightsOff ? 'none' : 'visible'
+    );
+  }
 }
 
 export function RouteMap({
@@ -17,32 +47,44 @@ export function RouteMap({
   selectedActivity,
   dark,
   onClearSelection,
+  lightsOff = false,
 }: RouteMapProps) {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const lightsOffRef = useRef(lightsOff);
+  const activitiesRef = useRef(activities);
+  const selectedRef = useRef(selectedActivity);
 
-  const style =
-    dark !== false
-      ? 'mapbox://styles/mapbox/dark-v11'
-      : 'mapbox://styles/mapbox/light-v11';
+  useEffect(() => {
+    lightsOffRef.current = lightsOff;
+    activitiesRef.current = activities;
+    selectedRef.current = selectedActivity;
+  });
 
-  // Declared before the effects that reference it (react-hooks/immutability).
-  function updateRoutes() {
-    if (!map.current) return;
+  const useBlank = lightsOff || !MAPBOX_TOKEN;
+  const bg = dark !== false ? '#0d1117' : '#f6f8fa';
+  const style = useBlank
+    ? blankMapStyle(bg)
+    : mapboxBasemapStyle(dark !== false);
 
-    // Remove existing source/layer
-    if (map.current.getLayer('routes')) map.current.removeLayer('routes');
-    if (map.current.getSource('routes')) map.current.removeSource('routes');
-    if (map.current.getLayer('selected')) map.current.removeLayer('selected');
-    if (map.current.getSource('selected')) map.current.removeSource('selected');
+  const updateRoutesRef = useRef(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
-    // If a single activity is selected, show only that route highlighted
-    if (selectedActivity?.summary_polyline) {
+    if (map.getLayer('routes')) map.removeLayer('routes');
+    if (map.getSource('routes')) map.removeSource('routes');
+    if (map.getLayer('selected')) map.removeLayer('selected');
+    if (map.getSource('selected')) map.removeSource('selected');
+
+    const selected = selectedRef.current;
+    const acts = activitiesRef.current;
+
+    if (selected?.summary_polyline) {
       const coords = polyline
-        .decode(selectedActivity.summary_polyline)
+        .decode(selected.summary_polyline)
         .map(([lat, lng]) => [lng, lat]);
 
-      map.current.addSource('selected', {
+      map.addSource('selected', {
         type: 'geojson',
         data: {
           type: 'Feature',
@@ -51,12 +93,12 @@ export function RouteMap({
         },
       });
 
-      map.current.addLayer({
+      map.addLayer({
         id: 'selected',
         type: 'line',
         source: 'selected',
         paint: {
-          'line-color': selectedActivity.type === 'Run' ? '#f97316' : '#3b82f6',
+          'line-color': selected.type === 'Run' ? '#f97316' : '#3b82f6',
           'line-width': 3,
           'line-opacity': 0.9,
         },
@@ -64,12 +106,16 @@ export function RouteMap({
 
       const bounds = new mapboxgl.LngLatBounds();
       for (const c of coords) bounds.extend(c as [number, number]);
-      map.current.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+      map.fitBounds(bounds, {
+        padding: 50,
+        maxZoom: 14,
+        duration: lightsOffRef.current ? 200 : 800,
+      });
+      applyLightsOff(map, lightsOffRef.current);
       return;
     }
 
-    // Otherwise show all routes
-    const features = activities
+    const features = acts
       .filter((a) => a.summary_polyline)
       .map((a) => {
         const coords = polyline
@@ -85,9 +131,12 @@ export function RouteMap({
         };
       });
 
-    if (features.length === 0) return;
+    if (features.length === 0) {
+      applyLightsOff(map, lightsOffRef.current);
+      return;
+    }
 
-    map.current.addSource('routes', {
+    map.addSource('routes', {
       type: 'geojson',
       data: {
         type: 'FeatureCollection',
@@ -95,7 +144,7 @@ export function RouteMap({
       },
     });
 
-    map.current.addLayer({
+    map.addLayer({
       id: 'routes',
       type: 'line',
       source: 'routes',
@@ -109,27 +158,25 @@ export function RouteMap({
           '#3b82f6',
           '#a855f7',
         ],
-        'line-width': 1.5,
-        'line-opacity': 0.6,
+        'line-width': lightsOffRef.current ? 2 : 1.5,
+        'line-opacity': lightsOffRef.current ? 0.85 : 0.6,
       },
     });
 
-    // Fit bounds to majority of routes (ignore outliers)
-    // Use median-based approach: find the region where most routes are
     const allCoords: [number, number][] = [];
     for (const f of features) {
-      // Use first coord of each route as representative point
       if (f.geometry.coordinates.length > 0) {
         allCoords.push(f.geometry.coordinates[0] as [number, number]);
       }
     }
 
-    if (allCoords.length === 0) return;
+    if (allCoords.length === 0) {
+      applyLightsOff(map, lightsOffRef.current);
+      return;
+    }
 
-    // Sort by lng and lat, take the middle 80% to exclude outliers
     const trimPct = 0.1;
     const trimCount = Math.floor(allCoords.length * trimPct);
-
     const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
     const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
 
@@ -138,50 +185,89 @@ export function RouteMap({
       [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
     );
 
-    map.current.fitBounds(bounds, { padding: 30, maxZoom: 13 });
-  }
+    map.fitBounds(bounds, {
+      padding: 30,
+      maxZoom: 13,
+      duration: lightsOffRef.current ? 200 : 800,
+    });
+    applyLightsOff(map, lightsOffRef.current);
+  });
 
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainerRef.current) return;
 
-    if (map.current) {
-      map.current.setStyle(style);
-      return;
-    }
+    if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
+    const onStyleReady = () => {
+      updateRoutesRef.current();
+    };
+
+    mapRef.current = new mapboxgl.Map({
+      container: mapContainerRef.current,
       style,
       center: [121.4, 31.2],
       zoom: 10,
+      attributionControl: !useBlank,
     });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+    mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    if (!useBlank) {
+      mapRef.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+    }
 
-    map.current.on('style.load', () => {
-      updateRoutes();
-    });
+    mapRef.current.on('style.load', onStyleReady);
+
+    // Mapbox CDN blocked / slow → fall back to blank so routes still render
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
+      timedOut = true;
+      console.warn('Map style load timed out; falling back to blank basemap');
+      mapRef.current.setStyle(blankMapStyle(bg));
+    }, MAP_STYLE_LOAD_TIMEOUT_MS);
 
     return () => {
-      map.current?.remove();
-      map.current = null;
+      window.clearTimeout(timer);
+      mapRef.current?.remove();
+      mapRef.current = null;
     };
-  }, [dark]);
+    // Recreate when basemap mode changes (blank ↔ mapbox)
+  }, [dark, useBlank]);
 
   useEffect(() => {
-    if (map.current?.isStyleLoaded()) {
-      updateRoutes();
+    if (!mapRef.current) return;
+    if (mapRef.current.isStyleLoaded()) {
+      updateRoutesRef.current();
     } else {
-      map.current?.once('style.load', () => updateRoutes());
+      mapRef.current.once('style.load', () => updateRoutesRef.current());
     }
   }, [activities, selectedActivity]);
 
+  useEffect(() => {
+    if (!mapRef.current?.isStyleLoaded()) return;
+    applyLightsOff(mapRef.current, lightsOff);
+    if (mapRef.current.getLayer('routes')) {
+      mapRef.current.setPaintProperty(
+        'routes',
+        'line-width',
+        lightsOff ? 2 : 1.5
+      );
+      mapRef.current.setPaintProperty(
+        'routes',
+        'line-opacity',
+        lightsOff ? 0.85 : 0.6
+      );
+    }
+  }, [lightsOff]);
+
   return (
-    <div className="relative h-[280px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+    <div
+      className="route-map-hover-ctrls relative h-[280px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
+      style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
+    >
       {selectedActivity && (
         <button
+          type="button"
           onClick={onClearSelection}
           className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
         >
@@ -201,7 +287,7 @@ export function RouteMap({
           Overview
         </button>
       )}
-      <div ref={mapContainer} className="h-full w-full" />
+      <div ref={mapContainerRef} className="h-full w-full" />
     </div>
   );
 }

@@ -15,13 +15,14 @@ import pytz
 import s2sphere as s2
 
 try:
-    from tzfpy import get_tz
+    from tzfpy import get_tz as _tzfpy_get_tz
 
     tf = None
 except ImportError:
     # tzfpy is not available, fallback to timezonefinder
     from timezonefinder import TimezoneFinder
 
+    _tzfpy_get_tz = None
     tf = TimezoneFinder()
 
 
@@ -119,23 +120,39 @@ def format_float(f):
     return locale.format_string("%.1f", f)
 
 
-def parse_datetime_to_local(start_time, end_time, point):
+def _resolve_timezone_name(point) -> str:
+    """Timezone from GPS point, fallback Asia/Shanghai."""
     if not point:
-        timezone = "Asia/Shanghai"
-    else:
-        # just parse the start time, because start/end maybe different
-        offset = start_time.utcoffset()
-        if offset:
-            return start_time + offset, end_time + offset
-        lat, lng = point
+        return "Asia/Shanghai"
+    lat, lng = point
+    if _tzfpy_get_tz is not None:
         try:
-            timezone = get_tz(lng=lng, lat=lat)
+            return _tzfpy_get_tz(lng=lng, lat=lat) or "Asia/Shanghai"
         except Exception as e:
             # just a little trick when tzfpy support windows will delete this
             print(f"tzfpy error: {e} fallback to timezonefinder")
-            lat, lng = point
-            timezone = tf.timezone_at(lng=lng, lat=lat)
-    tc_offset = datetime.now(pytz.timezone(timezone)).utcoffset()
+    if tf is not None:
+        return tf.timezone_at(lng=lng, lat=lat) or "Asia/Shanghai"
+    return "Asia/Shanghai"
+
+
+def parse_datetime_to_local(start_time, end_time, point):
+    """Return naive local wall-clock datetimes for start/end.
+
+    - Timezone-aware inputs (e.g. TCX ``...+08:00``): convert via astimezone —
+      do NOT add utcoffset again (that caused a double +8h bug).
+    - Naive inputs: treat as UTC-like absolute wall and add the local offset
+      (previous behavior for FIT/GPX without tz).
+    """
+    tz_name = _resolve_timezone_name(point)
+    tz = pytz.timezone(tz_name)
+
+    if start_time.tzinfo is not None and start_time.utcoffset() is not None:
+        local_start = start_time.astimezone(tz).replace(tzinfo=None)
+        local_end = end_time.astimezone(tz).replace(tzinfo=None)
+        return local_start, local_end
+
+    tc_offset = datetime.now(tz).utcoffset()
     return start_time + tc_offset, end_time + tc_offset
 
 
