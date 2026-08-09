@@ -23,10 +23,8 @@ export function StatsCards({
   // For Gym, goals are in minutes; for others, goals are in km → convert to meters
   const yearGoalMeters = goal.unit === 'time' ? 0 : goal.yearly * 1000;
   const monthGoalMeters = goal.unit === 'time' ? 0 : goal.monthly * 1000;
-  const weekGoalMeters = goal.unit === 'time' ? 0 : goal.weekly * 1000;
   const yearGoalMins = goal.unit === 'time' ? goal.yearly : 0;
   const monthGoalMins = goal.unit === 'time' ? goal.monthly : 0;
-  const weekGoalMins = goal.unit === 'time' ? goal.weekly : 0;
 
   // Current year stats (for yearly goal)
   const now = new Date();
@@ -111,46 +109,6 @@ export function StatsCards({
     goal.unit === 'time'
       ? monthSeconds - lastMonthSeconds
       : monthDistance - lastMonthDistance;
-
-  // Current week stats — week starts on Monday
-  const dayOfWeek = now.getDay(); // 0=Sun
-  const daysSinceMon = (dayOfWeek + 6) % 7; // Mon=0 … Sun=6
-  const weekStart = new Date(now.getTime() - daysSinceMon * 86400000);
-  weekStart.setHours(0, 0, 0, 0);
-  const weekActivities = allActivities.filter((a) => {
-    const d = new Date(a.start_date_local);
-    if (d < weekStart) return false;
-    if (filter !== 'all' && a.type !== filter) return false;
-    return true;
-  });
-  const weekDistance = weekActivities.reduce((s, a) => s + a.distance, 0);
-  const weekCount = weekActivities.length;
-  const weekSeconds = weekActivities.reduce(
-    (s, a) => s + parseMovingTime(a.moving_time),
-    0
-  );
-
-  // Last week same period comparison
-  const lastWeekStart = new Date(weekStart.getTime() - 7 * 86400000);
-  const lastWeekSamePoint = new Date(now.getTime() - 7 * 86400000);
-  const lastWeekActivities = allActivities.filter((a) => {
-    const d = new Date(a.start_date_local);
-    if (d < lastWeekStart || d > lastWeekSamePoint) return false;
-    if (filter !== 'all' && a.type !== filter) return false;
-    return true;
-  });
-  const lastWeekDistance = lastWeekActivities.reduce(
-    (s, a) => s + a.distance,
-    0
-  );
-  const lastWeekSeconds = lastWeekActivities.reduce(
-    (s, a) => s + parseMovingTime(a.moving_time),
-    0
-  );
-  const weekDiff =
-    goal.unit === 'time'
-      ? weekSeconds - lastWeekSeconds
-      : weekDistance - lastWeekDistance;
 
   // Use local date string to avoid UTC offset issues
   function toLocalDateStr(d: Date): string {
@@ -292,12 +250,12 @@ export function StatsCards({
   const unit = filter === 'Run' ? t('runs') : t('activities');
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_1fr_1.6fr]">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1.5fr] md:gap-4">
       {/* Yearly Goal */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
-        <p className="mb-2 flex items-center gap-1.5 text-xs tracking-wider text-[var(--color-muted)] uppercase">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg md:p-5">
+        <p className="mb-1.5 flex items-center gap-1 text-[10px] tracking-wider text-[var(--color-muted)] uppercase md:mb-2 md:gap-1.5 md:text-xs">
           <svg
-            className="h-3.5 w-3.5"
+            className="h-3 w-3 md:h-3.5 md:w-3.5"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -311,18 +269,18 @@ export function StatsCards({
           </svg>
           {t('yearlyGoal')}
         </p>
-        <p className="font-mono text-3xl font-bold whitespace-nowrap">
+        <p className="font-mono text-xl font-bold whitespace-nowrap md:text-3xl">
           {goal.unit === 'time'
             ? formatHours(yearSeconds)
             : formatDistance(yearDistance)}
-          <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+          <span className="ml-1 text-xs font-normal text-[var(--color-muted)] md:text-base">
             /{' '}
             {goal.unit === 'time'
               ? `${Math.round(yearGoalMins / 60)}h`
               : `${goal.yearly} km`}
           </span>
         </p>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-border)]">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-border)] md:mt-3 md:h-1.5">
           <div
             className="h-full rounded-full bg-[var(--color-accent)] transition-all"
             style={{
@@ -330,7 +288,7 @@ export function StatsCards({
             }}
           />
         </div>
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+        <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
           <span className="flex items-center gap-1.5">
             <svg
               className="h-3.5 w-3.5 text-[var(--color-accent)]"
@@ -350,7 +308,7 @@ export function StatsCards({
           <span>{formatHours(yearSeconds)}</span>
         </div>
         <p
-          className={`mt-1.5 text-xs ${yearDiff >= 0 ? 'text-emerald-500' : 'text-red-400'}`}
+          className={`mt-1.5 text-[10px] md:text-xs ${yearDiff >= 0 ? 'text-emerald-500' : 'text-red-400'}`}
         >
           {yearDiff >= 0 ? '↗' : '↘'}{' '}
           {goal.unit === 'time'
@@ -361,10 +319,10 @@ export function StatsCards({
       </div>
 
       {/* Monthly Goal */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
-        <p className="mb-2 flex items-center gap-1.5 text-xs tracking-wider text-[var(--color-muted)] uppercase">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg md:p-5">
+        <p className="mb-1.5 flex items-center gap-1 text-[10px] tracking-wider text-[var(--color-muted)] uppercase md:mb-2 md:gap-1.5 md:text-xs">
           <svg
-            className="h-3.5 w-3.5"
+            className="h-3 w-3 md:h-3.5 md:w-3.5"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -378,18 +336,18 @@ export function StatsCards({
           </svg>
           {t('monthlyGoal')}
         </p>
-        <p className="font-mono text-3xl font-bold whitespace-nowrap">
+        <p className="font-mono text-xl font-bold whitespace-nowrap md:text-3xl">
           {goal.unit === 'time'
             ? formatHours(monthSeconds)
             : formatDistance(monthDistance)}
-          <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+          <span className="ml-1 text-xs font-normal text-[var(--color-muted)] md:text-base">
             /{' '}
             {goal.unit === 'time'
               ? `${Math.round(monthGoalMins / 60)}h`
               : `${goal.monthly} km`}
           </span>
         </p>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-border)]">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-border)] md:mt-3 md:h-1.5">
           <div
             className="h-full rounded-full bg-[var(--color-accent)] transition-all"
             style={{
@@ -397,7 +355,7 @@ export function StatsCards({
             }}
           />
         </div>
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+        <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
           <span className="flex items-center gap-1.5">
             <svg
               className="h-3.5 w-3.5 text-[var(--color-accent)]"
@@ -417,7 +375,7 @@ export function StatsCards({
           <span>{formatHours(monthSeconds)}</span>
         </div>
         <p
-          className={`mt-1.5 text-xs ${monthDiff >= 0 ? 'text-emerald-500' : 'text-red-400'}`}
+          className={`mt-1.5 text-[10px] md:text-xs ${monthDiff >= 0 ? 'text-emerald-500' : 'text-red-400'}`}
         >
           {monthDiff >= 0 ? '↗' : '↘'}{' '}
           {goal.unit === 'time'
@@ -427,72 +385,8 @@ export function StatsCards({
         </p>
       </div>
 
-      {/* Weekly Goal */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
-        <p className="mb-2 flex items-center gap-1.5 text-xs tracking-wider text-[var(--color-muted)] uppercase">
-          <svg
-            className="h-3.5 w-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          {locale === 'zh' ? '周目标' : 'WEEKLY GOAL'}
-        </p>
-        <p className="font-mono text-3xl font-bold whitespace-nowrap">
-          {goal.unit === 'time'
-            ? formatHours(weekSeconds)
-            : formatDistance(weekDistance)}
-          <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
-            / {goal.unit === 'time' ? `${weekGoalMins}m` : `${goal.weekly} km`}
-          </span>
-        </p>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-border)]">
-          <div
-            className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-            style={{
-              width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60)) * 100 : (weekDistance / weekGoalMeters) * 100, 100)}%`,
-            }}
-          />
-        </div>
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-          <span className="flex items-center gap-1.5">
-            <svg
-              className="h-3.5 w-3.5 text-[var(--color-accent)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-            {weekCount} {unit}
-          </span>
-          <span>{formatHours(weekSeconds)}</span>
-        </div>
-        <p
-          className={`mt-1.5 text-xs ${weekDiff >= 0 ? 'text-emerald-500' : 'text-red-400'}`}
-        >
-          {weekDiff >= 0 ? '↗' : '↘'}{' '}
-          {goal.unit === 'time'
-            ? formatHours(Math.abs(weekDiff))
-            : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
-          {locale === 'zh' ? 'vs 上周同期' : 'vs last week'}
-        </p>
-      </div>
-
       {/* Streak */}
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
+      <div className="col-span-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg md:col-span-1 md:p-5">
         <p className="mb-2 flex items-center gap-1.5 text-xs tracking-wider text-[var(--color-muted)] uppercase">
           <svg
             className="h-3.5 w-3.5"

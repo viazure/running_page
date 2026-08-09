@@ -39,11 +39,14 @@ type Page = 'home' | 'tracks';
 
 const FOOTER_YEAR = new Date().getFullYear();
 
-function MapFallback({ height = 280 }: { height?: number }) {
+function MapFallback({
+  className = 'h-[220px] md:h-[380px]',
+}: {
+  className?: string;
+}) {
   return (
     <div
-      className="flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] text-sm text-[var(--color-muted)]"
-      style={{ height }}
+      className={`flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] text-sm text-[var(--color-muted)] ${className}`}
     >
       …
     </div>
@@ -107,70 +110,94 @@ function DashboardProContent({
   }
 
   return (
-    <main className="mx-auto max-w-[1400px] px-6 py-6">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
-        <div className="min-w-0 space-y-6 overflow-hidden">
-          <StatsCards
-            activities={filtered}
-            allActivities={activities}
-            year={year}
-            filter={filter}
-            onSelectActivity={setSelectedActivity}
-          />
-          <ContributionHeatmap
-            activities={filtered}
-            year={heatmapYear}
-            filter={filter}
-            onSelectActivity={setSelectedActivity}
-          />
-          <ActivityLog
-            activities={filtered}
-            years={years}
-            year={year}
-            setYear={setYear}
-            selectedActivity={selectedActivity}
-            onSelectActivity={setSelectedActivity}
-            filter={filter}
-            getTitle={activityTitle}
-          />
+    <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
+      {/*
+        Mobile order: Stats → Heatmap → sticky RouteMap → ActivityLog → Calendar
+        → Profile → PersonalBest → ChinaMap.
+        Desktop: left Stats/Heatmap/Log; right Profile/PB/ChinaMap/RouteMap/Calendar.
+      */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_380px] lg:items-start xl:grid-cols-[1fr_420px]">
+        <div className="contents min-w-0 lg:flex lg:flex-col lg:gap-6 lg:overflow-hidden">
+          <div className="order-1 min-w-0 lg:order-none">
+            <StatsCards
+              activities={filtered}
+              allActivities={activities}
+              year={year}
+              filter={filter}
+              onSelectActivity={setSelectedActivity}
+            />
+          </div>
+          <div className="order-2 min-w-0 overflow-hidden lg:order-none">
+            <ContributionHeatmap
+              activities={filtered}
+              year={heatmapYear}
+              filter={filter}
+              onSelectActivity={setSelectedActivity}
+            />
+          </div>
+          <div className="order-4 min-w-0 overflow-hidden lg:order-none">
+            <ActivityLog
+              activities={filtered}
+              years={years}
+              year={year}
+              setYear={setYear}
+              selectedActivity={selectedActivity}
+              onSelectActivity={setSelectedActivity}
+              filter={filter}
+              getTitle={activityTitle}
+            />
+          </div>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-6 overflow-hidden">
-          <ProfileCard
-            activities={activities}
-            filter={filter}
-            getTitle={activityTitle}
-            hideLocationStats={privacyActive}
-          />
-          <Suspense fallback={<MapFallback height={280} />}>
-            <ChinaMap
-              activities={filtered}
+        <div className="contents min-w-0 lg:flex lg:flex-col lg:gap-6 lg:overflow-hidden">
+          <div className="order-6 min-w-0 overflow-hidden lg:order-none">
+            <ProfileCard
+              activities={activities}
               filter={filter}
-              selectedProvince={selectedProvince}
-              onSelectProvince={(p) => {
-                setSelectedProvince(p);
-                setSelectedActivity(null);
-              }}
+              getTitle={activityTitle}
+              hideLocationStats={privacyActive}
             />
-          </Suspense>
-          <Suspense fallback={<MapFallback />}>
-            <RouteMap
-              activities={provinceFiltered}
+          </div>
+          <div className="order-7 min-w-0 overflow-hidden lg:order-none">
+            <PersonalBest
+              activities={activities}
+              onSelectActivity={setSelectedActivity}
+            />
+          </div>
+          <div className="order-8 min-w-0 overflow-hidden lg:order-none">
+            <Suspense
+              fallback={<MapFallback className="h-[220px] md:h-[280px]" />}
+            >
+              <ChinaMap
+                activities={filtered}
+                filter={filter}
+                selectedProvince={selectedProvince}
+                onSelectProvince={(p) => {
+                  setSelectedProvince(p);
+                  setSelectedActivity(null);
+                }}
+              />
+            </Suspense>
+          </div>
+          {/* Sticky under header on mobile (ref: run.731558.xyz sticky map) */}
+          <div className="sticky top-16 z-40 order-3 -mx-4 bg-[var(--color-bg)] px-4 py-2 shadow-md lg:static lg:z-auto lg:order-none lg:mx-0 lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none">
+            <Suspense fallback={<MapFallback />}>
+              <RouteMap
+                activities={provinceFiltered}
+                selectedActivity={selectedActivity}
+                dark={dark}
+                lightsOff={privacyActive}
+                onClearSelection={() => setSelectedActivity(null)}
+              />
+            </Suspense>
+          </div>
+          <div className="order-5 min-w-0 overflow-hidden lg:order-none">
+            <CalendarWidget
+              activities={filtered}
               selectedActivity={selectedActivity}
-              dark={dark}
-              lightsOff={privacyActive}
-              onClearSelection={() => setSelectedActivity(null)}
+              onSelectActivity={setSelectedActivity}
             />
-          </Suspense>
-          <PersonalBest
-            activities={activities}
-            onSelectActivity={setSelectedActivity}
-          />
-          <CalendarWidget
-            activities={filtered}
-            selectedActivity={selectedActivity}
-            onSelectActivity={setSelectedActivity}
-          />
+          </div>
         </div>
       </div>
     </main>

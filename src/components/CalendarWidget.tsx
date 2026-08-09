@@ -85,14 +85,14 @@ export function CalendarWidget({
     } else setViewMonth(viewMonth + 1);
   };
 
-  // 4 tiers: returns px size of circle
+  // 4 tiers: returns px size of circle (capped for narrow sidebars / phones)
   const getCircleSize = (dist: number): number => {
     if (!dist) return 0;
     const km = dist / 1000;
-    if (km < 5) return 20;
-    if (km < 10) return 26;
-    if (km < 20) return 32;
-    return 38;
+    if (km < 5) return 18;
+    if (km < 10) return 22;
+    if (km < 20) return 28;
+    return 32;
   };
 
   const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];

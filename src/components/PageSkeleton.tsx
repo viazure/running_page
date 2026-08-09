@@ -19,7 +19,7 @@ export function PageSkeleton() {
       }}
     >
       <header
-        className="sticky top-0 z-50 border-b px-6 py-4"
+        className="sticky top-0 z-50 border-b px-4 py-4 md:px-6"
         style={{ borderColor: 'var(--color-border, #30363d)' }}
       >
         <div className="mx-auto flex max-w-[1400px] items-center justify-between">
@@ -29,11 +29,11 @@ export function PageSkeleton() {
           />
           <div className="flex gap-4">
             <div
-              className="h-4 w-10 animate-pulse rounded"
+              className="hidden h-4 w-10 animate-pulse rounded md:block"
               style={{ backgroundColor: 'var(--color-card, #161b22)' }}
             />
             <div
-              className="h-4 w-10 animate-pulse rounded"
+              className="hidden h-4 w-10 animate-pulse rounded md:block"
               style={{ backgroundColor: 'var(--color-card, #161b22)' }}
             />
             <div
@@ -44,14 +44,13 @@ export function PageSkeleton() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-6 py-6">
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
+      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
           <div className="min-w-0 space-y-6">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Block className="h-24" />
               <Block className="h-24" />
-              <Block className="h-24" />
-              <Block className="h-24" />
+              <Block className="col-span-2 h-24 sm:col-span-1" />
             </div>
             <Block className="h-40" />
             <Block className="h-72" />
@@ -59,7 +58,7 @@ export function PageSkeleton() {
           <div className="flex min-w-0 flex-col gap-6">
             <Block className="h-36" />
             <Block className="h-56" />
-            <Block className="h-64" />
+            <Block className="h-80" />
           </div>
         </div>
       </main>
@@ -70,14 +69,13 @@ export function PageSkeleton() {
 /** Content-area only (header already visible) */
 export function DashboardContentSkeleton() {
   return (
-    <main className="mx-auto max-w-[1400px] px-6 py-6">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
+    <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
         <div className="min-w-0 space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Block className="h-24" />
             <Block className="h-24" />
-            <Block className="h-24" />
-            <Block className="h-24" />
+            <Block className="col-span-2 h-24 sm:col-span-1" />
           </div>
           <Block className="h-40" />
           <Block className="h-72" />
@@ -85,7 +83,7 @@ export function DashboardContentSkeleton() {
         <div className="flex min-w-0 flex-col gap-6">
           <Block className="h-36" />
           <Block className="h-56" />
-          <Block className="h-64" />
+          <Block className="h-80" />
         </div>
       </div>
     </main>

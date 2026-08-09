@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Activity, SportFilter } from '../types';
 import { formatDuration, formatPace } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
@@ -25,6 +25,10 @@ function typeIcon(type: string): string {
   return icons[type] ?? '📌';
 }
 
+function formatRowDate(iso: string): string {
+  return iso.slice(0, 16).replace('T', ' ');
+}
+
 export function ActivityLog({
   activities,
   years,
@@ -32,12 +36,13 @@ export function ActivityLog({
   setYear,
   selectedActivity,
   onSelectActivity,
-  filter = 'all',
+  filter: _filter = 'all',
   getTitle,
 }: ActivityLogProps) {
   const { t } = useLocale();
   const [page, setPage] = useState(0);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
+  const prevSelectedIdRef = useRef<Activity['run_id'] | null>(null);
 
   const sorted = useMemo(() => {
     const distFiltered = activities.filter((a) => {
@@ -60,25 +65,45 @@ export function ActivityLog({
     );
   }, [activities, distFilter]);
 
-  // Jump to the page that contains the selection when selection / list changes.
-  // `sorted` is memoized so this does not re-fire on every render and block pagination.
+  // Keep selection in view; don't fight the user when they change distance filter.
   useEffect(() => {
-    if (!selectedActivity) return;
-    const idx = sorted.findIndex((a) => a.run_id === selectedActivity.run_id);
+    if (!selectedActivity) {
+      prevSelectedIdRef.current = null;
+      return;
+    }
+    const id = selectedActivity.run_id;
+    const isNewSelection = prevSelectedIdRef.current !== id;
+    prevSelectedIdRef.current = id;
+
+    const idx = sorted.findIndex((a) => a.run_id === id);
     if (idx >= 0) {
       setPage(Math.floor(idx / PAGE_SIZE));
-    } else if (distFilter !== 'all') {
-      setDistFilter('all');
+      return;
     }
-  }, [selectedActivity, sorted, distFilter]);
+    if (isNewSelection) {
+      // Selected from map/calendar — reveal row by clearing distance filter
+      if (distFilter !== 'all') setDistFilter('all');
+    } else {
+      // User's distance filter hid the current row — drop selection
+      onSelectActivity?.(null);
+    }
+  }, [selectedActivity, sorted, distFilter, onSelectActivity]);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE) || 1;
   const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const showType = useMemo(
+    () => new Set(activities.map((a) => a.type)).size > 1,
+    [activities]
+  );
+
+  const toggleSelect = (a: Activity) => {
+    onSelectActivity?.(selectedActivity?.run_id === a.run_id ? null : a);
+  };
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:p-6">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-bold">{t('activityLog')}</h2>
         <span className="text-sm text-[var(--color-muted)]">
           {t('showing')} {page * PAGE_SIZE + 1}-
@@ -87,14 +112,14 @@ export function ActivityLog({
         </span>
       </div>
 
-      {/* Year tabs */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      {/* Year tabs — single row, swipe/scroll when overflow */}
+      <div className="-mx-1 mb-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           onClick={() => {
             setYear(null);
             setPage(0);
           }}
-          className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
         >
           All
         </button>
@@ -105,7 +130,7 @@ export function ActivityLog({
               setYear(y);
               setPage(0);
             }}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
           >
             {y}
           </button>
@@ -113,7 +138,7 @@ export function ActivityLog({
       </div>
 
       {/* Distance filter */}
-      <div className="mb-5 flex items-center gap-2">
+      <div className="mb-5 flex flex-wrap items-center gap-2">
         {(
           [
             ['all', t('all')],
@@ -135,59 +160,69 @@ export function ActivityLog({
         ))}
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      {/* Horizontal scroll — content-sized cols so name doesn't eat the viewport */}
+      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <table className="w-max min-w-full border-collapse text-sm md:w-full">
           <thead>
             <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-              <th className="pb-3 font-medium">{t('date')}</th>
-              <th className="pb-3 font-medium">{t('type')}</th>
-              <th className="pb-3 font-medium">{t('name')}</th>
-              <th className="pb-3 font-medium">{t('distance')}</th>
-              <th className="pb-3 font-medium">{t('duration')}</th>
-              <th className="pb-3 font-medium">{t('pace')}</th>
-              <th className="pb-3 font-medium">{t('hr')}</th>
+              <th className="min-w-[9.5rem] pr-3 pb-3 font-medium whitespace-nowrap">
+                {t('date')}
+              </th>
+              <th className="w-28 max-w-[7rem] pr-4 pb-3 font-medium md:w-auto md:max-w-none">
+                {t('name')}
+              </th>
+              <th className="pr-4 pb-3 font-medium whitespace-nowrap">
+                {t('distance')}
+              </th>
+              {showType && (
+                <th className="pr-4 pb-3 font-medium whitespace-nowrap">
+                  {t('type')}
+                </th>
+              )}
+              <th className="pr-4 pb-3 font-medium whitespace-nowrap">
+                {t('duration')}
+              </th>
+              <th className="pr-4 pb-3 font-medium whitespace-nowrap">
+                {t('pace')}
+              </th>
+              <th className="pb-3 font-medium whitespace-nowrap">{t('hr')}</th>
             </tr>
           </thead>
           <tbody>
             {pageData.map((a) => (
               <tr
                 key={a.run_id}
-                onClick={() =>
-                  onSelectActivity?.(
-                    selectedActivity?.run_id === a.run_id ? null : a
-                  )
-                }
+                onClick={() => toggleSelect(a)}
                 className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
                   selectedActivity?.run_id === a.run_id
                     ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
                     : 'hover:bg-[var(--color-bg)]'
                 }`}
               >
-                <td className="py-3 text-[var(--color-muted)]">
-                  {a.start_date_local.slice(0, 16).replace('T', ' ')}
+                <td className="min-w-[9.5rem] py-3 pr-3 text-sm whitespace-nowrap text-[var(--color-muted)]">
+                  {formatRowDate(a.start_date_local)}
                 </td>
-                <td className="py-3">
-                  <span className="text-[var(--color-muted)]">
-                    {typeIcon(a.type)} {a.type}
-                  </span>
-                </td>
-                <td className="py-3">
+                <td className="w-28 max-w-[7rem] truncate py-3 pr-4 md:w-auto md:max-w-[12rem]">
                   {getTitle ? getTitle(a) : a.name || t('run')}
                 </td>
-                <td className="py-3 font-mono font-medium">
+                <td className="py-3 pr-4 font-mono font-medium whitespace-nowrap">
                   {(a.distance / 1000).toFixed(1)}
                   <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
                     km
                   </span>
                 </td>
-                <td className="py-3 text-[var(--color-muted)]">
+                {showType && (
+                  <td className="py-3 pr-4 whitespace-nowrap text-[var(--color-muted)]">
+                    {typeIcon(a.type)} {a.type}
+                  </td>
+                )}
+                <td className="py-3 pr-4 whitespace-nowrap text-[var(--color-muted)]">
                   {formatDuration(a.moving_time)}
                 </td>
-                <td className="py-3 text-[var(--color-muted)]">
+                <td className="py-3 pr-4 whitespace-nowrap text-[var(--color-muted)]">
                   {formatPace(a.average_speed)}
                 </td>
-                <td className="py-3 text-[var(--color-muted)]">
+                <td className="py-3 whitespace-nowrap text-[var(--color-muted)]">
                   {a.average_heartrate ? Math.round(a.average_heartrate) : '--'}
                 </td>
               </tr>

@@ -238,7 +238,7 @@ export function ProfileCard({
           <p className="mb-1 text-xs text-[var(--color-muted)]">
             {locale === 'zh' ? '最近活动' : 'Latest Activity'}
           </p>
-          <p className="text-sm font-medium">
+          <p className="truncate text-sm font-medium">
             {latest.type === 'Run' ? '🏃 ' : '🚴 '}
             {getTitle
               ? getTitle(latest)

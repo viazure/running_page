@@ -262,7 +262,7 @@ export function RouteMap({
 
   return (
     <div
-      className="route-map-hover-ctrls relative h-[280px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
+      className="route-map-hover-ctrls relative h-[220px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] md:h-[380px]"
       style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
     >
       {selectedActivity && (

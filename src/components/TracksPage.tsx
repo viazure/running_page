@@ -79,13 +79,13 @@ function TrackThumb({
     title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
   return (
     <div
-      className={`group relative cursor-pointer rounded transition-all ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
+      className={`group relative h-[72px] w-[72px] cursor-pointer rounded transition-all md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
       onClick={onClick}
       title={label}
     >
       <svg
-        width={size}
-        height={size}
+        width="100%"
+        height="100%"
         viewBox={`0 0 ${size} ${size}`}
         className={`transition-opacity ${selected ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
       >
@@ -460,7 +460,7 @@ export function TracksPage({
   ];
 
   return (
-    <div className="mx-auto max-w-[1400px] px-6 py-6">
+    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
       {/* Top bar: back + title */}
       <div className="mb-5 flex items-center gap-4">
         <button
@@ -645,10 +645,7 @@ export function TracksPage({
           )}
 
           {/* Map */}
-          <div
-            className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
-            style={{ height: 260 }}
-          >
+          <div className="h-[220px] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] md:h-[360px]">
             <TrackMap
               activity={selectedActivity}
               activities={withPolyline}
@@ -665,7 +662,7 @@ export function TracksPage({
             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
           >
             {/* Year pills + sport filter */}
-            <div className="mb-4 flex items-center gap-1.5 border-b border-[var(--color-border)] pb-3">
+            <div className="mb-4 flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border)] pb-3">
               {totalYearPages > 1 && (
                 <button
                   onClick={() => setYearPage((p) => Math.max(0, p - 1))}
@@ -703,8 +700,8 @@ export function TracksPage({
                   ›
                 </button>
               )}
-              {/* Sport filter — right side */}
-              <div className="ml-auto flex items-center gap-1.5">
+              {/* Sport filter — wraps under years on narrow screens */}
+              <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">
                 <button
                   onClick={() => setSportFilter(null)}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
@@ -797,7 +794,7 @@ export function TracksPage({
                 {Array.from({ length: 40 }).map((_, i) => (
                   <div
                     key={i}
-                    className="h-[80px] w-[80px] animate-pulse rounded bg-[var(--color-border)]"
+                    className="h-[72px] w-[72px] animate-pulse rounded bg-[var(--color-border)] md:h-[80px] md:w-[80px]"
                     style={{ animationDelay: `${i * 20}ms` }}
                   />
                 ))}

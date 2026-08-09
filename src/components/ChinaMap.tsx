@@ -143,7 +143,10 @@ export function ChinaMap({
       </div>
 
       {/* SVG Map — aspect-ratio wrapper prevents stretching */}
-      <div className="relative" style={{ aspectRatio: `${SVG_W} / ${SVG_H}` }}>
+      <div
+        className="relative touch-manipulation"
+        style={{ aspectRatio: `${SVG_W} / ${SVG_H}` }}
+      >
         <svg
           key={filter}
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
@@ -184,7 +187,7 @@ export function ChinaMap({
                 d={featureToPath(feature, SVG_W, SVG_H)}
                 fill={fill}
                 stroke="var(--color-bg)"
-                strokeWidth="0.5"
+                strokeWidth="0.75"
                 className={`transition-all duration-150 ${visited ? 'cursor-pointer' : 'cursor-default'}`}
                 onMouseEnter={() => setHoveredProvince(name)}
                 onMouseLeave={() => setHoveredProvince(null)}
