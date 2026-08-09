@@ -4,7 +4,9 @@ import { useLocale } from '../hooks/useLocale';
 import { NAV_LINKS, navLinkLabel } from '../config';
 import { usePrivacyUnlockToggle } from '../contexts/PrivacyUnlockContext';
 
-type Page = 'home' | 'tracks';
+type Page = 'home' | 'tracks' | 'summary';
+
+export type { Page };
 
 interface HeaderProps {
   dark: boolean;
@@ -59,6 +61,7 @@ export function Header({
   const navItems: { label: string; page: Page }[] = [
     { label: t('home'), page: 'home' },
     { label: t('tracks'), page: 'tracks' },
+    { label: t('summary'), page: 'summary' },
   ];
 
   const handleNav = (p: Page) => {

@@ -25,7 +25,7 @@ const ActivityChart = ({ data, yAxisMax, yAxisTicks }: ActivityChartProps) => (
     <BarChart data={data} margin={{ top: 20, right: 20, left: -20, bottom: 5 }}>
       <CartesianGrid
         strokeDasharray="3 3"
-        stroke="var(--color-run-row-hover-background)"
+        stroke="var(--color-summary-border, var(--color-activity-card))"
       />
       <XAxis dataKey="day" tick={{ fill: 'var(--color-run-table-thead)' }} />
       <YAxis
@@ -43,12 +43,20 @@ const ActivityChart = ({ data, yAxisMax, yAxisTicks }: ActivityChartProps) => (
         formatter={(value) => `${value} ${DIST_UNIT}`}
         contentStyle={{
           backgroundColor: 'var(--color-run-row-hover-background)',
-          border: '1px solid var(--color-run-row-hover-background)',
-          color: 'var(--color-run-table-thead)',
+          border:
+            '1px solid var(--color-summary-border, var(--color-activity-card))',
+          borderRadius: '8px',
+          color: 'var(--color-summary-fg, var(--color-run-table-thead))',
         }}
-        labelStyle={{ color: 'var(--color-primary)' }}
+        labelStyle={{
+          color: 'var(--color-summary-accent, var(--color-primary))',
+        }}
       />
-      <Bar dataKey="distance" fill="var(--color-primary)" />
+      <Bar
+        dataKey="distance"
+        fill="var(--color-summary-accent, var(--color-primary))"
+        radius={[3, 3, 0, 0]}
+      />
     </BarChart>
   </ResponsiveContainer>
 );

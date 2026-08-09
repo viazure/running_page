@@ -1,5 +1,5 @@
 import './index.css';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import type { Activity } from '@/types';
 import {
   useFilteredActivities,
@@ -19,7 +19,11 @@ import { PersonalBest } from '@/components/PersonalBest';
 import { TracksPage } from '@/components/TracksPage';
 import { ChinaMap } from '@/components/ChinaMap';
 
-type Page = 'home' | 'tracks';
+const SummaryPage = lazy(() =>
+  import('@/components/SummaryPage').then((m) => ({ default: m.SummaryPage }))
+);
+
+type Page = 'home' | 'tracks' | 'summary';
 
 function Dashboard() {
   const activities = getActivityData() as Activity[];
@@ -61,6 +65,16 @@ function Dashboard() {
           onSelectActivity={setSelectedActivity}
           onBack={() => setPage('home')}
         />
+      ) : page === 'summary' ? (
+        <Suspense
+          fallback={
+            <div className="flex min-h-[60vh] items-center justify-center text-sm text-[var(--color-muted)]">
+              …
+            </div>
+          }
+        >
+          <SummaryPage onBack={() => setPage('home')} />
+        </Suspense>
       ) : (
         <main className="mx-auto max-w-[1400px] px-6 py-6">
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">

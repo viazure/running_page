@@ -1,0 +1,97 @@
+/* Align classic ActivityList with dashboard / dashboard_pro tokens.
+   Light: run orange · Dark: accent purple (same as site filter=all). */
+
+.summary-page-root {
+  --color-summary-fg: var(--color-text);
+  --color-summary-accent: var(--color-run);
+  --color-summary-accent-hover: color-mix(
+    in srgb,
+    var(--color-run) 82%,
+    #000
+  );
+  --color-summary-on-accent: #ffffff;
+  --color-summary-border: var(--color-border);
+  --color-summary-chart-bg: color-mix(
+    in srgb,
+    var(--color-bg) 70%,
+    var(--color-card)
+  );
+  --color-summary-radius: 12px;
+  --color-summary-card-shadow: none;
+
+  --color-brand: var(--color-run);
+  --color-primary: var(--color-run);
+  --color-secondary: var(--color-run);
+  --color-background: var(--color-bg);
+  --color-tx: var(--color-text);
+  --color-text-primary: var(--color-text);
+  --color-run-date: var(--color-muted);
+  --color-run-table-thead: var(--color-muted);
+  --color-run-row-hover-background: var(--color-card);
+  --color-activity-card: var(--color-border);
+  --color-scrollbar-thumb: var(--color-run);
+  --color-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--color-run) 82%,
+    #000
+  );
+  --svg-color-inactive-cell: var(--color-border);
+  --svg-color-active-cell: var(--color-run);
+  --svg-special-color: var(--color-run);
+  --svg-special-color2: var(--color-all);
+
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dark .summary-page-root {
+  --color-summary-accent: var(--color-accent);
+  --color-summary-accent-hover: color-mix(
+    in srgb,
+    var(--color-accent) 78%,
+    #fff
+  );
+  --color-summary-chart-bg: color-mix(
+    in srgb,
+    var(--color-card) 88%,
+    var(--color-bg)
+  );
+  --color-brand: var(--color-accent);
+  --color-primary: var(--color-accent);
+  --color-secondary: var(--color-accent);
+  --color-scrollbar-thumb: var(--color-accent);
+  --color-scrollbar-thumb-hover: color-mix(
+    in srgb,
+    var(--color-accent) 78%,
+    #fff
+  );
+  --svg-color-active-cell: var(--color-accent);
+  --svg-special-color: var(--color-run);
+  --svg-special-color2: var(--color-accent);
+}
+
+.summary-page-root .svg-color-bg {
+  fill: var(--color-card);
+}
+
+.summary-page-root .svg-color-inactive-cell {
+  fill: var(--color-border);
+}
+
+.summary-page-root .svg-color-active-cell {
+  fill: var(--svg-color-active-cell);
+}
+
+.summary-page-root .svg-special-color {
+  fill: var(--svg-special-color);
+}
+
+.summary-page-root .svg-special-color2 {
+  fill: var(--svg-special-color2);
+}
+
+.summary-page-root .svg-color-text {
+  fill: var(--color-text);
+}

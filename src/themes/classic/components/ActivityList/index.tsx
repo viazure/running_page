@@ -9,7 +9,6 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import VirtualList from 'rc-virtual-list';
-import { useNavigate } from 'react-router-dom';
 import styles from './style.module.css';
 import { ACTIVITY_TOTAL, LOADING_TEXT } from '../../utils/const';
 import { totalStat, yearSummaryStats } from '@assets/index';
@@ -22,16 +21,21 @@ import useActivities from '../../hooks/useActivities';
 const ITEM_WIDTH = 280;
 const ITEM_GAP = 20;
 
+export interface ActivityListProps {
+  /** Prefer over react-router so dashboard themes can host Summary without a Router */
+  onBack?: () => void;
+}
+
 const VIRTUAL_LIST_STYLES = {
   horizontalScrollBar: {},
   horizontalScrollBarThumb: {
     background:
-      'var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4)))',
+      'var(--color-summary-accent, var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4))))',
   },
   verticalScrollBar: {},
   verticalScrollBarThumb: {
     background:
-      'var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4)))',
+      'var(--color-summary-accent, var(--color-primary, var(--color-scrollbar-thumb, rgba(0,0,0,0.4))))',
   },
 };
 
@@ -760,7 +764,7 @@ const activityCardAreEqual = (
 
 const ActivityCard = React.memo(ActivityCardInner, activityCardAreEqual);
 
-const ActivityList: React.FC = () => {
+const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
   const { activities: activityData } = useActivities();
   const [interval, setInterval] = useState<IntervalType>('month');
   const [sportType, setSportType] = useState<string>('all');
@@ -821,10 +825,8 @@ const ActivityList: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [interval, selectedYear, availableYears]);
 
-  const navigate = useNavigate();
-
   const handleHomeClick = () => {
-    navigate('/');
+    onBack?.();
   };
 
   function toggleInterval(newInterval: IntervalType): void {

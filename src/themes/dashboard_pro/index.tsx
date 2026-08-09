@@ -31,11 +31,14 @@ const RouteMap = lazy(() =>
 const TracksPage = lazy(() =>
   import('@/components/TracksPage').then((m) => ({ default: m.TracksPage }))
 );
+const SummaryPage = lazy(() =>
+  import('@/components/SummaryPage').then((m) => ({ default: m.SummaryPage }))
+);
 const ChinaMap = lazy(() =>
   import('@/components/ChinaMap').then((m) => ({ default: m.ChinaMap }))
 );
 
-type Page = 'home' | 'tracks';
+type Page = 'home' | 'tracks' | 'summary';
 
 const FOOTER_YEAR = new Date().getFullYear();
 
@@ -105,6 +108,20 @@ function DashboardProContent({
           getTitle={activityTitle}
           lightsOff={privacyActive}
         />
+      </Suspense>
+    );
+  }
+
+  if (page === 'summary') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex min-h-[60vh] items-center justify-center text-sm text-[var(--color-muted)]">
+            …
+          </div>
+        }
+      >
+        <SummaryPage onBack={onNavigateHome} />
       </Suspense>
     );
   }
