@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { MAP_TILE_STYLE_LIGHT, MAP_TILE_STYLE_DARK } from '../utils/const';
 
 export type Theme = 'light' | 'dark';
@@ -6,13 +6,13 @@ export type Theme = 'light' | 'dark';
 // Custom event name for theme changes
 export const THEME_CHANGE_EVENT = 'theme-change';
 
-const getCurrentThemeSnapshot = () => {
+const getCurrentThemeSnapshot = (): Theme => {
   if (typeof window === 'undefined') return 'dark';
-  return (
-    document.documentElement.getAttribute('data-theme') ||
-    localStorage.getItem('theme') ||
-    'dark'
-  );
+  const dataTheme = document.documentElement.getAttribute('data-theme');
+  if (dataTheme === 'light' || dataTheme === 'dark') return dataTheme;
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+  return 'dark';
 };
 
 const subscribeToThemeChanges = (onStoreChange: () => void) => {
@@ -79,47 +79,50 @@ export const useMapTheme = () => {
 };
 
 /**
- * Main theme hook for the application
- * @returns Object with current theme and function to change theme
+ * Main theme hook — single external store (Header / pages share one snapshot).
  */
 export const useTheme = () => {
-  // Initialize theme from localStorage or default to dark
-  const [themeState, setThemeState] = useState<Theme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (localStorage.getItem('theme') as Theme) || 'dark';
-  });
+  const theme = useSyncExternalStore(
+    subscribeToThemeChanges,
+    getCurrentThemeSnapshot,
+    () => 'dark' as Theme
+  );
 
-  /**
-   * Set theme and dispatch event to notify other components
-   */
   const setTheme = useCallback((newTheme: Theme) => {
-    setThemeState(newTheme);
-
-    // Dispatch custom event for theme change
-    const event = new CustomEvent(THEME_CHANGE_EVENT, {
-      detail: { theme: newTheme },
-    });
-    window.dispatchEvent(event);
+    if (typeof window === 'undefined') return;
+    const root = window.document.documentElement;
+    root.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    window.dispatchEvent(
+      new CustomEvent(THEME_CHANGE_EVENT, { detail: { theme: newTheme } })
+    );
   }, []);
 
-  // Apply theme changes to DOM and localStorage
+  // Apply persisted theme on first client mount (direct /summary visits).
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const root = window.document.documentElement;
-
-    // Set attribute and save to localStorage for both themes
-    root.setAttribute('data-theme', themeState);
-    localStorage.setItem('theme', themeState);
-  }, [themeState]);
+    const stored = localStorage.getItem('theme');
+    const attr = root.getAttribute('data-theme');
+    if (stored === 'light' || stored === 'dark') {
+      if (attr !== stored) root.setAttribute('data-theme', stored);
+      return;
+    }
+    if (attr !== 'light' && attr !== 'dark') {
+      root.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+    }
+  }, []);
 
   return {
-    theme: themeState,
+    theme,
     setTheme,
   };
 };
 
 /**
  * Hook to trigger re-render when theme changes for dynamic color calculations
- * @returns A counter that increments when theme changes
+ * @returns Current theme from the shared store
  */
 export const useThemeChangeCounter = () => {
   return useSyncExternalStore(

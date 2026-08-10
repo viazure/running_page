@@ -98,11 +98,7 @@ function Dashboard() {
 
             {/* Right column */}
             <div className="flex min-w-0 flex-col gap-6 overflow-hidden">
-              <ProfileCard
-                activities={activities}
-                filter={filter}
-                onSelectActivity={setSelectedActivity}
-              />
+              <ProfileCard activities={activities} filter={filter} />
               <ChinaMap
                 activities={filtered}
                 filter={filter}

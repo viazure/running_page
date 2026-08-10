@@ -108,6 +108,33 @@ export function ProfileCard({
   const hasBests = bests.some((b) => b.activity !== null);
   const pbLabels = personalBestLabels(locale);
 
+  const latest =
+    activities.length > 0
+      ? [...activities].sort(
+          (a, b) =>
+            new Date(b.start_date_local).getTime() -
+            new Date(a.start_date_local).getTime()
+        )[0]
+      : null;
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (locale === 'zh') {
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    }
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const latestTitle = latest
+    ? getTitle
+      ? getTitle(latest)
+      : latest.name || (latest.type === 'Run' ? 'Run' : 'Ride')
+    : '';
+
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
       {/* Avatar top-left + Distance */}
@@ -276,6 +303,21 @@ export function ProfileCard({
               getTitle={getTitle}
             />
           </div>
+        </div>
+      ) : latest ? (
+        <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+          <p className="mb-1 text-xs text-[var(--color-muted)]">
+            {locale === 'zh' ? '最近活动' : 'Latest Activity'}
+          </p>
+          <p className="text-sm font-medium">
+            {latest.type === 'Run' ? '🏃 ' : '🚴 '}
+            {latestTitle}
+            <span className="font-normal text-[var(--color-muted)]">
+              {' '}
+              · {formatDistance(latest.distance)} km ·{' '}
+              {formatDate(latest.start_date_local)}
+            </span>
+          </p>
         </div>
       ) : null}
     </div>

@@ -242,17 +242,16 @@ const titleForRun = (run: Activity): string => {
   if (runDistance >= 40) {
     return RUN_TITLES.FULL_MARATHON_RUN_TITLE;
   }
-  // Everyday Chinese sense: 傍晚 ≈ sunset window; 20:00+ is 夜晚
-  if (runHour >= 5 && runHour <= 10) {
+  if (runHour >= 0 && runHour <= 10) {
     return RUN_TITLES.MORNING_RUN_TITLE;
   }
-  if (runHour >= 11 && runHour <= 13) {
+  if (runHour > 10 && runHour <= 14) {
     return RUN_TITLES.MIDDAY_RUN_TITLE;
   }
-  if (runHour >= 14 && runHour <= 17) {
+  if (runHour > 14 && runHour <= 18) {
     return RUN_TITLES.AFTERNOON_RUN_TITLE;
   }
-  if (runHour >= 18 && runHour <= 19) {
+  if (runHour > 18 && runHour <= 21) {
     return RUN_TITLES.EVENING_RUN_TITLE;
   }
   return RUN_TITLES.NIGHT_RUN_TITLE;

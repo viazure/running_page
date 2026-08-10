@@ -1,0 +1,331 @@
+/* dashboard_pro Summary embed only — imported when ActivityList embedded=true */
+
+.activityList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 0;
+  background-color: var(--color-background);
+  color: var(--color-summary-fg, var(--color-primary));
+}
+
+.filterContainer {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 12px;
+  overflow: visible;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chipRow::-webkit-scrollbar {
+  display: none;
+}
+
+.filterChip {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filterChip:hover:not(:disabled) {
+  color: var(--color-summary-fg, var(--color-primary));
+}
+
+.filterChip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.filterChipActive {
+  background: var(--color-summary-accent, var(--color-primary));
+  color: var(--color-summary-on-accent, var(--color-background));
+}
+
+.filterChipActive:hover:not(:disabled) {
+  color: var(--color-summary-on-accent, var(--color-background));
+}
+
+.summaryContainer {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+
+.activityCard {
+  background-color: var(--color-run-row-hover-background);
+  border: 1px solid var(--color-activity-card);
+  border-radius: var(--color-summary-radius, 8px);
+  padding: 12px;
+  width: 280px;
+  box-shadow: var(
+    --color-summary-card-shadow,
+    0 4px 8px var(--color-run-row-hover-background)
+  );
+  transition:
+    transform 0.3s,
+    border-color 0.3s,
+    background-color 0.3s,
+    box-shadow 0.3s;
+  position: relative;
+  box-sizing: border-box;
+  touch-action: pan-y;
+}
+
+.activityCardFlippable {
+  perspective: 1000px;
+  padding: 0;
+}
+
+.cardInner {
+  position: relative;
+  width: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.cardInner.flipped {
+  transform: rotateY(180deg);
+}
+
+.cardFront,
+.cardBack {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: var(--color-summary-radius, 8px);
+  padding: 12px;
+  box-sizing: border-box;
+  background-color: var(--color-run-row-hover-background);
+}
+
+.cardBack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.routeContainer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.activityName {
+  font-size: var(--color-summary-title-size, 1.125rem);
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--color-summary-fg, var(--color-primary));
+}
+
+.statHero {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-summary-accent, var(--color-primary));
+}
+
+.statHeroUnit {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
+}
+
+.statMeta {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
+}
+
+.statMetaSep {
+  margin: 0 6px;
+  opacity: 0.6;
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin-bottom: 0;
+}
+
+.statCell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statLabel {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
+}
+
+.statValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-summary-fg, var(--color-primary));
+}
+
+.chart {
+  height: 140px;
+  width: 100%;
+  background-color: var(--color-summary-chart-bg, var(--color-activity-card));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  border-radius: calc(var(--color-summary-radius, 8px) - 2px);
+}
+
+.lifeContainer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.yearSelector {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 4px 0 8px;
+  background: color-mix(in srgb, var(--color-background) 94%, transparent);
+}
+
+.yearSummarySvg {
+  max-width: 100%;
+}
+
+.lifeSvgWrap {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 100%;
+}
+
+.summaryInner {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.summaryInner > div {
+  padding-right: 8px;
+  box-sizing: content-box;
+}
+
+.rowContainer {
+  display: flex;
+  padding: 8px 0;
+  justify-content: flex-start;
+  gap: 0;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+
+.lifeContainer > svg,
+.lifeContainer :global(svg) {
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .activityCard {
+    width: auto;
+    min-width: 0;
+  }
+
+  .cardFront,
+  .cardBack {
+    padding: 10px;
+  }
+
+  .statHero {
+    font-size: 1.2rem;
+  }
+
+  .statLabel {
+    font-size: 9px;
+  }
+
+  .statValue {
+    font-size: 12px;
+  }
+
+  .statGrid {
+    gap: 4px 8px;
+  }
+
+  .chart {
+    height: 110px;
+    margin-top: 6px;
+  }
+
+  .filterContainer {
+    margin-left: -4px;
+    margin-right: -4px;
+    padding: 0 4px;
+  }
+
+  .chipRow {
+    flex-wrap: nowrap;
+  }
+}

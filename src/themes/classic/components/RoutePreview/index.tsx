@@ -11,11 +11,14 @@ import styles from './style.module.css';
 interface RoutePreviewProps {
   activities: Activity[];
   className?: string;
+  /** Summary embed: fill card via viewBox. Classic default keeps fixed 250×150. */
+  responsive?: boolean;
 }
 
 const RoutePreview: React.FC<RoutePreviewProps> = ({
   activities,
   className,
+  responsive = false,
 }) => {
   // Filter activities that have polyline data
   const activitiesWithRoutes = activities.filter(
@@ -90,8 +93,20 @@ const RoutePreview: React.FC<RoutePreviewProps> = ({
   };
 
   return (
-    <div className={`${styles.routePreview} ${className || ''}`}>
-      <svg width={svgWidth} height={svgHeight} className={styles.routeSvg}>
+    <div
+      className={`${styles.routePreview} ${responsive ? styles.routePreviewResponsive : ''} ${className || ''}`}
+    >
+      <svg
+        {...(responsive
+          ? {
+              viewBox: `0 0 ${svgWidth} ${svgHeight}`,
+              preserveAspectRatio: 'xMidYMid meet',
+              role: 'img',
+              'aria-label': 'route preview',
+            }
+          : { width: svgWidth, height: svgHeight })}
+        className={styles.routeSvg}
+      >
         {/* Background */}
         <rect
           width={svgWidth}

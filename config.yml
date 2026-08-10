@@ -25,7 +25,7 @@ locale: zh
 theme: system
 
 # ── 主题预设 ──────────────────────────────────────────────────────────────────
-# 可选值：dashboard | dashboard_pro（隐私增强）| classic | 自定义主题名
+# 可选值：dashboard | dashboard_pro | classic | 自定义主题名
 # 自定义主题：在 src/themes/<name>/ 下创建主题，并在 src/App.tsx 注册后填写对应名称
 theme_preset: dashboard_pro
 

@@ -34,7 +34,7 @@ import {
   getBoundsForGeoData,
   type IViewState,
 } from '../utils/geoUtils';
-import { useTheme, useThemeChangeCounter } from '../hooks/useTheme';
+import { useThemeChangeCounter } from '../hooks/useTheme';
 
 const HASH_RUN_CHANGE_EVENT = 'running-page-hash-run-change';
 
@@ -403,12 +403,10 @@ const Index = () => {
     };
   }, [year, locateActivity, runs, thisYear]);
 
-  const { theme } = useTheme();
-
   return (
     <Layout>
       <Helmet>
-        <html lang="en" data-theme={theme} />
+        <html lang="en" />
       </Helmet>
       <div className="w-full lg:w-1/3">
         <h1 className="my-12 mt-6 text-5xl font-extrabold italic">

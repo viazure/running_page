@@ -22,6 +22,8 @@ interface ActivityLogProps {
   getTitle?: (a: Activity) => string;
   /** Default 16 (upstream). Pass `{ mobile, desktop }` for responsive sizing. */
   pageSize?: PageSizeConfig;
+  /** Default = upstream table. Pass `'pro'` for compact mobile/pro layout. */
+  variant?: 'default' | 'pro';
 }
 
 const DEFAULT_PAGE_SIZE = 16;
@@ -92,6 +94,7 @@ export function ActivityLog({
   filter: _filter = 'all',
   getTitle,
   pageSize: pageSizeConfig,
+  variant = 'default',
 }: ActivityLogProps) {
   const { t } = useLocale();
   const [page, setPage] = useState(0);
@@ -105,6 +108,7 @@ export function ActivityLog({
   const pageSize = resolvePageSize(pageSizeConfig, isDesktop);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
   const prevSelectedIdRef = useRef<Activity['run_id'] | null>(null);
+  const isPro = variant === 'pro';
 
   const sorted = useMemo(() => {
     const distFiltered = activities.filter((a) => {
@@ -165,9 +169,21 @@ export function ActivityLog({
   };
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:p-6">
+    <div
+      className={
+        isPro
+          ? 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:p-6'
+          : 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6'
+      }
+    >
       {/* Header */}
-      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        className={
+          isPro
+            ? 'mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'
+            : 'mb-4 flex items-center justify-between'
+        }
+      >
         <h2 className="text-lg font-bold">{t('activityLog')}</h2>
         <span className="text-sm text-[var(--color-muted)]">
           {t('showing')} {safePage * pageSize + 1}-
@@ -176,8 +192,14 @@ export function ActivityLog({
         </span>
       </div>
 
-      {/* Year tabs — single row, swipe/scroll when overflow */}
-      <div className="-mx-1 mb-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Year tabs */}
+      <div
+        className={
+          isPro
+            ? '-mx-1 mb-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+            : 'mb-3 flex flex-wrap items-center gap-2'
+        }
+      >
         <button
           onClick={() => {
             setYear(null);
@@ -202,7 +224,13 @@ export function ActivityLog({
       </div>
 
       {/* Distance filter */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div
+        className={
+          isPro
+            ? 'mb-5 flex flex-wrap items-center gap-2'
+            : 'mb-5 flex items-center gap-2'
+        }
+      >
         {(
           [
             ['all', t('all')],
@@ -224,44 +252,120 @@ export function ActivityLog({
         ))}
       </div>
 
-      {/* Horizontal scroll — content-sized cols so name doesn't eat the viewport */}
-      <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <table className="w-max min-w-full border-collapse text-sm md:w-full">
-          <thead>
-            <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-              <th className="w-[5.75rem] py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:w-[10.5rem] md:pr-6 md:pl-5">
-                {t('date')}
-              </th>
-              <th
-                className={`pr-2 pb-3 font-medium whitespace-nowrap md:w-[1%] md:pr-3 ${
-                  showTypeContent ? '' : 'hidden md:table-cell'
-                }`}
-              >
-                <span className={showTypeContent ? undefined : 'invisible'}>
-                  {t('type')}
-                </span>
-              </th>
-              <th className="max-w-[5.5rem] min-w-0 pr-3 pb-3 font-medium md:w-auto md:max-w-[12rem]">
-                {t('name')}
-              </th>
-              <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                {t('distance')}
-              </th>
-              <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                {t('duration')}
-              </th>
-              <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                {t('pace')}
-              </th>
-              <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                {t('hr')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageData.map((a) => {
-              const date = formatRowDate(a.start_date_local);
-              return (
+      {isPro ? (
+        <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <table className="w-max min-w-full border-collapse text-sm md:w-full">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                <th className="w-[5.75rem] py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:w-[10.5rem] md:pr-6 md:pl-5">
+                  {t('date')}
+                </th>
+                <th
+                  className={`pr-2 pb-3 font-medium whitespace-nowrap md:w-[1%] md:pr-3 ${
+                    showTypeContent ? '' : 'hidden md:table-cell'
+                  }`}
+                >
+                  <span className={showTypeContent ? undefined : 'invisible'}>
+                    {t('type')}
+                  </span>
+                </th>
+                <th className="max-w-[5.5rem] min-w-0 pr-3 pb-3 font-medium md:w-auto md:max-w-[12rem]">
+                  {t('name')}
+                </th>
+                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                  {t('distance')}
+                </th>
+                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                  {t('duration')}
+                </th>
+                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                  {t('pace')}
+                </th>
+                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                  {t('hr')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageData.map((a) => {
+                const date = formatRowDate(a.start_date_local);
+                return (
+                  <tr
+                    key={a.run_id}
+                    onClick={() => toggleSelect(a)}
+                    className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
+                      selectedActivity?.run_id === a.run_id
+                        ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
+                        : 'hover:bg-[var(--color-bg)]'
+                    }`}
+                  >
+                    <td className="w-[5.75rem] py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:w-[10.5rem] md:pr-6 md:pl-5 md:whitespace-nowrap">
+                      <span className="flex flex-col leading-tight md:hidden">
+                        <span className="text-[10px] tracking-wide opacity-70">
+                          {date.ymd}
+                        </span>
+                        <span className="font-mono tabular-nums">
+                          {date.time}
+                        </span>
+                      </span>
+                      <span className="hidden whitespace-nowrap md:inline">
+                        {date.full}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:w-[1%] md:pr-3 ${
+                        showTypeContent ? '' : 'hidden md:table-cell'
+                      }`}
+                    >
+                      <span
+                        className={showTypeContent ? undefined : 'invisible'}
+                        aria-hidden={!showTypeContent}
+                      >
+                        {typeIcon(a.type)} {typeLabel(a.type, t)}
+                      </span>
+                    </td>
+                    <td className="max-w-[5.5rem] min-w-0 truncate py-3 pr-3 md:max-w-[14rem] md:pr-4">
+                      {getTitle ? getTitle(a) : a.name || t('run')}
+                    </td>
+                    <td className="py-3 pr-3 font-mono font-medium whitespace-nowrap md:pr-4">
+                      {(a.distance / 1000).toFixed(1)}
+                      <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
+                        km
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                      {formatDuration(a.moving_time)}
+                    </td>
+                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                      {formatPace(a.average_speed)}
+                    </td>
+                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                      {a.average_heartrate
+                        ? Math.round(a.average_heartrate)
+                        : '--'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                <th className="pb-3 font-medium">{t('date')}</th>
+                <th className="pb-3 font-medium">{t('type')}</th>
+                <th className="pb-3 font-medium">{t('name')}</th>
+                <th className="pb-3 font-medium">{t('distance')}</th>
+                <th className="pb-3 font-medium">{t('duration')}</th>
+                <th className="pb-3 font-medium">{t('pace')}</th>
+                <th className="pb-3 font-medium">{t('hr')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageData.map((a) => (
                 <tr
                   key={a.run_id}
                   onClick={() => toggleSelect(a)}
@@ -271,58 +375,40 @@ export function ActivityLog({
                       : 'hover:bg-[var(--color-bg)]'
                   }`}
                 >
-                  <td className="w-[5.75rem] py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:w-[10.5rem] md:pr-6 md:pl-5 md:whitespace-nowrap">
-                    {/* Mobile: stacked ymd (small) + time — clear year, saves width */}
-                    <span className="flex flex-col leading-tight md:hidden">
-                      <span className="text-[10px] tracking-wide opacity-70">
-                        {date.ymd}
-                      </span>
-                      <span className="font-mono tabular-nums">
-                        {date.time}
-                      </span>
-                    </span>
-                    <span className="hidden whitespace-nowrap md:inline">
-                      {date.full}
+                  <td className="py-3 text-[var(--color-muted)]">
+                    {a.start_date_local.slice(0, 16).replace('T', ' ')}
+                  </td>
+                  <td className="py-3">
+                    <span className="text-[var(--color-muted)]">
+                      {typeIcon(a.type)} {a.type}
                     </span>
                   </td>
-                  <td
-                    className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:w-[1%] md:pr-3 ${
-                      showTypeContent ? '' : 'hidden md:table-cell'
-                    }`}
-                  >
-                    <span
-                      className={showTypeContent ? undefined : 'invisible'}
-                      aria-hidden={!showTypeContent}
-                    >
-                      {typeIcon(a.type)} {typeLabel(a.type, t)}
-                    </span>
-                  </td>
-                  <td className="max-w-[5.5rem] min-w-0 truncate py-3 pr-3 md:max-w-[14rem] md:pr-4">
+                  <td className="py-3">
                     {getTitle ? getTitle(a) : a.name || t('run')}
                   </td>
-                  <td className="py-3 pr-3 font-mono font-medium whitespace-nowrap md:pr-4">
+                  <td className="py-3 font-mono font-medium">
                     {(a.distance / 1000).toFixed(1)}
                     <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
                       km
                     </span>
                   </td>
-                  <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                  <td className="py-3 text-[var(--color-muted)]">
                     {formatDuration(a.moving_time)}
                   </td>
-                  <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                  <td className="py-3 text-[var(--color-muted)]">
                     {formatPace(a.average_speed)}
                   </td>
-                  <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                  <td className="py-3 text-[var(--color-muted)]">
                     {a.average_heartrate
                       ? Math.round(a.average_heartrate)
                       : '--'}
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination */}
       <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-4">

@@ -99,33 +99,84 @@ interface PersonalBestProps {
   onSelectActivity?: (a: Activity | null) => void;
   getTitle?: (a: Activity) => string;
   className?: string;
+  /** Default `'list'` = upstream star header + rows. Pass `'grid'` for pro. */
+  layout?: 'list' | 'grid';
 }
 
-/** Standalone card (dashboard theme). Profile embeds the same grid inline. */
+/** Standalone card. Default list matches upstream; grid is dashboard_pro. */
 export function PersonalBest({
   activities,
   onSelectActivity,
   getTitle,
   className = '',
+  layout = 'list',
 }: PersonalBestProps) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const bests = computePersonalBests(activities);
   const labels = personalBestLabels(locale);
   const hasBests = bests.some((b) => b.activity !== null);
   if (!hasBests) return null;
 
+  if (layout === 'grid') {
+    return (
+      <div
+        className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 ${className}`}
+      >
+        <PersonalBestDivider />
+        <div className="mt-2">
+          <PersonalBestGrid
+            bests={bests}
+            labels={labels}
+            onSelectActivity={onSelectActivity}
+            getTitle={getTitle}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 ${className}`}
+      className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 transition-all duration-300 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg ${className}`}
     >
-      <PersonalBestDivider />
-      <div className="mt-2">
-        <PersonalBestGrid
-          bests={bests}
-          labels={labels}
-          onSelectActivity={onSelectActivity}
-          getTitle={getTitle}
-        />
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+        <svg
+          className="h-4 w-4 text-[var(--color-accent)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+          />
+        </svg>
+        {t('personalBest')}
+      </h3>
+
+      <div className="divide-y divide-[var(--color-border)]">
+        {bests.map(({ key, activity, time }) => (
+          <div
+            key={key}
+            className={`flex items-center justify-between py-1.5 ${
+              activity
+                ? '-mx-2 cursor-pointer rounded-lg px-2 transition-colors hover:bg-[var(--color-bg)]'
+                : ''
+            }`}
+            onClick={() => activity && onSelectActivity?.(activity)}
+          >
+            <span className="text-xs text-[var(--color-text)]">
+              {labels[key]}
+            </span>
+            <span
+              className={`font-mono text-xs font-bold ${activity ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}
+            >
+              {activity ? formatPbTime(time) : '--'}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

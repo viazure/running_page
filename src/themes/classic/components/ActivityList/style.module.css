@@ -1,42 +1,168 @@
 .activityList {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
-  padding: 0;
+  padding: 20px 20px 0 20px;
   background-color: var(--color-background);
-  color: var(--color-summary-fg, var(--color-primary));
+  color: var(--color-primary);
 }
 
+/* Default scrollbar color variables for this component. You can override these in a higher-level CSS or :root. */
 :root {
-  --color-scrollbar-thumb: color-mix(
-    in srgb,
-    var(--color-summary-fg, var(--color-primary, #000)) 22%,
-    transparent
-  );
-  --color-scrollbar-thumb-hover: color-mix(
-    in srgb,
-    var(--color-summary-fg, var(--color-primary, #000)) 38%,
-    transparent
-  );
+  --color-scrollbar-thumb: var(--color-primary, rgba(0, 0, 0, 0.4));
+  --color-scrollbar-thumb-hover: var(--color-primary, rgba(0, 0, 0, 0.6));
 }
 
+/* rc-virtual-list renders its scrollbar elements with classnames we can target globally. */
 :global(.rc-virtual-list-scrollbar) {
-  background: transparent !important;
-  width: 6px !important;
+  background: transparent;
 }
 
 :global(.rc-virtual-list-scrollbar-thumb) {
   background: var(--color-scrollbar-thumb) !important;
-  border-radius: 999px !important;
-  opacity: 0.9;
+  border-radius: 4px;
 }
 
 :global(.rc-virtual-list-scrollbar-thumb:hover) {
   background: var(--color-scrollbar-thumb-hover) !important;
+}
+
+.filterContainer {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  overflow: visible;
+}
+
+.filterContainer select {
+  appearance: none;
+  width: 90px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid var(--color-run-table-thead);
+  background-color: var(--color-run-row-hover-background);
+  color: var(--color-run-table-thead);
+  cursor: pointer;
+  text-align: center;
+  text-transform: capitalize;
+  box-sizing: border-box;
+}
+
+.summaryContainer {
+  /* display: grid;
+  justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(280px, auto));
+  gap: 20px; */
+  /* position: relative; */
+  width: 100%;
+  height: 100%;
+  /* overflow: auto;
+  will-change: transform; */
+}
+
+.activityCard {
+  background-color: var(--color-run-row-hover-background);
+  border: 1px solid var(--color-activity-card);
+  border-radius: 8px;
+  padding: 16px;
+  width: 280px;
+  box-shadow: 0 4px 8px var(--color-run-row-hover-background);
+  transition: transform 0.2s;
+  position: relative;
+}
+
+.activityCard:hover {
+  transform: translateY(-5px);
+}
+
+/* Flip card styles */
+.activityCardFlippable {
+  perspective: 1000px;
+  padding: 0;
+  /* Remove padding for flippable cards */
+}
+
+.cardInner {
+  position: relative;
+  width: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.cardInner.flipped {
+  transform: rotateY(180deg);
+}
+
+.cardFront,
+.cardBack {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 8px;
+  padding: 16px;
+  box-sizing: border-box;
+  background-color: var(--color-run-row-hover-background);
+}
+
+.cardBack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.routeContainer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.activityName {
+  font-size: 1.5em;
+  margin-bottom: 10px;
+  color: var(--color-primary);
+}
+
+.activityDetails p {
+  margin: 8px 0;
+  color: var(--color-run-table-thead);
+}
+
+.activityDetails strong {
+  color: var(--color-primary);
+}
+
+.chart {
+  height: 250px;
+  width: 100%;
+  background-color: var(--color-activity-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.smallHomeButton {
+  width: 90px;
+  padding: 4px 12px;
+  background-color: var(--color-primary);
+  color: var(--color-background);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 20px;
+}
+
+.smallHomeButton:hover {
+  background-color: var(--color-secondary);
 }
 
 .pageTopBar {
@@ -78,372 +204,81 @@
   color: var(--color-summary-fg, var(--color-primary));
 }
 
-.filterContainer {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  margin-bottom: 12px;
-  overflow: visible;
-}
-
-.chipRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.chipRow::-webkit-scrollbar {
-  display: none;
-}
-
-.filterChip {
-  flex-shrink: 0;
-  padding: 4px 12px;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.filterChip:hover:not(:disabled) {
-  color: var(--color-summary-fg, var(--color-primary));
-}
-
-.filterChip:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.filterChipActive {
-  background: var(--color-summary-accent, var(--color-primary));
-  color: var(--color-summary-on-accent, var(--color-background));
-}
-
-.filterChipActive:hover:not(:disabled) {
-  color: var(--color-summary-on-accent, var(--color-background));
-}
-
-.summaryContainer {
-  position: relative;
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: pan-y;
-}
-
-.activityCard {
-  background-color: var(--color-run-row-hover-background);
-  border: 1px solid var(--color-activity-card);
-  border-radius: var(--color-summary-radius, 8px);
-  padding: 12px;
-  width: 280px;
-  box-shadow: var(
-    --color-summary-card-shadow,
-    0 4px 8px var(--color-run-row-hover-background)
-  );
-  transition:
-    transform 0.3s,
-    border-color 0.3s,
-    background-color 0.3s,
-    box-shadow 0.3s;
-  position: relative;
-  box-sizing: border-box;
-  touch-action: pan-y;
-}
-
-.activityCard:hover {
-  transform: translateY(calc(var(--color-summary-card-lift, 5px) * -1));
-  border-color: var(
-    --color-summary-card-hover-border,
-    var(--color-activity-card)
-  );
-  background-color: var(
-    --color-summary-card-hover-bg,
-    var(--color-run-row-hover-background)
-  );
-}
-
-.activityCardFlippable {
-  perspective: 1000px;
-  padding: 0;
-}
-
-.cardInner {
-  position: relative;
-  width: 100%;
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-}
-
-.cardInner.flipped {
-  transform: rotateY(180deg);
-}
-
-.cardFront,
-.cardBack {
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  border-radius: var(--color-summary-radius, 8px);
-  padding: 12px;
-  box-sizing: border-box;
-  background-color: var(--color-run-row-hover-background);
-}
-
-.cardBack {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  transform: rotateY(180deg);
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.routeContainer {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 16px;
-  max-height: 100%;
-  overflow: hidden;
-}
-
-.activityName {
-  font-size: var(--color-summary-title-size, 1.125rem);
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--color-summary-fg, var(--color-primary));
-}
-
-.statHero {
-  margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--color-summary-accent, var(--color-primary));
-}
-
-.statHeroUnit {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
-}
-
-.statMeta {
-  margin: 4px 0 8px;
-  font-size: 12px;
-  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
-}
-
-.statMetaSep {
-  margin: 0 6px;
-  opacity: 0.6;
-}
-
-.statGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 10px;
-  margin-bottom: 0;
-}
-
-.statCell {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.statLabel {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-summary-chip-fg, var(--color-run-table-thead));
-}
-
-.statValue {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-summary-fg, var(--color-primary));
-}
-
-.chart {
-  height: 140px;
-  width: 100%;
-  background-color: var(--color-summary-chart-bg, var(--color-activity-card));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 8px;
-  border-radius: calc(var(--color-summary-radius, 8px) - 2px);
-}
-
-.smallHomeButton {
-  width: auto;
-  min-width: 72px;
-  align-self: flex-start;
-  padding: 6px 12px;
-  background-color: var(--color-summary-home-bg, var(--color-primary));
-  color: var(--color-summary-accent, var(--color-background));
-  border: 1px solid var(--color-summary-home-border, transparent);
-  border-radius: var(
-    --color-summary-chip-radius,
-    var(--color-summary-radius, 5px)
-  );
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
-}
-
-.smallHomeButton:hover {
-  background-color: var(
-    --color-summary-accent,
-    var(--color-summary-accent-hover, var(--color-secondary))
-  );
-  color: var(--color-summary-on-accent, var(--color-background));
-  border-color: var(--color-summary-accent, transparent);
-}
-
 .lifeContainer {
   display: flex;
-  flex: 1;
-  min-height: 0;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-bottom: 16px;
-  -webkit-overflow-scrolling: touch;
+  justify-content: center;
 }
 
 .yearSelector {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
-  flex-shrink: 0;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 4px 0 8px;
-  background: color-mix(in srgb, var(--color-background) 94%, transparent);
+  margin-bottom: 20px;
+  padding: 10px;
+}
+
+.yearButton {
+  padding: 8px 16px;
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.yearButton:hover {
+  background-color: var(--color-primary);
+  color: var(--color-background);
+}
+
+.yearButtonActive {
+  background-color: var(--color-primary);
+  color: var(--color-background);
 }
 
 .yearSummarySvg {
   max-width: 100%;
+  height: auto;
+  max-height: 80vh;
 }
 
-.lifeSvgWrap {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  width: 100%;
-}
-
+/* Inner wrapper to center the virtual list rows and constrain width */
 .summaryInner {
   display: flex;
   justify-content: center;
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
-  padding: 0;
+  padding: 0 10px;
 }
 
+/* Prevent content from sitting flush against the custom scrollbar. The inner wrapper (direct child) gets right padding. */
 .summaryInner > div {
-  padding-right: 8px;
+  padding-right: 16px;
   box-sizing: content-box;
 }
 
+/* Row container used by VirtualList rows */
 .rowContainer {
   display: flex;
-  padding: 8px 0;
+  padding: 10px 0;
   justify-content: flex-start;
-  gap: 0;
-  padding-right: 8px;
+  padding-right: 12px;
   box-sizing: border-box;
 }
 
+/* rc-virtual-list view and body panes: ensure there's a little inner spacing so content doesn't overlap scrollbar */
 :global(.rc-virtual-list-holder-inner),
 :global(.rc-virtual-list-holder) {
   padding-right: 4px;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
 }
 
 .lifeContainer > svg,
 .lifeContainer :global(svg) {
   max-width: 100%;
-}
-
-@media (max-width: 640px) {
-  .activityCard {
-    width: auto;
-    min-width: 0;
-  }
-
-  .cardFront,
-  .cardBack {
-    padding: 10px;
-  }
-
-  .statHero {
-    font-size: 1.2rem;
-  }
-
-  .statLabel {
-    font-size: 9px;
-  }
-
-  .statValue {
-    font-size: 12px;
-  }
-
-  .statGrid {
-    gap: 4px 8px;
-  }
-
-  .chart {
-    height: 110px;
-    margin-top: 6px;
-  }
-
-  .filterContainer {
-    margin-left: -4px;
-    margin-right: -4px;
-    padding: 0 4px;
-  }
-
-  .chipRow {
-    flex-wrap: nowrap;
-  }
-
-  .pageTopBar {
-    margin-bottom: 10px;
-  }
+  height: auto;
 }

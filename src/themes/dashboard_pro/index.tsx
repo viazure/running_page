@@ -1,5 +1,5 @@
 import '../dashboard/index.css';
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, startTransition, Suspense, useMemo, useState } from 'react';
 import type { Activity } from '@/types';
 import {
   useFilteredActivities,
@@ -29,18 +29,25 @@ import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TrendChart } from '@/components/TrendChart';
 
-const RouteMap = lazy(() =>
-  import('@/components/RouteMap').then((m) => ({ default: m.RouteMap }))
-);
-const TracksPage = lazy(() =>
-  import('@/components/TracksPage').then((m) => ({ default: m.TracksPage }))
-);
-const SummaryPage = lazy(() =>
-  import('@/components/SummaryPage').then((m) => ({ default: m.SummaryPage }))
-);
-const ChinaMap = lazy(() =>
-  import('@/components/ChinaMap').then((m) => ({ default: m.ChinaMap }))
-);
+const loadRouteMap = () =>
+  import('@/components/RouteMap').then((m) => ({ default: m.RouteMap }));
+const loadTracksPage = () =>
+  import('@/components/TracksPage').then((m) => ({ default: m.TracksPage }));
+const loadSummaryPage = () =>
+  import('@/components/SummaryPage').then((m) => ({ default: m.SummaryPage }));
+const loadChinaMap = () =>
+  import('@/components/ChinaMap').then((m) => ({ default: m.ChinaMap }));
+
+const RouteMap = lazy(loadRouteMap);
+const TracksPage = lazy(loadTracksPage);
+const SummaryPage = lazy(loadSummaryPage);
+const ChinaMap = lazy(loadChinaMap);
+
+// Prefetch secondary pages so navigating home → summary/tracks does not flash Suspense.
+void loadSummaryPage();
+void loadTracksPage();
+void loadRouteMap();
+void loadChinaMap();
 
 type Page = 'home' | 'tracks' | 'summary';
 
@@ -100,13 +107,7 @@ function DashboardProContent({
 
   if (page === 'tracks') {
     return (
-      <Suspense
-        fallback={
-          <div className="flex min-h-[60vh] items-center justify-center text-sm text-[var(--color-muted)]">
-            …
-          </div>
-        }
-      >
+      <Suspense>
         <TracksPage
           activities={activities}
           filter={filter}
@@ -122,13 +123,7 @@ function DashboardProContent({
 
   if (page === 'summary') {
     return (
-      <Suspense
-        fallback={
-          <div className="flex h-full min-h-0 items-center justify-center text-sm text-[var(--color-muted)]">
-            …
-          </div>
-        }
-      >
+      <Suspense>
         <SummaryPage onBack={onNavigateHome} />
       </Suspense>
     );
@@ -153,6 +148,7 @@ function DashboardProContent({
               year={year}
               filter={filter}
               onSelectActivity={setSelectedActivity}
+              compact
             />
           </div>
           <div className="order-9 min-w-0 overflow-hidden lg:order-none">
@@ -210,6 +206,7 @@ function DashboardProContent({
             filter={filter}
             getTitle={activityTitle}
             pageSize={ACTIVITY_LOG_PAGE_SIZE}
+            variant="pro"
           />
         </div>
 
@@ -255,11 +252,16 @@ function DashboardProInner() {
   const [filter] = useState('all' as const);
   const [page, setPage] = useState<Page>('home');
 
+  const navigate = (next: Page) => {
+    // Keep previous page painted while lazy chunks resolve (avoids Suspense flash).
+    startTransition(() => setPage(next));
+  };
+
   return (
     <div
       className={
         page === 'summary'
-          ? 'flex h-dvh flex-col overflow-hidden overscroll-none bg-[var(--color-bg)]'
+          ? 'flex h-svh flex-col bg-[var(--color-bg)]'
           : 'min-h-screen bg-[var(--color-bg)]'
       }
       data-filter={filter}
@@ -268,7 +270,7 @@ function DashboardProInner() {
         dark={dark}
         toggleTheme={toggle}
         page={page}
-        onNavigate={setPage}
+        onNavigate={navigate}
         enablePrivacyUnlock={CAN_PRIVACY_UNLOCK}
         showSummary
       />
@@ -276,7 +278,7 @@ function DashboardProInner() {
       <div
         className={
           page === 'summary'
-            ? 'flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
             : undefined
         }
       >
@@ -285,7 +287,7 @@ function DashboardProInner() {
             page={page}
             dark={dark}
             filter={filter}
-            onNavigateHome={() => setPage('home')}
+            onNavigateHome={() => navigate('home')}
           />
         </Suspense>
       </div>
