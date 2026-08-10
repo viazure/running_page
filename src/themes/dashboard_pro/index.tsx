@@ -13,7 +13,7 @@ import { Header } from '@/components/Header';
 import { StatsCards } from '@/components/StatsCards';
 import { ContributionHeatmap } from '@/components/ContributionHeatmap';
 import { ActivityLog } from '@/components/ActivityLog';
-import { CalendarWidget } from '@/components/CalendarWidget';
+import { DualCalendarWidget } from '@/components/DualCalendarWidget';
 import { ProfileCard } from '@/components/ProfileCard';
 import {
   PrivacyUnlockProvider,
@@ -227,7 +227,7 @@ function DashboardProContent({
             </Suspense>
           </div>
           <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
-            <CalendarWidget
+            <DualCalendarWidget
               activities={activities}
               selectedActivity={selectedActivity}
               onSelectActivity={setSelectedActivity}

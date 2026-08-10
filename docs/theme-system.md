@@ -61,6 +61,7 @@ privacy_anonymous_titles: true     # 按需
 - Summary 汇总页
 - ProfileCard 路线图标与内嵌个人最佳
 - 隐私模式（关灯底图、匿名标题、可解锁）
+- 月历支持距离视图与路线视图切换
 
 定制建议：优先改 `src/themes/dashboard_pro/`，通过可选 props 开启共享组件增强，避免直接改写 `src/components/` 默认行为。
 
