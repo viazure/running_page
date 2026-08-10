@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import type { Activity } from '../types';
 import { useLocale } from '../hooks/useLocale';
+import './TrendChart.css';
 
 interface TrendChartProps {
   activities: Activity[];
@@ -61,12 +62,26 @@ export function TrendChart({
         <span className="text-[11px] text-[var(--color-muted)]">{unit}</span>
       </div>
 
-      {/* Explicit height so ResponsiveContainer works (%, min-h alone is not enough) */}
-      <div className="h-[200px] min-h-0 w-full flex-1">
-        <ResponsiveContainer width="100%" height="100%">
+      {/*
+        Fixed height + min-w-0 avoids ResponsiveContainer (-1,-1) warn in flex layouts.
+        mousedown preventDefault stops SVG focus ring without breaking tooltips.
+      */}
+      <div
+        className="trend-chart-surface h-[200px] w-full min-w-0 shrink-0"
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          minWidth={0}
+          debounce={50}
+        >
           <AreaChart
             data={data}
             margin={{ top: 8, right: 4, left: -18, bottom: 0 }}
+            accessibilityLayer={false}
+            tabIndex={-1}
+            style={{ outline: 'none' }}
           >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

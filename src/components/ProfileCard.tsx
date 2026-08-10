@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Activity, SportFilter } from '../types';
 import { useLocale } from '../hooks/useLocale';
 import {
@@ -26,6 +27,26 @@ interface ProfileCardProps {
   showLocationStats?: boolean;
 }
 
+function AvatarFallback() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[var(--color-accent)]/20">
+      <svg
+        className="h-7 w-7 text-[var(--color-accent)]"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={1.5}
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export function ProfileCard({
   activities,
   filter = 'all',
@@ -36,6 +57,7 @@ export function ProfileCard({
   showLocationStats = true,
 }: ProfileCardProps) {
   const { t, locale } = useLocale();
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   // Filter activities by sport type for distance/count/time
   const filteredActivities =
@@ -91,28 +113,18 @@ export function ProfileCard({
       {/* Avatar top-left + Distance */}
       <div className="flex items-center gap-4">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[var(--color-border)]">
-          {AVATAR ? (
+          {AVATAR && !avatarFailed ? (
             <img
               src={AVATAR}
               alt="avatar"
               className="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarFailed(true)}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[var(--color-accent)]/20">
-              <svg
-                className="h-7 w-7 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-            </div>
+            <AvatarFallback />
           )}
         </div>
         <div className="flex-1 text-center">

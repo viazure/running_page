@@ -1,0 +1,7 @@
+/* Recharts SVG click focus ring (accessibilityLayer / tabIndex). */
+.trend-chart-surface,
+.trend-chart-surface *:focus,
+.trend-chart-surface *:focus-visible {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}

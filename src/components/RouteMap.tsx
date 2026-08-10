@@ -108,11 +108,14 @@ export function RouteMap({
 
       const bounds = new mapboxgl.LngLatBounds();
       for (const c of coords) bounds.extend(c as [number, number]);
-      map.fitBounds(bounds, {
-        padding: 50,
-        maxZoom: 14,
-        duration: lightsOffRef.current ? 200 : 800,
-      });
+      // Privacy: jump instantly so province switches don't reveal geography.
+      // Normal: omit duration → Mapbox default (matches upstream).
+      map.fitBounds(
+        bounds,
+        lightsOffRef.current
+          ? { padding: 50, maxZoom: 14, duration: 200 }
+          : { padding: 50, maxZoom: 14 }
+      );
       applyLightsOff(map, lightsOffRef.current);
       return;
     }
@@ -187,11 +190,12 @@ export function RouteMap({
       [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
     );
 
-    map.fitBounds(bounds, {
-      padding: 30,
-      maxZoom: 13,
-      duration: lightsOffRef.current ? 200 : 800,
-    });
+    map.fitBounds(
+      bounds,
+      lightsOffRef.current
+        ? { padding: 30, maxZoom: 13, duration: 200 }
+        : { padding: 30, maxZoom: 13 }
+    );
     applyLightsOff(map, lightsOffRef.current);
   });
 
