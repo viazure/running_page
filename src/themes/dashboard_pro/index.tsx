@@ -83,9 +83,8 @@ function DashboardProContent({
   const isUnlocked = usePrivacyUnlock();
   const { locale } = useLocale();
   const years = getAvailableYears(activities);
-  const [year, setYear] = useState<number | null>(() =>
-    years.includes(FOOTER_YEAR) ? FOOTER_YEAR : (years[0] ?? null)
-  );
+  /** Default ALL so China map / stats show full history (not just current year). */
+  const [year, setYear] = useState<number | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
@@ -229,7 +228,7 @@ function DashboardProContent({
           </div>
           <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <CalendarWidget
-              activities={filtered}
+              activities={activities}
               selectedActivity={selectedActivity}
               onSelectActivity={setSelectedActivity}
             />

@@ -119,7 +119,7 @@ function Dashboard() {
                 onSelectActivity={setSelectedActivity}
               />
               <CalendarWidget
-                activities={filtered}
+                activities={activities}
                 onSelectActivity={setSelectedActivity}
               />
             </div>
