@@ -107,7 +107,7 @@ function Dashboard() {
                   onSelectActivity={setSelectedActivity}
                 />
                 <ContributionHeatmap
-                  activities={filtered}
+                  activities={activities}
                   year={heatmapYear}
                   filter={filter}
                   onSelectActivity={setSelectedActivity}

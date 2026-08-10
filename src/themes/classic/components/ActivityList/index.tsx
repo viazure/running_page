@@ -810,6 +810,7 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
     () => getSportTypeOptions(activityData),
     [activityData]
   );
+  const showSportTypeFilter = sportTypeOptions.length > 2; // ['all', oneType] → hide
 
   // Keyboard navigation for year selection in Life view
   useEffect(() => {
@@ -988,23 +989,25 @@ const ActivityList: React.FC<ActivityListProps> = ({ onBack }) => {
             {HOME_PAGE_TITLE}
           </button>
         )}
-        <div className={styles.chipRow}>
-          {sportTypeOptions.map((type) => {
-            const disabled = interval === 'life' && type !== 'all';
-            const active = sportType === type;
-            return (
-              <button
-                key={type}
-                type="button"
-                disabled={disabled}
-                className={`${styles.filterChip} ${active ? styles.filterChipActive : ''}`}
-                onClick={() => !disabled && setSportType(type)}
-              >
-                {sportLabel(type)}
-              </button>
-            );
-          })}
-        </div>
+        {showSportTypeFilter ? (
+          <div className={styles.chipRow}>
+            {sportTypeOptions.map((type) => {
+              const disabled = interval === 'life' && type !== 'all';
+              const active = sportType === type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  disabled={disabled}
+                  className={`${styles.filterChip} ${active ? styles.filterChipActive : ''}`}
+                  onClick={() => !disabled && setSportType(type)}
+                >
+                  {sportLabel(type)}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className={styles.chipRow}>
           {intervalOptions.map(({ value, label }) => (
             <button

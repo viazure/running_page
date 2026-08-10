@@ -838,6 +838,8 @@ export function TracksPage({
   const allSportTabs: { label: string; value: SportType; color: string }[] = [
     { label: locale === 'zh' ? '跑步' : 'Run', value: 'Run', color: '#f97316' },
   ];
+  const availableSportTabs = allSportTabs.filter((t) => hasSport(t.value));
+  const showSportFilter = availableSportTabs.length > 1;
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
@@ -1044,70 +1046,48 @@ export function TracksPage({
             ref={captureRef}
             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
           >
-            {/* Year pills + sport filter */}
-            <div className="mb-4 flex flex-wrap items-center gap-1.5 border-b border-[var(--color-border)] pb-3">
-              {totalYearPages > 1 && (
-                <button
-                  onClick={() => setYearPage((p) => Math.max(0, p - 1))}
-                  disabled={yearPage === 0}
-                  className="px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
-                >
-                  ‹
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedYear(null)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
-              >
-                {locale === 'zh' ? '全部' : 'All'}
-              </button>
-              {visibleYears.map((yr) => (
-                <button
-                  key={yr}
-                  onClick={() =>
-                    setSelectedYear(selectedYear === yr ? null : yr)
-                  }
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
-                >
-                  {yr}
-                </button>
-              ))}
-              {totalYearPages > 1 && (
-                <button
-                  onClick={() =>
-                    setYearPage((p) => Math.min(totalYearPages - 1, p + 1))
-                  }
-                  disabled={yearPage === totalYearPages - 1}
-                  className="px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
-                >
-                  ›
-                </button>
-              )}
-              {/* Sport filter — wraps under years on narrow screens */}
-              <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">
-                <button
-                  onClick={() => setSportFilter(null)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
-                >
-                  {locale === 'zh' ? '全部' : 'All'}
-                </button>
-                {allSportTabs
-                  .filter((t) => hasSport(t.value))
-                  .map(({ label, value, color }) => (
+            {/* Year pills (scroll) + export; sport filter only when multiple sports */}
+            <div className="mb-4 space-y-2.5 border-b border-[var(--color-border)] pb-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {totalYearPages > 1 && (
                     <button
-                      key={value}
-                      onClick={() =>
-                        setSportFilter(sportFilter === value ? null : value)
-                      }
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === value ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
-                      style={
-                        sportFilter === value ? { backgroundColor: color } : {}
-                      }
+                      onClick={() => setYearPage((p) => Math.max(0, p - 1))}
+                      disabled={yearPage === 0}
+                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
                     >
-                      {label}
+                      ‹
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedYear(null)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '全部' : 'All'}
+                  </button>
+                  {visibleYears.map((yr) => (
+                    <button
+                      key={yr}
+                      onClick={() =>
+                        setSelectedYear(selectedYear === yr ? null : yr)
+                      }
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                    >
+                      {yr}
                     </button>
                   ))}
-                <span className="mx-1 h-3 w-px bg-[var(--color-border)]" />
+                  {totalYearPages > 1 && (
+                    <button
+                      onClick={() =>
+                        setYearPage((p) => Math.min(totalYearPages - 1, p + 1))
+                      }
+                      disabled={yearPage === totalYearPages - 1}
+                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+                    >
+                      ›
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={async () => {
                     if (!captureRef.current || exporting) return;
@@ -1136,7 +1116,7 @@ export function TracksPage({
                     }
                   }}
                   disabled={exporting}
-                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:opacity-50"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:opacity-50"
                   title={locale === 'zh' ? '导出图片' : 'Export as image'}
                 >
                   {exporting ? (
@@ -1170,6 +1150,30 @@ export function TracksPage({
                   )}
                 </button>
               </div>
+              {showSportFilter ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setSportFilter(null)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '全部' : 'All'}
+                  </button>
+                  {availableSportTabs.map(({ label, value, color }) => (
+                    <button
+                      key={value}
+                      onClick={() =>
+                        setSportFilter(sportFilter === value ? null : value)
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === value ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                      style={
+                        sportFilter === value ? { backgroundColor: color } : {}
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {clustering ? (

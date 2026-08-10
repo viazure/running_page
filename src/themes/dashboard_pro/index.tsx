@@ -156,7 +156,7 @@ function DashboardProContent({
           </div>
           <div className="order-9 min-w-0 overflow-hidden lg:order-none">
             <ContributionHeatmap
-              activities={filtered}
+              activities={activities}
               year={heatmapYear}
               filter={filter}
               onSelectActivity={setSelectedActivity}
