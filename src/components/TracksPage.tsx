@@ -24,7 +24,8 @@ type SportType = 'Run';
 
 interface TracksPageProps {
   activities: Activity[];
-  filter: string;
+  /** Reserved for parent sport filter; Tracks manages its own sport tabs. */
+  filter?: string;
   onBack: () => void;
   onSelectActivity?: (a: Activity | null) => void;
   getTitle?: (a: Activity) => string;

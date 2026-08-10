@@ -132,3 +132,12 @@
 .summary-page-root .svg-color-text {
   fill: var(--color-text);
 }
+
+/* Cap Life / year summary SVGs in dashboard_pro Summary embed (classic stays full). */
+.summary-page-root [class*='yearSummarySvg'],
+.summary-page-root [class*='lifeContainer'] > svg,
+.summary-page-root [class*='lifeContainer'] svg {
+  width: min(100%, 680px) !important;
+  height: auto !important;
+  max-height: none;
+}

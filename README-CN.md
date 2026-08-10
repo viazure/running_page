@@ -351,16 +351,38 @@ const MAP_TILE_ACCESS_TOKEN = 'your_access_token_here';
 
 ## 主题系统 (3.0)
 
-Running Page 3.0 引入了可插拔的主题架构。内置主题包括 **Dashboard**（现代单页布局）和 **Classic**（原始多页面布局）。
+Running Page 3.0 引入了可插拔的主题架构。内置主题包括 **Dashboard**（现代单页布局）和 **Classic**（原始多页面布局）。本仓库额外提供 **Dashboard Pro**。
 
 ### 切换主题
 
 编辑 `config.yml`，重新构建即可：
 
 ```yaml
-# dashboard | classic | 自定义
+# dashboard | dashboard_pro | classic | 自定义
 theme_preset: classic
 ```
+
+### Dashboard Pro
+
+**Dashboard Pro** 是基于 Dashboard 的隐私增强、移动端优化个人站主题。启用方式：
+
+```yaml
+theme_preset: dashboard_pro
+privacy_mode: true                 # 按需：关灯底图 + 解锁
+privacy_unlock: true               # 按需：允许临时解除隐私
+privacy_anonymous_titles: true     # 按需：锁定时用时段匿名标题
+```
+
+本主题额外能力：
+
+- 首页默认选中当前年
+- 移动端更短的活动记录分页
+- 移动端首页模块顺序调整、路线图置顶固定、年度趋势图
+- Summary 汇总页
+- ProfileCard 路线图标与内嵌个人最佳
+- 隐私模式（关灯底图、匿名标题、可解锁）
+
+定制建议：优先改 `src/themes/dashboard_pro/`。选择 `dashboard` / `classic` 不受影响。
 
 > 详细架构说明、主题介绍、自定义主题创建方法及共享核心层 API 请参阅 **[docs/theme-system.md](docs/theme-system.md)**。
 
@@ -374,7 +396,7 @@ mapbox_token: 'your-token-here'   # https://account.mapbox.com
 avatar: 'https://...'              # 头像 URL
 locale: zh                         # zh | en
 theme: dark                        # system | light | dark
-theme_preset: dashboard            # dashboard | classic | 自定义
+theme_preset: dashboard            # dashboard | dashboard_pro | classic | 自定义
 
 goals:
   Run:

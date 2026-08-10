@@ -97,6 +97,7 @@ export function PersonalBestDivider() {
 interface PersonalBestProps {
   activities: Activity[];
   onSelectActivity?: (a: Activity | null) => void;
+  getTitle?: (a: Activity) => string;
   className?: string;
 }
 
@@ -104,6 +105,7 @@ interface PersonalBestProps {
 export function PersonalBest({
   activities,
   onSelectActivity,
+  getTitle,
   className = '',
 }: PersonalBestProps) {
   const { locale } = useLocale();
@@ -122,6 +124,7 @@ export function PersonalBest({
           bests={bests}
           labels={labels}
           onSelectActivity={onSelectActivity}
+          getTitle={getTitle}
         />
       </div>
     </div>
@@ -132,20 +135,28 @@ export function PersonalBestGrid({
   bests,
   labels,
   onSelectActivity,
+  getTitle,
 }: {
   bests: PersonalBestEntry[];
   labels: Record<PersonalBestKey, string>;
   onSelectActivity?: (a: Activity | null) => void;
+  /** Optional title resolver (e.g. privacy anonymous titles) for tooltip/a11y */
+  getTitle?: (a: Activity) => string;
 }) {
   return (
     <div className="grid grid-cols-4 gap-1">
       {bests.map(({ key, activity, time }) => {
         const clickable = Boolean(activity);
+        const label = activity
+          ? (getTitle?.(activity) ?? activity.name)
+          : undefined;
         return (
           <div
             key={key}
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
+            title={label}
+            aria-label={label ? `${labels[key]}: ${label}` : labels[key]}
             onClick={() => activity && onSelectActivity?.(activity)}
             onKeyDown={(e) => {
               if (!activity) return;

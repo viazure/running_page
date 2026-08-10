@@ -17,10 +17,15 @@ interface HeaderProps {
   onNavigate: (p: Page) => void;
   /** Enable logo multi-tap privacy unlock (still navigates home on click) */
   enablePrivacyUnlock?: boolean;
+  /** Include Summary nav item (dashboard_pro). Default false. */
+  showSummary?: boolean;
 }
 
 const LOGO_TAP_TARGET = 7;
 const LOGO_TAP_WINDOW_MS = 2000;
+
+const logoButtonClassName =
+  'flex min-w-0 cursor-pointer items-center gap-2 border-0 bg-transparent p-0';
 
 function ExternalLinkIcon({
   className = 'h-3.5 w-3.5',
@@ -45,23 +50,52 @@ function ExternalLinkIcon({
   );
 }
 
-export function Header({
-  dark,
-  toggleTheme,
-  page,
+function LogoMark() {
+  return (
+    <span className="truncate text-xl font-bold text-[var(--color-text)]">
+      RUNNING<span className="text-[var(--color-run)]">.</span>PAGE
+    </span>
+  );
+}
+
+/** Plain home logo — no privacy context dependency. */
+function HomeLogoButton({
+  title,
   onNavigate,
-  enablePrivacyUnlock = false,
-}: HeaderProps) {
-  const { locale, setLocale, t } = useLocale();
+}: {
+  title: string;
+  onNavigate: (p: Page) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate('home')}
+      className={logoButtonClassName}
+      title={title}
+    >
+      <LogoMark />
+    </button>
+  );
+}
+
+/**
+ * Home logo with multi-tap privacy unlock.
+ * Mounted only when enablePrivacyUnlock so official dashboard never hooks privacy.
+ */
+function PrivacyUnlockHomeLogo({
+  title,
+  onNavigate,
+}: {
+  title: string;
+  onNavigate: (p: Page) => void;
+}) {
   const toggleUnlock = usePrivacyUnlockToggle();
   const logoTapCountRef = useRef(0);
   const logoTapWindowRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogoClick = useCallback(
     (e: MouseEvent) => {
       onNavigate('home');
-      if (!enablePrivacyUnlock) return;
       logoTapCountRef.current += 1;
       if (logoTapCountRef.current >= LOGO_TAP_TARGET) {
         if (logoTapWindowRef.current) {
@@ -78,13 +112,37 @@ export function Header({
         }, LOGO_TAP_WINDOW_MS);
       }
     },
-    [enablePrivacyUnlock, onNavigate, toggleUnlock]
+    [onNavigate, toggleUnlock]
   );
+
+  return (
+    <button
+      type="button"
+      onClick={handleLogoClick}
+      className={logoButtonClassName}
+      title={title}
+    >
+      <LogoMark />
+    </button>
+  );
+}
+
+export function Header({
+  dark,
+  toggleTheme,
+  page,
+  onNavigate,
+  enablePrivacyUnlock = false,
+  showSummary = false,
+}: HeaderProps) {
+  const { locale, setLocale, t } = useLocale();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const homeTitle = t('home');
 
   const navItems: { label: string; page: Page }[] = [
     { label: t('home'), page: 'home' },
     { label: t('tracks'), page: 'tracks' },
-    { label: t('summary'), page: 'summary' },
+    ...(showSummary ? [{ label: t('summary'), page: 'summary' as const }] : []),
   ];
 
   const handleNav = (p: Page) => {
@@ -171,16 +229,11 @@ export function Header({
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--color-border)] bg-[var(--color-bg)]/70 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-4 md:px-6">
-        <button
-          type="button"
-          onClick={handleLogoClick}
-          className="flex min-w-0 cursor-pointer items-center gap-2 border-0 bg-transparent p-0"
-          title={t('home')}
-        >
-          <span className="truncate text-xl font-bold text-[var(--color-text)]">
-            RUNNING<span className="text-[var(--color-run)]">.</span>PAGE
-          </span>
-        </button>
+        {enablePrivacyUnlock ? (
+          <PrivacyUnlockHomeLogo title={homeTitle} onNavigate={onNavigate} />
+        ) : (
+          <HomeLogoButton title={homeTitle} onNavigate={onNavigate} />
+        )}
 
         {/* Desktop nav: pages + optional nav_links … theme + locale + blog */}
         <div className="hidden items-center gap-5 md:flex">

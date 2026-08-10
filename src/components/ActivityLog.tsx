@@ -1,7 +1,15 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { Activity, SportFilter } from '../types';
 import { formatDuration, formatPace } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
+
+type PageSizeConfig = number | { mobile: number; desktop: number };
 
 interface ActivityLogProps {
   activities: Activity[];
@@ -12,19 +20,38 @@ interface ActivityLogProps {
   onSelectActivity?: (a: Activity | null) => void;
   filter?: SportFilter;
   getTitle?: (a: Activity) => string;
+  /** Default 16 (upstream). Pass `{ mobile, desktop }` for responsive sizing. */
+  pageSize?: PageSizeConfig;
 }
 
-const PAGE_SIZE_MOBILE = 7;
-const PAGE_SIZE_DESKTOP = 16;
+const DEFAULT_PAGE_SIZE = 16;
 const LG_MQ = '(min-width: 1024px)';
 
 type DistanceFilter = 'all' | '10' | '20' | '40';
 
-function getActivityLogPageSize() {
-  if (typeof window === 'undefined') return PAGE_SIZE_DESKTOP;
-  return window.matchMedia(LG_MQ).matches
-    ? PAGE_SIZE_DESKTOP
-    : PAGE_SIZE_MOBILE;
+function subscribeLg(onChange: () => void) {
+  const mq = window.matchMedia(LG_MQ);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
+function getLgSnapshot() {
+  return window.matchMedia(LG_MQ).matches;
+}
+
+function getLgServerSnapshot() {
+  // Vite SPA has no SSR; mobile-first avoids a large first page on phones
+  // when dashboard_pro uses responsive { mobile, desktop } pageSize.
+  return false;
+}
+
+function resolvePageSize(
+  config: PageSizeConfig | undefined,
+  isDesktop: boolean
+): number {
+  if (config == null) return DEFAULT_PAGE_SIZE;
+  if (typeof config === 'number') return config;
+  return isDesktop ? config.desktop : config.mobile;
 }
 
 function typeIcon(type: string): string {
@@ -64,21 +91,20 @@ export function ActivityLog({
   onSelectActivity,
   filter: _filter = 'all',
   getTitle,
+  pageSize: pageSizeConfig,
 }: ActivityLogProps) {
   const { t } = useLocale();
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(getActivityLogPageSize);
+  const needsResponsive =
+    pageSizeConfig != null && typeof pageSizeConfig === 'object';
+  const isDesktop = useSyncExternalStore(
+    needsResponsive ? subscribeLg : () => () => {},
+    needsResponsive ? getLgSnapshot : () => true,
+    getLgServerSnapshot
+  );
+  const pageSize = resolvePageSize(pageSizeConfig, isDesktop);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
   const prevSelectedIdRef = useRef<Activity['run_id'] | null>(null);
-
-  useEffect(() => {
-    const mq = window.matchMedia(LG_MQ);
-    const onChange = () => {
-      setPageSize(mq.matches ? PAGE_SIZE_DESKTOP : PAGE_SIZE_MOBILE);
-    };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   const sorted = useMemo(() => {
     const distFiltered = activities.filter((a) => {

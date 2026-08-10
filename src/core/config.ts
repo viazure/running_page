@@ -54,15 +54,15 @@ export const DEFAULT_THEME: 'light' | 'dark' | 'system' =
   config.theme ?? 'system';
 export const THEME_PRESET: string = config.theme_preset ?? 'default';
 /** When true: lights-off map, unlock sequence available if enabled */
-export const PRIVACY_MODE: boolean = config.privacy_mode ?? true;
+export const PRIVACY_MODE: boolean = config.privacy_mode ?? false;
 /** When false: privacy stays locked; unlock triggers are disabled */
-export const PRIVACY_UNLOCK: boolean = config.privacy_unlock ?? true;
+export const PRIVACY_UNLOCK: boolean = config.privacy_unlock ?? false;
 /**
- * When true (default): locked privacy shows period titles (清晨跑步…);
+ * When true: locked privacy shows period titles (清晨跑步…);
  * unlocked / privacy_mode false shows original activity.name.
  */
 export const PRIVACY_ANONYMOUS_TITLES: boolean =
-  config.privacy_anonymous_titles ?? true;
+  config.privacy_anonymous_titles ?? false;
 export const GOALS: Record<string, GoalConfig> = config.goals ?? {};
 export const DEFAULT_GOAL: GoalConfig = GOALS.all ?? {
   yearly: 2000,

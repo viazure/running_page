@@ -355,12 +355,8 @@
   background: color-mix(in srgb, var(--color-background) 94%, transparent);
 }
 
-/* Classic capped at intrinsic mm size (~too small on wide screens).
-   Full-bleed was too large — use a middle width and let Life area scroll. */
 .yearSummarySvg {
-  width: min(100%, 680px) !important;
-  height: auto !important;
-  max-height: none;
+  max-width: 100%;
 }
 
 .lifeSvgWrap {
@@ -402,9 +398,7 @@
 
 .lifeContainer > svg,
 .lifeContainer :global(svg) {
-  width: min(100%, 680px) !important;
-  height: auto !important;
-  max-height: none;
+  max-width: 100%;
 }
 
 @media (max-width: 640px) {

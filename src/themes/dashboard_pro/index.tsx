@@ -45,6 +45,7 @@ const ChinaMap = lazy(() =>
 type Page = 'home' | 'tracks' | 'summary';
 
 const FOOTER_YEAR = new Date().getFullYear();
+const ACTIVITY_LOG_PAGE_SIZE = { mobile: 7, desktop: 16 } as const;
 
 function MapFallback({
   className = 'h-[220px] md:h-[380px]',
@@ -172,6 +173,9 @@ function DashboardProContent({
               filter={filter}
               getTitle={activityTitle}
               onSelectActivity={setSelectedActivity}
+              showRouteIcon
+              showPersonalBest
+              showLocationStats
             />
           </div>
           <div className="order-6 min-w-0 overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
@@ -205,6 +209,7 @@ function DashboardProContent({
             onSelectActivity={setSelectedActivity}
             filter={filter}
             getTitle={activityTitle}
+            pageSize={ACTIVITY_LOG_PAGE_SIZE}
           />
         </div>
 
@@ -265,6 +270,7 @@ function DashboardProInner() {
         page={page}
         onNavigate={setPage}
         enablePrivacyUnlock={CAN_PRIVACY_UNLOCK}
+        showSummary
       />
 
       <div

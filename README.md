@@ -348,16 +348,38 @@ When using **"mapbox"**, **"maptiler"** or **"stadiamaps"**, you must configure 
 
 ## Theme System (3.0)
 
-Running Page 3.0 introduces a pluggable theme architecture. Built-in themes include **Dashboard** (modern single-page layout) and **Classic** (original multi-page layout).
+Running Page 3.0 introduces a pluggable theme architecture. Built-in themes include **Dashboard** (modern single-page layout) and **Classic** (original multi-page layout). This fork also provides **Dashboard Pro**.
 
 ### Switching Themes
 
 Edit `config.yml` and rebuild:
 
 ```yaml
-# dashboard | classic | custom
+# dashboard | dashboard_pro | classic | custom
 theme_preset: classic
 ```
+
+### Dashboard Pro
+
+**Dashboard Pro** is a privacy-enhanced, mobile-optimized personal-site theme based on Dashboard. Enable it with:
+
+```yaml
+theme_preset: dashboard_pro
+privacy_mode: true                 # optional: lights-off map + unlock
+privacy_unlock: true               # optional: allow temporary unlock
+privacy_anonymous_titles: true     # optional: period titles while locked
+```
+
+What it adds:
+
+- Home year defaults to the current calendar year
+- Shorter activity log pages on mobile
+- Mobile home module order, sticky route map, yearly trend chart
+- Summary page
+- ProfileCard route icon and embedded personal bests
+- Privacy mode (lights-off map, anonymous titles, unlock)
+
+Customization tip: prefer editing `src/themes/dashboard_pro/`. Choosing `dashboard` or `classic` is unaffected.
 
 > For detailed architecture, theme descriptions, custom theme creation, and the shared core layer API, see **[docs/theme-system.md](docs/theme-system.md)**.
 
@@ -371,7 +393,7 @@ mapbox_token: 'your-token-here'   # https://account.mapbox.com
 avatar: 'https://...'              # Profile avatar URL
 locale: zh                         # zh | en
 theme: dark                        # system | light | dark
-theme_preset: dashboard            # dashboard | classic | custom
+theme_preset: dashboard            # dashboard | dashboard_pro | classic | custom
 
 goals:
   Run:
