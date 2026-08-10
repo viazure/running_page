@@ -25,20 +25,24 @@ const SummaryPage = lazy(() =>
 
 type Page = 'home' | 'tracks' | 'summary';
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 function Dashboard() {
   const activities = getActivityData() as Activity[];
   const { dark, toggle } = useTheme();
   const [filter] = useState('all' as const);
-  const [year, setYear] = useState<number | null>(null);
+  const years = getAvailableYears(activities);
+  const [year, setYear] = useState<number | null>(() =>
+    years.includes(CURRENT_YEAR) ? CURRENT_YEAR : (years[0] ?? null)
+  );
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [page, setPage] = useState<Page>('home');
 
-  const years = getAvailableYears(activities);
   const filtered = useFilteredActivities(activities, filter, year);
-  const heatmapYear = year ?? years[0] ?? new Date().getFullYear();
+  const heatmapYear = year ?? years[0] ?? CURRENT_YEAR;
 
   // Activities filtered to the selected province (for RouteMap)
   const provinceFiltered = useMemo(() => {
@@ -52,7 +56,7 @@ function Dashboard() {
     <div
       className={
         page === 'summary'
-          ? 'flex h-dvh flex-col overflow-hidden bg-[var(--color-bg)]'
+          ? 'flex h-dvh flex-col overflow-hidden overscroll-none bg-[var(--color-bg)]'
           : 'min-h-screen bg-[var(--color-bg)]'
       }
       data-filter={filter}
@@ -68,13 +72,13 @@ function Dashboard() {
       <div
         className={
           page === 'summary'
-            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none'
             : undefined
         }
       >
         {page === 'tracks' ? (
           <TracksPage
-            activities={filtered}
+            activities={activities}
             filter={filter}
             onSelectActivity={setSelectedActivity}
             onBack={() => setPage('home')}
@@ -153,7 +157,7 @@ function Dashboard() {
 
       {page !== 'summary' ? (
         <footer className="border-t border-[var(--color-border)] py-6 text-center text-sm text-[var(--color-muted)]">
-          &copy; {new Date().getFullYear()} Running Page 3.0
+          &copy; {CURRENT_YEAR} Running Page 3.0
           {GITHUB_URL ? (
             <>
               {' · '}

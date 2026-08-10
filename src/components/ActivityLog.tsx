@@ -14,9 +14,18 @@ interface ActivityLogProps {
   getTitle?: (a: Activity) => string;
 }
 
-const PAGE_SIZE = 16;
+const PAGE_SIZE_MOBILE = 7;
+const PAGE_SIZE_DESKTOP = 16;
+const LG_MQ = '(min-width: 1024px)';
 
 type DistanceFilter = 'all' | '10' | '20' | '40';
+
+function getActivityLogPageSize() {
+  if (typeof window === 'undefined') return PAGE_SIZE_DESKTOP;
+  return window.matchMedia(LG_MQ).matches
+    ? PAGE_SIZE_DESKTOP
+    : PAGE_SIZE_MOBILE;
+}
 
 function typeIcon(type: string): string {
   const icons: Record<string, string> = {
@@ -58,8 +67,18 @@ export function ActivityLog({
 }: ActivityLogProps) {
   const { t } = useLocale();
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(getActivityLogPageSize);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
   const prevSelectedIdRef = useRef<Activity['run_id'] | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia(LG_MQ);
+    const onChange = () => {
+      setPageSize(mq.matches ? PAGE_SIZE_DESKTOP : PAGE_SIZE_MOBILE);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   const sorted = useMemo(() => {
     const distFiltered = activities.filter((a) => {
@@ -94,7 +113,7 @@ export function ActivityLog({
 
     const idx = sorted.findIndex((a) => a.run_id === id);
     if (idx >= 0) {
-      setPage(Math.floor(idx / PAGE_SIZE));
+      setPage(Math.floor(idx / pageSize));
       return;
     }
     if (isNewSelection) {
@@ -104,10 +123,11 @@ export function ActivityLog({
       // User's distance filter hid the current row — drop selection
       onSelectActivity?.(null);
     }
-  }, [selectedActivity, sorted, distFilter, onSelectActivity]);
+  }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
-  const totalPages = Math.ceil(sorted.length / PAGE_SIZE) || 1;
-  const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(sorted.length / pageSize) || 1;
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
+  const pageData = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
   // When only one sport type, keep type column width but hide labels/values
   const showTypeContent = useMemo(() => {
     const types = new Set(sorted.map((a) => a.type));
@@ -124,8 +144,8 @@ export function ActivityLog({
       <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-bold">{t('activityLog')}</h2>
         <span className="text-sm text-[var(--color-muted)]">
-          {t('showing')} {page * PAGE_SIZE + 1}-
-          {Math.min((page + 1) * PAGE_SIZE, sorted.length)} {t('of')}{' '}
+          {t('showing')} {safePage * pageSize + 1}-
+          {Math.min((safePage + 1) * pageSize, sorted.length)} {t('of')}{' '}
           {sorted.length}
         </span>
       </div>
@@ -282,17 +302,17 @@ export function ActivityLog({
       <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-4">
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={page === 0}
+          disabled={safePage === 0}
           className="text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
         >
           ←
         </button>
         <span className="text-sm text-[var(--color-muted)]">
-          {t('page')} {page + 1} {t('pageOf')} {totalPages} {t('pages')}
+          {t('page')} {safePage + 1} {t('pageOf')} {totalPages} {t('pages')}
         </span>
         <button
           onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-          disabled={page >= totalPages - 1}
+          disabled={safePage >= totalPages - 1}
           className="text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
         >
           →

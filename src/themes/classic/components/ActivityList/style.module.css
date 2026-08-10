@@ -5,6 +5,7 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   padding: 0;
   background-color: var(--color-background);
   color: var(--color-summary-fg, var(--color-primary));
@@ -137,6 +138,8 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 .activityCard {
@@ -156,6 +159,7 @@
     box-shadow 0.3s;
   position: relative;
   box-sizing: border-box;
+  touch-action: pan-y;
 }
 
 .activityCard:hover {
@@ -392,6 +396,8 @@
 :global(.rc-virtual-list-holder-inner),
 :global(.rc-virtual-list-holder) {
   padding-right: 4px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .lifeContainer > svg,

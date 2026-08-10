@@ -74,13 +74,15 @@ function DashboardProContent({
   const activities = getActivityData() as Activity[];
   const isUnlocked = usePrivacyUnlock();
   const { locale } = useLocale();
-  const [year, setYear] = useState<number | null>(null);
+  const years = getAvailableYears(activities);
+  const [year, setYear] = useState<number | null>(() =>
+    years.includes(FOOTER_YEAR) ? FOOTER_YEAR : (years[0] ?? null)
+  );
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
 
-  const years = getAvailableYears(activities);
   const filtered = useFilteredActivities(activities, filter, year);
   const heatmapYear = year ?? years[0] ?? FOOTER_YEAR;
   const privacyActive = PRIVACY_MODE && !isUnlocked;
@@ -105,7 +107,7 @@ function DashboardProContent({
         }
       >
         <TracksPage
-          activities={filtered}
+          activities={activities}
           filter={filter}
           onSelectActivity={setSelectedActivity}
           onBack={onNavigateHome}
@@ -134,8 +136,8 @@ function DashboardProContent({
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
       {/*
-        Mobile order: Stats → sticky RouteMap → Calendar → ActivityLog
-        → Profile → ChinaMap → Yearly Distance → Heatmap (bottom).
+        Mobile order: Profile → Stats → sticky RouteMap → Calendar → ActivityLog
+        → ChinaMap → Yearly Distance → Heatmap (bottom).
         Desktop (2×2):
           [Stats+Heatmap] [Profile(含PB) + Map]  ← row1 stretch
           [ActivityLog  ] [RouteMap+Calendar+Distance]  ← row2 stretch
@@ -143,7 +145,7 @@ function DashboardProContent({
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_380px] lg:grid-rows-[auto_auto] xl:grid-cols-[1fr_400px]">
         {/* Row1 left: stats + heatmap */}
         <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:flex-col lg:gap-6">
-          <div className="order-1 min-w-0 lg:order-none">
+          <div className="order-2 min-w-0 lg:order-none">
             <StatsCards
               activities={filtered}
               allActivities={activities}
@@ -164,12 +166,11 @@ function DashboardProContent({
 
         {/* Row1 right: profile (with PB) + map — stretches to heatmap bottom */}
         <div className="contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:gap-4 lg:overflow-hidden">
-          <div className="order-5 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+          <div className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <ProfileCard
               activities={activities}
               filter={filter}
               getTitle={activityTitle}
-              hideLocationStats={privacyActive}
               onSelectActivity={setSelectedActivity}
             />
           </div>
@@ -194,7 +195,7 @@ function DashboardProContent({
         </div>
 
         {/* Row2 left: activity log */}
-        <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2">
+        <div className="order-5 min-w-0 overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2">
           <ActivityLog
             activities={filtered}
             years={years}
@@ -210,7 +211,7 @@ function DashboardProContent({
         {/* Row2 right: route map + calendar + trend — stretch to log bottom */}
         <div className="contents min-w-0 lg:col-start-2 lg:row-start-2 lg:flex lg:h-full lg:flex-col lg:gap-4 lg:overflow-hidden">
           {/* Mobile sticky: py-2 keeps light air above/below while stuck */}
-          <div className="sticky top-16 z-40 order-2 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0">
+          <div className="sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0">
             <Suspense
               fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}
             >
@@ -224,7 +225,7 @@ function DashboardProContent({
               />
             </Suspense>
           </div>
-          <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+          <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <CalendarWidget
               activities={filtered}
               selectedActivity={selectedActivity}
@@ -253,7 +254,7 @@ function DashboardProInner() {
     <div
       className={
         page === 'summary'
-          ? 'flex h-dvh flex-col overflow-hidden bg-[var(--color-bg)]'
+          ? 'flex h-dvh flex-col overflow-hidden overscroll-none bg-[var(--color-bg)]'
           : 'min-h-screen bg-[var(--color-bg)]'
       }
       data-filter={filter}
@@ -269,7 +270,7 @@ function DashboardProInner() {
       <div
         className={
           page === 'summary'
-            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none'
             : undefined
         }
       >
