@@ -1,11 +1,44 @@
-/* Mapbox zoom / compass / fullscreen: hidden until pointer is over the control corner */
+/* Mapbox zoom / compass / fullscreen: hidden until pointer is over the map.
+   Fullscreen puts the map in a top layer, so parent :hover stops working —
+   always show controls while any descendant is :fullscreen. */
 @media (hover: hover) and (pointer: fine) {
-  .route-map-hover-ctrls .mapboxgl-ctrl-top-right {
+  .route-map-hover-ctrls .mapboxgl-ctrl-top-right,
+  .route-map-hover-ctrls .route-map-3d-ctrl {
     opacity: 0;
     transition: opacity 0.15s ease;
   }
 
-  .route-map-hover-ctrls .mapboxgl-ctrl-top-right:hover {
+  .route-map-hover-ctrls:hover .mapboxgl-ctrl-top-right,
+  .route-map-hover-ctrls:hover .route-map-3d-ctrl,
+  .route-map-hover-ctrls:has(:fullscreen) .mapboxgl-ctrl-top-right,
+  .route-map-hover-ctrls:has(:fullscreen) .route-map-3d-ctrl {
     opacity: 1;
   }
+}
+
+/* 3D chase toggle — match native Mapbox control sizing and center the SVG icon */
+.route-map-3d-ctrl button.route-map-3d-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.route-map-3d-ctrl button.route-map-3d-btn.is-hidden {
+  display: none !important;
+}
+
+.route-map-3d-ctrl button.route-map-3d-btn .mapboxgl-ctrl-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: none;
+}
+
+.route-map-3d-ctrl button.route-map-3d-btn.is-chasing {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
 }

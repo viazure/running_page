@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './RouteMap.css';
@@ -10,8 +10,18 @@ import {
   mapboxBasemapStyle,
   MAP_STYLE_LOAD_TIMEOUT_MS,
 } from '../core/mapStyle';
+import { useLocale } from '../hooks/useLocale';
+import type { Coordinate } from '../utils/routeAnimation';
+import {
+  CHASE_LAYER_IDS,
+  createChaseControlButton,
+  createMapChaseController,
+  injectMapTerrain,
+  removeChaseHighlight,
+  updateChaseControlButton,
+} from '../utils/mapChase3d';
 
-const ROUTE_LAYER_IDS = new Set(['routes', 'selected']);
+const ROUTE_LAYER_IDS = new Set(['routes', 'selected', ...CHASE_LAYER_IDS]);
 
 interface RouteMapProps {
   activities: Activity[];
@@ -43,6 +53,10 @@ function applyLightsOff(map: mapboxgl.Map, lightsOff: boolean) {
   }
 }
 
+function routeColor(a: Activity): string {
+  return a.type === 'Run' ? '#f97316' : '#3b82f6';
+}
+
 export function RouteMap({
   activities,
   selectedActivity,
@@ -51,11 +65,29 @@ export function RouteMap({
   lightsOff = false,
   className = '',
 }: RouteMapProps) {
+  const { locale } = useLocale();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const lightsOffRef = useRef(lightsOff);
   const activitiesRef = useRef(activities);
   const selectedRef = useRef(selectedActivity);
+  const chaseRef = useRef(createMapChaseController());
+  const selectedCoordsRef = useRef<Coordinate[] | null>(null);
+  const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  const selectedId = selectedActivity ? String(selectedActivity.run_id) : null;
+  const chasing = chaseRunId != null && chaseRunId === selectedId;
+  const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toggle3dRef = useRef<() => void>(() => {});
+  const useBlank = lightsOff || !MAPBOX_TOKEN;
+  const can3d = !useBlank;
+  const bg = dark !== false ? '#0d1117' : '#f6f8fa';
+  const style = useBlank
+    ? blankMapStyle(bg)
+    : mapboxBasemapStyle(dark !== false);
+
+  const stopChase = () => {
+    chaseRef.current.stop({ silent: true });
+  };
 
   useEffect(() => {
     lightsOffRef.current = lightsOff;
@@ -63,20 +95,16 @@ export function RouteMap({
     selectedRef.current = selectedActivity;
   });
 
-  const useBlank = lightsOff || !MAPBOX_TOKEN;
-  const bg = dark !== false ? '#0d1117' : '#f6f8fa';
-  const style = useBlank
-    ? blankMapStyle(bg)
-    : mapboxBasemapStyle(dark !== false);
-
   const updateRoutesRef = useRef(() => {
     const map = mapRef.current;
     if (!map) return;
 
+    stopChase();
     if (map.getLayer('routes')) map.removeLayer('routes');
     if (map.getSource('routes')) map.removeSource('routes');
     if (map.getLayer('selected')) map.removeLayer('selected');
     if (map.getSource('selected')) map.removeSource('selected');
+    removeChaseHighlight(map);
 
     const selected = selectedRef.current;
     const acts = activitiesRef.current;
@@ -84,7 +112,9 @@ export function RouteMap({
     if (selected?.summary_polyline) {
       const coords = polyline
         .decode(selected.summary_polyline)
-        .map(([lat, lng]) => [lng, lat]);
+        .map(([lat, lng]) => [lng, lat] as Coordinate);
+      selectedCoordsRef.current = coords;
+      const color = routeColor(selected);
 
       map.addSource('selected', {
         type: 'geojson',
@@ -100,16 +130,19 @@ export function RouteMap({
         type: 'line',
         source: 'selected',
         paint: {
-          'line-color': selected.type === 'Run' ? '#f97316' : '#3b82f6',
+          'line-color': color,
           'line-width': 3,
           'line-opacity': 0.9,
         },
       });
 
       const bounds = new mapboxgl.LngLatBounds();
-      for (const c of coords) bounds.extend(c as [number, number]);
-      // Privacy: jump instantly so province switches don't reveal geography.
-      // Normal: omit duration → Mapbox default (matches upstream).
+      for (const c of coords) bounds.extend(c);
+      map.easeTo({
+        pitch: 0,
+        bearing: 0,
+        duration: lightsOffRef.current ? 200 : 400,
+      });
       map.fitBounds(
         bounds,
         lightsOffRef.current
@@ -119,6 +152,8 @@ export function RouteMap({
       applyLightsOff(map, lightsOffRef.current);
       return;
     }
+
+    selectedCoordsRef.current = null;
 
     const features = acts
       .filter((a) => a.summary_polyline)
@@ -190,6 +225,11 @@ export function RouteMap({
       [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
     );
 
+    map.easeTo({
+      pitch: 0,
+      bearing: 0,
+      duration: lightsOffRef.current ? 200 : 400,
+    });
     map.fitBounds(
       bounds,
       lightsOffRef.current
@@ -199,12 +239,84 @@ export function RouteMap({
     applyLightsOff(map, lightsOffRef.current);
   });
 
+  const handleToggle3d = () => {
+    const map = mapRef.current;
+    const selected = selectedRef.current;
+    const coords = selectedCoordsRef.current;
+    if (!map || !selected || !coords || !can3d) return;
+
+    if (chaseRef.current.isAnimating()) {
+      stopChase();
+      setChaseRunId(null);
+      if (map.getLayer('selected')) {
+        map.setPaintProperty('selected', 'line-opacity', 0.9);
+      }
+      const bounds = new mapboxgl.LngLatBounds();
+      coords.forEach((c) => bounds.extend(c));
+      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 800 });
+      removeChaseHighlight(map);
+      return;
+    }
+
+    // Prefer chase highlight over static selected line while flying
+    if (map.getLayer('selected')) {
+      map.setPaintProperty('selected', 'line-opacity', 0.25);
+    }
+
+    const runId = String(selected.run_id);
+    chaseRef.current.start(
+      {
+        map,
+        coords,
+        color: routeColor(selected),
+        distanceKm: selected.distance / 1000,
+        runId,
+        isDark: dark !== false,
+        overviewLayerId: map.getLayer('routes') ? 'routes' : undefined,
+      },
+      {
+        onStart: () => setChaseRunId(runId),
+        onEnd: () => {
+          setChaseRunId(null);
+          if (map.getLayer('selected')) {
+            map.setPaintProperty('selected', 'line-opacity', 0.9);
+          }
+        },
+      }
+    );
+  };
+
+  useEffect(() => {
+    toggle3dRef.current = handleToggle3d;
+  });
+
+  useEffect(() => {
+    const btn = chaseButtonRef.current;
+    if (!btn) return;
+    updateChaseControlButton(btn, {
+      visible: Boolean(selectedActivity && can3d),
+      chasing,
+      dark,
+      title: chasing
+        ? locale === 'zh'
+          ? '停止巡航'
+          : 'Stop chase'
+        : locale === 'zh'
+          ? '开始巡航'
+          : 'Play chase',
+    });
+  }, [chasing, locale, selectedActivity, can3d, dark]);
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
     const onStyleReady = () => {
+      if (can3d && mapRef.current) {
+        injectMapTerrain(mapRef.current, dark !== false, true);
+      }
       updateRoutesRef.current();
     };
 
@@ -213,17 +325,45 @@ export function RouteMap({
       style,
       center: [121.4, 31.2],
       zoom: 10,
+      pitch: 0,
+      maxPitch: 85,
       attributionControl: !useBlank,
     });
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    // Custom "3D chase" button as a real Mapbox control (no overlay).
+    const chaseControl: mapboxgl.IControl = {
+      onAdd: () => {
+        const root = document.createElement('div');
+        root.className = 'route-map-3d-ctrl mapboxgl-ctrl mapboxgl-ctrl-group';
+
+        const btn = createChaseControlButton();
+        chaseButtonRef.current = btn;
+        btn.onclick = () => toggle3dRef.current();
+        updateChaseControlButton(btn, {
+          visible: Boolean(selectedActivity && can3d),
+          chasing: false,
+          dark,
+          title: locale === 'zh' ? '开始巡航' : 'Play chase',
+        });
+
+        root.appendChild(btn);
+        return root;
+      },
+      onRemove: () => {
+        chaseButtonRef.current = null;
+      },
+    };
+
+    mapRef.current.addControl(chaseControl, 'top-right');
     if (!useBlank) {
+      // Add fullscreen after chase so chase appears above it.
       mapRef.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
     }
 
     mapRef.current.on('style.load', onStyleReady);
 
-    // Mapbox CDN blocked / slow → fall back to blank so routes still render
     let timedOut = false;
     const timer = window.setTimeout(() => {
       if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
@@ -232,8 +372,10 @@ export function RouteMap({
       mapRef.current.setStyle(blankMapStyle(bg));
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
 
+    const chase = chaseRef.current;
     return () => {
       window.clearTimeout(timer);
+      chase.stop({ silent: true });
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -271,10 +413,14 @@ export function RouteMap({
       className={`route-map-hover-ctrls relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] ${className || 'h-[220px] md:h-[380px]'}`}
       style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
     >
-      {selectedActivity && (
+      {selectedActivity && onClearSelection ? (
         <button
           type="button"
-          onClick={onClearSelection}
+          onClick={() => {
+            stopChase();
+            setChaseRunId(null);
+            onClearSelection();
+          }}
           className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
         >
           <svg
@@ -292,7 +438,7 @@ export function RouteMap({
           </svg>
           Overview
         </button>
-      )}
+      ) : null}
       <div ref={mapContainerRef} className="h-full w-full" />
     </div>
   );
