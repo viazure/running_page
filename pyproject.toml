@@ -54,7 +54,12 @@ build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
-packages = ["run_page"]
+
+# Frontend lives under src/; Python package is run_page/ at repo root.
+# Without this, pdm-backend treats src/ as package-dir and editable installs break.
+[tool.pdm.build]
+package-dir = "."
+includes = ["run_page/"]
 
 [dependency-groups]
 dev = [
