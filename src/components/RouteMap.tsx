@@ -297,7 +297,6 @@ export function RouteMap({
     updateChaseControlButton(btn, {
       visible: Boolean(selectedActivity && can3d),
       chasing,
-      dark,
       title: chasing
         ? locale === 'zh'
           ? '停止巡航'
@@ -306,7 +305,7 @@ export function RouteMap({
           ? '开始巡航'
           : 'Play chase',
     });
-  }, [chasing, locale, selectedActivity, can3d, dark]);
+  }, [chasing, locale, selectedActivity, can3d]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -344,7 +343,6 @@ export function RouteMap({
         updateChaseControlButton(btn, {
           visible: Boolean(selectedActivity && can3d),
           chasing: false,
-          dark,
           title: locale === 'zh' ? '开始巡航' : 'Play chase',
         });
 

@@ -362,15 +362,9 @@ export function createChaseControlButton(): HTMLButtonElement {
 
 export function updateChaseControlButton(
   btn: HTMLButtonElement,
-  state: { visible: boolean; chasing: boolean; title: string; dark?: boolean }
+  state: { visible: boolean; chasing: boolean; title: string }
 ): void {
   btn.classList.toggle('is-hidden', !state.visible);
   btn.classList.toggle('is-chasing', state.chasing);
   btn.title = state.title;
-  if (state.chasing) {
-    btn.style.removeProperty('color');
-  } else {
-    btn.style.color =
-      state.dark !== false ? '#f9fafb' : 'var(--color-text, #e5e7eb)';
-  }
 }

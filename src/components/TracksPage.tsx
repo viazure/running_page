@@ -384,7 +384,6 @@ function TrackMap({
     updateChaseControlButton(btn, {
       visible: Boolean(activity && can3d),
       chasing,
-      dark,
       title: chasing
         ? locale === 'zh'
           ? '停止巡航'
@@ -393,7 +392,7 @@ function TrackMap({
           ? '开始巡航'
           : 'Play chase',
     });
-  }, [chasing, locale, activity, can3d, dark]);
+  }, [chasing, locale, activity, can3d]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -427,7 +426,6 @@ function TrackMap({
         updateChaseControlButton(btn, {
           visible: Boolean(activity && can3d),
           chasing: false,
-          dark,
           title: locale === 'zh' ? '开始巡航' : 'Play chase',
         });
 

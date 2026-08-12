@@ -22,6 +22,8 @@
   align-items: center;
   justify-content: center;
   padding: 0;
+  /* Match native Mapbox controls: dark icon on white button background */
+  color: #333;
 }
 
 .route-map-3d-ctrl button.route-map-3d-btn.is-hidden {
