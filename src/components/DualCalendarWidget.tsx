@@ -14,7 +14,10 @@ type ViewMode = 'distance' | 'route';
 
 const ROUTE_SVG_SIZE = 100;
 
-function renderTrackSVG(summaryPolyline: string, size = ROUTE_SVG_SIZE): string {
+function renderTrackSVG(
+  summaryPolyline: string,
+  size = ROUTE_SVG_SIZE
+): string {
   try {
     let coords = polyline.decode(summaryPolyline);
     if (coords.length < 2) return '';
@@ -337,7 +340,7 @@ export function DualCalendarWidget({
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="flex min-w-0 flex-1 items-baseline gap-2 text-lg font-bold whitespace-nowrap text-[var(--color-text)]">
           <span className="tabular-nums">{monthStr}</span>
-          <span className="text-sm font-normal tabular-nums text-[var(--color-muted)]">
+          <span className="text-sm font-normal text-[var(--color-muted)] tabular-nums">
             {formatDistance(monthDistance)} km
           </span>
         </h3>
@@ -433,7 +436,7 @@ export function DualCalendarWidget({
                 }`}
               >
                 {!hasActivity ? (
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium tabular-nums text-[var(--color-muted)]/65">
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-[var(--color-muted)]/65 tabular-nums">
                     {d.day}
                   </span>
                 ) : (
@@ -474,7 +477,7 @@ export function DualCalendarWidget({
                 key={d.day}
                 className="relative flex aspect-square items-center justify-center"
               >
-                <span className="text-xs font-medium tabular-nums text-[var(--color-muted)]/65">
+                <span className="text-xs font-medium text-[var(--color-muted)]/65 tabular-nums">
                   {d.day}
                 </span>
               </div>
