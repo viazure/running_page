@@ -308,7 +308,8 @@ export function RouteMap({
   }, [chasing, locale, selectedActivity, can3d]);
 
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
 
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -320,13 +321,14 @@ export function RouteMap({
     };
 
     mapRef.current = new mapboxgl.Map({
-      container: mapContainerRef.current,
+      container,
       style,
       center: [121.4, 31.2],
       zoom: 10,
       pitch: 0,
       maxPitch: 85,
       attributionControl: !useBlank,
+      keyboard: false,
     });
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -362,6 +364,15 @@ export function RouteMap({
 
     mapRef.current.on('style.load', onStyleReady);
 
+    const resizeMap = () => {
+      mapRef.current?.resize();
+    };
+    const ro = new ResizeObserver(() => {
+      resizeMap();
+      requestAnimationFrame(resizeMap);
+    });
+    ro.observe(container);
+
     let timedOut = false;
     const timer = window.setTimeout(() => {
       if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
@@ -372,6 +383,7 @@ export function RouteMap({
 
     const chase = chaseRef.current;
     return () => {
+      ro.disconnect();
       window.clearTimeout(timer);
       chase.stop({ silent: true });
       mapRef.current?.remove();

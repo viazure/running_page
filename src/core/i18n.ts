@@ -52,6 +52,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     page: '第',
     pageOf: '页 / 共',
     pages: '页',
+    prevPage: '上一页',
+    nextPage: '下一页',
+    keyboardHint: '↑↓ 记录 · ←→ 年份 · Esc 取消',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -104,5 +107,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     page: 'Page',
     pageOf: 'of',
     pages: '',
+    prevPage: 'Previous page',
+    nextPage: 'Next page',
+    keyboardHint: '↑↓ run · ←→ year · Esc to clear',
   },
 };

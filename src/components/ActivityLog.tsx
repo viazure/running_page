@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  type KeyboardEvent,
 } from 'react';
 import type { Activity, SportFilter } from '../types';
 import { formatDuration, formatPace } from '../hooks/useActivities';
@@ -28,6 +29,8 @@ interface ActivityLogProps {
 
 const DEFAULT_PAGE_SIZE = 16;
 const LG_MQ = '(min-width: 1024px)';
+const FOCUS_RING =
+  'outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]';
 
 type DistanceFilter = 'all' | '10' | '20' | '40';
 
@@ -72,6 +75,13 @@ function typeLabel(type: string, t: (k: string) => string): string {
   return type;
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"]')
+  );
+}
+
 function formatRowDate(iso: string): {
   full: string;
   ymd: string;
@@ -108,6 +118,8 @@ export function ActivityLog({
   const pageSize = resolvePageSize(pageSizeConfig, isDesktop);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
   const prevSelectedIdRef = useRef<Activity['run_id'] | null>(null);
+  const pendingYearSelectRef = useRef(false);
+  const logRef = useRef<HTMLDivElement>(null);
   const isPro = variant === 'pro';
 
   const sorted = useMemo(() => {
@@ -133,6 +145,11 @@ export function ActivityLog({
 
   // Keep selection in view; don't fight the user when they change distance filter.
   useEffect(() => {
+    if (pendingYearSelectRef.current) {
+      pendingYearSelectRef.current = false;
+      onSelectActivity?.(sorted[0] ?? null);
+      return;
+    }
     if (!selectedActivity) {
       prevSelectedIdRef.current = null;
       return;
@@ -155,6 +172,8 @@ export function ActivityLog({
     }
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
+  const yearOptions: Array<number | null> = [null, ...years];
+
   const totalPages = Math.ceil(sorted.length / pageSize) || 1;
   const safePage = Math.min(page, Math.max(0, totalPages - 1));
   const pageData = sorted.slice(safePage * pageSize, (safePage + 1) * pageSize);
@@ -165,15 +184,59 @@ export function ActivityLog({
   }, [sorted]);
 
   const toggleSelect = (a: Activity) => {
-    onSelectActivity?.(selectedActivity?.run_id === a.run_id ? null : a);
+    const next = selectedActivity?.run_id === a.run_id ? null : a;
+    onSelectActivity?.(next);
+    if (next) logRef.current?.focus({ preventScroll: true });
+    else logRef.current?.blur();
+  };
+
+  const handleLogKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!selectedActivity) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+    if (isTypingTarget(e.target)) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onSelectActivity?.(null);
+      logRef.current?.blur();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      const idx = sorted.findIndex((a) => a.run_id === selectedActivity.run_id);
+      const next = sorted[idx + 1];
+      if (next) onSelectActivity?.(next);
+      return;
+    }
+
+    if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      const idx = sorted.findIndex((a) => a.run_id === selectedActivity.run_id);
+      if (idx > 0) onSelectActivity?.(sorted[idx - 1]);
+      return;
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const yi = yearOptions.findIndex((y) => y === year);
+      const nextYi = e.key === 'ArrowLeft' ? yi - 1 : yi + 1;
+      if (nextYi < 0 || nextYi >= yearOptions.length) return;
+      pendingYearSelectRef.current = true;
+      setYear(yearOptions[nextYi]);
+      setPage(0);
+    }
   };
 
   return (
     <div
+      ref={logRef}
+      tabIndex={-1}
+      onKeyDown={handleLogKeyDown}
       className={
         isPro
-          ? 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:p-6'
-          : 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6'
+          ? 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 outline-none md:p-6'
+          : 'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 outline-none'
       }
     >
       {/* Header */}
@@ -185,11 +248,18 @@ export function ActivityLog({
         }
       >
         <h2 className="text-lg font-bold">{t('activityLog')}</h2>
-        <span className="text-sm text-[var(--color-muted)]">
-          {t('showing')} {safePage * pageSize + 1}-
-          {Math.min((safePage + 1) * pageSize, sorted.length)} {t('of')}{' '}
-          {sorted.length}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {selectedActivity ? (
+            <span className="hidden text-xs text-[var(--color-muted)] lg:inline">
+              {t('keyboardHint')}
+            </span>
+          ) : null}
+          <span className="text-sm text-[var(--color-muted)]">
+            {t('showing')} {safePage * pageSize + 1}-
+            {Math.min((safePage + 1) * pageSize, sorted.length)} {t('of')}{' '}
+            {sorted.length}
+          </span>
+        </div>
       </div>
 
       {/* Year tabs */}
@@ -201,22 +271,24 @@ export function ActivityLog({
         }
       >
         <button
+          type="button"
           onClick={() => {
             setYear(null);
             setPage(0);
           }}
-          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
         >
           All
         </button>
         {years.map((y) => (
           <button
+            type="button"
             key={y}
             onClick={() => {
               setYear(y);
               setPage(0);
             }}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
           >
             {y}
           </button>
@@ -298,6 +370,7 @@ export function ActivityLog({
                         ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
                         : 'hover:bg-[var(--color-bg)]'
                     }`}
+                    aria-selected={selectedActivity?.run_id === a.run_id}
                   >
                     <td className="w-[5.75rem] py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:w-[10.5rem] md:pr-6 md:pl-5 md:whitespace-nowrap">
                       <span className="flex flex-col leading-tight md:hidden">
@@ -374,6 +447,7 @@ export function ActivityLog({
                       ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
                       : 'hover:bg-[var(--color-bg)]'
                   }`}
+                  aria-selected={selectedActivity?.run_id === a.run_id}
                 >
                   <td className="py-3 text-[var(--color-muted)]">
                     {a.start_date_local.slice(0, 16).replace('T', ' ')}
@@ -413,9 +487,11 @@ export function ActivityLog({
       {/* Pagination */}
       <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-4">
         <button
+          type="button"
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={safePage === 0}
-          className="text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+          aria-label={t('prevPage')}
+          className={`text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30 ${FOCUS_RING}`}
         >
           ←
         </button>
@@ -423,9 +499,11 @@ export function ActivityLog({
           {t('page')} {safePage + 1} {t('pageOf')} {totalPages} {t('pages')}
         </span>
         <button
+          type="button"
           onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
           disabled={safePage >= totalPages - 1}
-          className="text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+          aria-label={t('nextPage')}
+          className={`text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30 ${FOCUS_RING}`}
         >
           →
         </button>

@@ -89,7 +89,7 @@ Classic 主题保留了原始的多页面布局，每个视图有独立路由。
 | 配置项 | 含义 |
 |--------|------|
 | `privacy_mode` | 关灯底图；配合匿名标题与解锁 |
-| `privacy_unlock` | 是否允许临时解除隐私（Logo 连点 / Konami） |
+| `privacy_unlock` | 是否允许临时解除隐私 |
 | `privacy_anonymous_titles` | 锁定时用时段匿名标题替代活动名 |
 
 这与同步脚本里的 polyline `IGNORE_*` 环境变量隐私保护是不同层面（数据入库 vs UI 展示）。
