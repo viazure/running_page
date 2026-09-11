@@ -441,9 +441,10 @@ if __name__ == "__main__":
         gpx_folder = FOLDER_DICT["gpx"]
         if not os.path.exists(gpx_folder):
             os.mkdir(gpx_folder)
-        downloaded_gpx_ids = get_downloaded_ids(gpx_folder)
-        # merge downloaded_ids:list
-        downloaded_ids = list(set(downloaded_ids + downloaded_gpx_ids))
+        # Do not treat existing GPX as already downloaded.
+        # Garmin CN GPX often has distance/HR in extensions but no track
+        # points; merging those IDs would skip FIT and leave fake indoor
+        # routes (upstream #1111 / #1134).
 
     loop = asyncio.get_event_loop()
     future = asyncio.ensure_future(
@@ -458,15 +459,8 @@ if __name__ == "__main__":
     )
     loop.run_until_complete(future)
     new_ids, id2title = future.result()
-    # fit may contain gpx(maybe upload by user)
-    if file_type == "fit":
-        make_activities_file(
-            SQL_FILE,
-            FOLDER_DICT["gpx"],
-            JSON_FILE,
-            file_suffix="gpx",
-            activity_title_dict=id2title,
-        )
+    # Import FIT only. Re-reading Garmin CN GPX first would wipe GPS: those
+    # files often have distance/HR extensions but no track points.
     make_activities_file(
         SQL_FILE, folder, JSON_FILE, file_suffix=file_type, activity_title_dict=id2title
     )

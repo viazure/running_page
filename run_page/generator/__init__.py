@@ -16,6 +16,14 @@ from .db import Activity, init_db, update_or_create_activity
 
 IGNORE_BEFORE_SAVING = os.getenv("IGNORE_BEFORE_SAVING", False)
 
+# Upstream #1111 reuses the last outdoor route when an activity has
+# distance but no GPS. Garmin CN GPX often lacks track points for real
+# outdoor runs, so this is off by default. Set to 1/true to restore the
+# treadmill visualization behavior. See issue #1134.
+REUSE_ROUTE_FOR_MISSING_GPS = os.getenv(
+    "REUSE_ROUTE_FOR_MISSING_GPS", ""
+).lower() in ("1", "true", "yes")
+
 
 # Bounding box spread threshold (degrees) for indoor activity detection.
 # 0.002° ≈ 220m — treadmill GPS drift typically stays within this range.
@@ -288,6 +296,7 @@ class Generator:
         1. Subtype match: known indoor subtypes from data sources
            (Garmin FIT "treadmill", Strava/Keep "VirtualRun", etc.)
         2. No GPS data: activity has distance but empty polyline
+           (opt-in via REUSE_ROUTE_FOR_MISSING_GPS; off by default)
         3. Tiny GPS spread: bounding box < ~10 m (noisy indoor GPS)
         For each indoor activity we:
         1. Take the most recent preceding outdoor route as reference.
@@ -323,8 +332,15 @@ class Generator:
                 except Exception:
                     coords = None
 
-            # Strategy 2: no GPS data but has distance → indoor
-            if not is_indoor and coords is None and a.get("distance", 0) > 100:
+            # Strategy 2: no GPS but has distance → indoor (opt-in).
+            # Default off: missing GPS on outdoor exports must not clone
+            # the previous outdoor route.
+            if (
+                REUSE_ROUTE_FOR_MISSING_GPS
+                and not is_indoor
+                and coords is None
+                and a.get("distance", 0) > 100
+            ):
                 is_indoor = True
 
             # Strategy 3: tiny GPS spread → noisy indoor GPS
