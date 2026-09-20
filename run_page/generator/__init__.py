@@ -20,9 +20,8 @@ IGNORE_BEFORE_SAVING = os.getenv("IGNORE_BEFORE_SAVING", False)
 # distance but no GPS. Garmin CN GPX often lacks track points for real
 # outdoor runs, so this is off by default. Set to 1/true to restore the
 # treadmill visualization behavior. See issue #1134.
-REUSE_ROUTE_FOR_MISSING_GPS = os.getenv(
-    "REUSE_ROUTE_FOR_MISSING_GPS", ""
-).lower() in ("1", "true", "yes")
+reuse_route_env = os.getenv("REUSE_ROUTE_FOR_MISSING_GPS", "")
+REUSE_ROUTE_FOR_MISSING_GPS = reuse_route_env.lower() in ("1", "true", "yes")
 
 
 # Bounding box spread threshold (degrees) for indoor activity detection.
