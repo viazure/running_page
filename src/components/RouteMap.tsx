@@ -16,7 +16,6 @@ import {
   CHASE_LAYER_IDS,
   createChaseControlButton,
   createMapChaseController,
-  injectMapTerrain,
   removeChaseHighlight,
   updateChaseControlButton,
 } from '../utils/mapChase3d';
@@ -78,6 +77,7 @@ export function RouteMap({
   const chasing = chaseRunId != null && chaseRunId === selectedId;
   const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
   const toggle3dRef = useRef<() => void>(() => {});
+  const styleIdleRef = useRef(false);
   const useBlank = lightsOff || !MAPBOX_TOKEN;
   const can3d = !useBlank;
   const bg = dark !== false ? '#0d1117' : '#f6f8fa';
@@ -97,7 +97,7 @@ export function RouteMap({
 
   const updateRoutesRef = useRef(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     stopChase();
     if (map.getLayer('routes')) map.removeLayer('routes');
@@ -313,10 +313,22 @@ export function RouteMap({
 
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
-    const onStyleReady = () => {
-      if (can3d && mapRef.current) {
-        injectMapTerrain(mapRef.current, dark !== false, true);
+    styleIdleRef.current = false;
+
+    const hasRouteLayers = (map: mapboxgl.Map) => {
+      try {
+        return Boolean(map.getLayer('routes') || map.getLayer('selected'));
+      } catch {
+        return false;
       }
+    };
+
+    const ensureRoutes = () => {
+      const map = mapRef.current;
+      if (!map?.isStyleLoaded()) return;
+      styleIdleRef.current = true;
+      if (chaseRef.current.isAnimating()) return;
+      if (hasRouteLayers(map)) return;
       updateRoutesRef.current();
     };
 
@@ -330,6 +342,22 @@ export function RouteMap({
       attributionControl: !useBlank,
       keyboard: false,
     });
+
+    let timedOut = false;
+    const timer = window.setTimeout(() => {
+      if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
+      timedOut = true;
+      console.warn('Map style load timed out; falling back to blank basemap');
+      mapRef.current.setStyle(blankMapStyle(bg));
+    }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
+    mapRef.current.on('style.load', () => {
+      styleIdleRef.current = false;
+      if (!timedOut) window.clearTimeout(timer);
+      ensureRoutes();
+    });
+    mapRef.current.on('idle', ensureRoutes);
+    if (mapRef.current.isStyleLoaded()) ensureRoutes();
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
@@ -362,8 +390,6 @@ export function RouteMap({
       mapRef.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
     }
 
-    mapRef.current.on('style.load', onStyleReady);
-
     const resizeMap = () => {
       mapRef.current?.resize();
     };
@@ -373,19 +399,12 @@ export function RouteMap({
     });
     ro.observe(container);
 
-    let timedOut = false;
-    const timer = window.setTimeout(() => {
-      if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
-      timedOut = true;
-      console.warn('Map style load timed out; falling back to blank basemap');
-      mapRef.current.setStyle(blankMapStyle(bg));
-    }, MAP_STYLE_LOAD_TIMEOUT_MS);
-
     const chase = chaseRef.current;
     return () => {
       ro.disconnect();
       window.clearTimeout(timer);
       chase.stop({ silent: true });
+      styleIdleRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -393,11 +412,8 @@ export function RouteMap({
   }, [dark, useBlank]);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (mapRef.current.isStyleLoaded()) {
+    if (styleIdleRef.current) {
       updateRoutesRef.current();
-    } else {
-      mapRef.current.once('style.load', () => updateRoutesRef.current());
     }
   }, [activities, selectedActivity]);
 
