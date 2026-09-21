@@ -8,7 +8,6 @@
 import locale
 import math
 from datetime import datetime
-from typing import List, Optional, Tuple
 
 import colour
 import pytz
@@ -43,8 +42,8 @@ def lat2y(lat_deg: float) -> float:
 
 
 def project(
-    bbox: s2.LatLngRect, size: XY, offset: XY, latlnglines: List[List[s2.LatLng]]
-) -> List[List[Tuple[float, float]]]:
+    bbox: s2.LatLngRect, size: XY, offset: XY, latlnglines: list[list[s2.LatLng]]
+) -> list[list[tuple[float, float]]]:
     min_x = lng2x(bbox.lng_lo().degrees)
     d_x = lng2x(bbox.lng_hi().degrees) - min_x
     while d_x >= 2:
@@ -80,7 +79,7 @@ def project(
 
 def compute_grid(
     count: int, dimensions: XY
-) -> Tuple[Optional[float], Optional[Tuple[int, int]]]:
+) -> tuple[float | None, tuple[int, int] | None]:
     # this is somehow suboptimal O(count^2). I guess it's possible in O(count)
     min_waste = -1.0
     best_size = None
@@ -128,7 +127,7 @@ def _resolve_timezone_name(point) -> str:
     if _tzfpy_get_tz is not None:
         try:
             return _tzfpy_get_tz(lng=lng, lat=lat) or "Asia/Shanghai"
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # just a little trick when tzfpy support windows will delete this
             print(f"tzfpy error: {e} fallback to timezonefinder")
     if tf is not None:
