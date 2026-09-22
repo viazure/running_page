@@ -91,7 +91,8 @@ function DashboardProContent({
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
 
   const filtered = useFilteredActivities(activities, filter, year);
-  const heatmapYear = year ?? years[0] ?? FOOTER_YEAR;
+  /** Fallback year for components that require a concrete calendar year (e.g. TrendChart). */
+  const chartYear = year ?? years[0] ?? FOOTER_YEAR;
   const privacyActive = PRIVACY_MODE && !isUnlocked;
   const useAnonymousTitles = privacyActive && PRIVACY_ANONYMOUS_TITLES;
   const activityTitle = (a: Activity) =>
@@ -153,9 +154,10 @@ function DashboardProContent({
           <div className="order-9 min-w-0 overflow-hidden lg:order-none">
             <ContributionHeatmap
               activities={activities}
-              year={heatmapYear}
+              year={year}
               filter={filter}
               onSelectActivity={setSelectedActivity}
+              onYearChange={setYear}
             />
           </div>
         </div>
@@ -173,10 +175,20 @@ function DashboardProContent({
               showLocationStats
             />
           </div>
-          <div className="order-6 min-w-0 overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
+          <div
+            className={`order-6 min-w-0 overflow-hidden lg:order-none ${
+              year == null ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+            }`}
+          >
             <Suspense
               fallback={
-                <MapFallback className="h-[200px] lg:h-full lg:min-h-[180px]" />
+                <MapFallback
+                  className={
+                    year == null
+                      ? 'h-[220px] lg:h-[260px]'
+                      : 'h-[200px] lg:h-full lg:min-h-[180px]'
+                  }
+                />
               }
             >
               <ChinaMap
@@ -187,7 +199,11 @@ function DashboardProContent({
                   setSelectedProvince(p);
                   setSelectedActivity(null);
                 }}
-                className="h-[200px] lg:h-full"
+                className={
+                  year == null
+                    ? 'h-[220px] lg:h-[260px]'
+                    : 'h-[200px] lg:h-full'
+                }
               />
             </Suspense>
           </div>
@@ -236,7 +252,7 @@ function DashboardProContent({
           <div className="order-7 min-w-0 lg:order-none lg:min-h-0 lg:flex-1">
             <TrendChart
               activities={filtered}
-              year={heatmapYear}
+              year={chartYear}
               className="h-[260px] lg:h-full lg:min-h-[220px]"
             />
           </div>

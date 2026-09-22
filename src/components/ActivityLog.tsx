@@ -106,7 +106,7 @@ export function ActivityLog({
   pageSize: pageSizeConfig,
   variant = 'default',
 }: ActivityLogProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [page, setPage] = useState(0);
   const needsResponsive =
     pageSizeConfig != null && typeof pageSizeConfig === 'object';
@@ -278,7 +278,7 @@ export function ActivityLog({
           }}
           className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
         >
-          All
+          {locale === 'zh' ? '全部' : 'All'}
         </button>
         {years.map((y) => (
           <button

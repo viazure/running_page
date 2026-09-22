@@ -37,7 +37,6 @@ function Dashboard() {
 
   const years = getAvailableYears(activities);
   const filtered = useFilteredActivities(activities, filter, year);
-  const heatmapYear = year ?? years[0] ?? FOOTER_YEAR;
 
   // Activities filtered to the selected province (for RouteMap)
   const provinceFiltered = useMemo(() => {
@@ -81,9 +80,10 @@ function Dashboard() {
               />
               <ContributionHeatmap
                 activities={activities}
-                year={heatmapYear}
+                year={year}
                 filter={filter}
                 onSelectActivity={setSelectedActivity}
+                onYearChange={setYear}
               />
               <ActivityLog
                 activities={filtered}

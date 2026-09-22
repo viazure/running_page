@@ -148,7 +148,7 @@ export function ChinaMap({
       </div>
 
       {/* Mobile: keep aspect; desktop: fill remaining height to align with heatmap */}
-      <div className="relative aspect-[240/174] min-h-[120px] min-w-0 flex-1 touch-manipulation lg:aspect-auto">
+      <div className="relative flex aspect-[240/174] min-h-[120px] min-w-0 flex-1 touch-manipulation items-center justify-center lg:aspect-auto">
         <svg
           key={filter}
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}

@@ -11,9 +11,12 @@ import { useLocale } from '../hooks/useLocale';
 
 interface HeatmapProps {
   activities: Activity[];
-  year: number;
+  /** Selected year, or null for "all years". */
+  year: number | null;
   filter: SportFilter;
   onSelectActivity?: (a: Activity | null) => void;
+  /** Year tab clicks update the parent filter. `null` = 全部. */
+  onYearChange?: (year: number | null) => void;
 }
 
 // Map any activity type to the 4 display categories
@@ -77,19 +80,26 @@ function dominantDisplayType(
   return toDisplayType(sorted[0].type);
 }
 
+function toSelectedYear(year: number | null): number | 'all' {
+  return year === null ? 'all' : year;
+}
+
 export function ContributionHeatmap({
   activities,
   year: defaultYear,
   filter,
   onSelectActivity,
+  onYearChange,
 }: HeatmapProps) {
   const { t, locale } = useLocale();
   const allYears = getAvailableYears(activities);
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>(defaultYear);
-  // Keep internal selection in sync when the parent's `year` prop changes
-  // (e.g. picking a year in StatsCards / ActivityLog). M4 fix.
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(() =>
+    toSelectedYear(defaultYear)
+  );
+  // Fully sync from parent year (ActivityLog / Stats). Single source of truth:
+  // null = 全部 (multi-year), number = that calendar year.
   useEffect(() => {
-    setSelectedYear(defaultYear);
+    setSelectedYear(toSelectedYear(defaultYear));
   }, [defaultYear]);
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -277,6 +287,7 @@ export function ContributionHeatmap({
 
   const handleSelectYear = (yr: number | 'all') => {
     setSelectedYear(yr);
+    onYearChange?.(yr === 'all' ? null : yr);
   };
 
   const handleExport = async () => {
