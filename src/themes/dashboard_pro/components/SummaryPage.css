@@ -16,13 +16,13 @@
     var(--color-bg) 70%,
     var(--color-card)
   );
-  --color-summary-radius: 12px;
+  --color-summary-radius: var(--radius-xl);
   --color-summary-chip-radius: 9999px;
-  --color-summary-card-shadow: none;
+  --color-summary-card-shadow: var(--shadow-card);
   --color-summary-card-hover-border: var(--color-border);
   --color-summary-card-hover-bg: var(--color-card);
   --color-summary-card-lift: 5px;
-  --color-summary-chip-bg: var(--color-border);
+  --color-summary-chip-bg: var(--color-sunken);
   --color-summary-chip-fg: var(--color-muted);
   --color-summary-title-size: 1.125rem;
   --color-summary-home-bg: color-mix(

@@ -336,7 +336,7 @@ export function DualCalendarWidget({
   const monthStr = `${String(viewMonth + 1).padStart(2, '0')}/${viewYear}`;
 
   return (
-    <div className="flex w-full min-w-0 flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 md:p-6">
+    <div className="card flex w-full min-w-0 flex-col p-5 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="flex min-w-0 flex-1 items-baseline gap-2 text-lg font-bold whitespace-nowrap text-[var(--color-text)]">
           <span className="tabular-nums">{monthStr}</span>
@@ -346,12 +346,12 @@ export function DualCalendarWidget({
         </h3>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <div className="flex gap-1 rounded-lg bg-[var(--color-border)]/50 p-1">
+          <div className="flex gap-1 rounded-lg bg-[var(--color-sunken)] p-1">
             <button
               type="button"
               onClick={prevMonth}
               aria-label="Previous month"
-              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-border)] hover:text-[var(--color-text)]"
+              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
             >
               <ChevronLeft />
             </button>
@@ -359,14 +359,14 @@ export function DualCalendarWidget({
               type="button"
               onClick={nextMonth}
               aria-label="Next month"
-              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-border)] hover:text-[var(--color-text)]"
+              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
             >
               <ChevronRight />
             </button>
           </div>
 
           <div
-            className="flex rounded-lg bg-[var(--color-border)]/50 p-1"
+            className="flex rounded-lg bg-[var(--color-sunken)] p-1"
             role="group"
             aria-label={t('viewMode')}
           >

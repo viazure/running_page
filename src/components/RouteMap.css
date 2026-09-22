@@ -1,72 +1,88 @@
-/* Mapbox zoom / compass / fullscreen: hidden until pointer is over the map.
-   Fullscreen puts the map in a top layer, so parent :hover stops working —
-   always show controls while any descendant is :fullscreen. */
-@media (hover: hover) and (pointer: fine) {
-  .route-map-hover-ctrls .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls .route-map-3d-ctrl {
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .route-map-hover-ctrls:hover .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls:hover .route-map-3d-ctrl,
-  .route-map-hover-ctrls:has(:fullscreen) .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls:has(:fullscreen) .route-map-3d-ctrl {
-    opacity: 1;
-  }
-}
-
-/* 3D chase toggle — match native Mapbox control sizing and center the SVG icon */
-.route-map-3d-ctrl button.route-map-3d-btn {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  /* Match native Mapbox controls: dark icon on white button background */
-  color: #333;
-}
-
-.route-map-3d-ctrl button.route-map-3d-btn.is-hidden {
-  display: none !important;
-}
-
-.route-map-3d-ctrl button.route-map-3d-btn .mapboxgl-ctrl-icon {
+.route-map {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  background: none;
-}
-
-.route-map-3d-ctrl button.route-map-3d-btn.is-chasing {
-  background-color: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #ffffff;
-}
-
-/* Icon-only recenter — sits beside Overview after user pans/zooms */
-.route-map-recenter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--color-card);
   color: var(--color-text);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
-  cursor: pointer;
-  transition: background-color 0.15s ease;
 }
-
-.route-map-recenter:hover {
+.route-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+}
+.route-map-body {
+  position: relative;
+  height: 320px;
+  min-height: 240px;
+}
+.route-map:fullscreen {
+  border: 0;
+  border-radius: 0;
+}
+.route-map:fullscreen .route-map-body {
+  flex: 1;
+  height: auto;
+}
+.route-map-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.route-map-action {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.route-map-action:hover:not(:disabled) {
   background: var(--color-bg);
 }
-
-.route-map-recenter:focus-visible {
+.route-map-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.route-map button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+.route-map .mapboxgl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: 0 2px 8px #0002;
+}
+.route-map .mapboxgl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+}
+.route-map .mapboxgl-ctrl-group button + button {
+  border-color: var(--color-border);
+}
+.route-map .mapboxgl-ctrl-group button:hover {
+  background: var(--color-bg);
+}
+.dark .route-map .mapboxgl-ctrl-icon {
+  filter: invert(1);
+}
+.route-map-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-card) 75%, transparent);
+  font-size: 13px;
 }

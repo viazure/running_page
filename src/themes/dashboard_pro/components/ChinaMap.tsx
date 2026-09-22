@@ -1,13 +1,14 @@
-import { memo, useEffect, useMemo, useState } from 'react';
-import type { Activity, SportFilter } from '../types';
-import { useLocale } from '../hooks/useLocale';
-import { extractProvince } from '../hooks/useActivities';
+import { useEffect, useMemo, useState } from 'react';
+import type { Activity, SportFilter } from '@/types';
+import { useLocale } from '@/hooks/useLocale';
+import { extractProvince } from '@/hooks/useActivities';
 
 interface ChinaMapProps {
   activities: Activity[];
   filter: SportFilter;
   onSelectProvince?: (province: string | null) => void;
   selectedProvince?: string | null;
+  className?: string;
 }
 
 type GeoFeature = {
@@ -19,8 +20,9 @@ type GeoFeature = {
   };
 };
 
-// Simple equirectangular projection bounded to China
-const BOUNDS = { minLng: 73, maxLng: 136, minLat: 15, maxLat: 54 };
+// Simple equirectangular projection bounded to China (tight for larger visual scale)
+const BOUNDS = { minLng: 73.5, maxLng: 135.5, minLat: 17.8, maxLat: 53.8 };
+const MAP_SCALE = 1.18;
 
 function project(
   lng: number,
@@ -57,34 +59,26 @@ function featureToPath(feature: GeoFeature, w: number, h: number): string {
     .join(' ');
 }
 
-export const ChinaMap = memo(function ChinaMap({
+export function ChinaMap({
   activities,
   filter,
   onSelectProvince,
   selectedProvince,
+  className = '',
 }: ChinaMapProps) {
   const { locale } = useLocale();
   const [hoveredProvince, setHoveredProvince] = useState<string | null>(null);
   const [features, setFeatures] = useState<GeoFeature[]>([]);
 
-  const SVG_W = 260;
-  const SVG_H = 190;
+  const SVG_W = 240;
+  const SVG_H = 174;
 
   // Lazy-load GeoJSON to keep initial bundle small
   useEffect(() => {
-    import('../assets/china-provinces.json').then((mod) => {
+    import('@/assets/china-provinces.json').then((mod) => {
       setFeatures((mod.default as { features: GeoFeature[] }).features);
     });
   }, []);
-
-  const paths = useMemo(
-    () =>
-      features.map((feature) => ({
-        ...feature.properties,
-        path: featureToPath(feature, SVG_W, SVG_H),
-      })),
-    [features]
-  );
 
   // Build province → activity count map
   const provinceCount = useMemo(() => {
@@ -110,14 +104,10 @@ export const ChinaMap = memo(function ChinaMap({
   }
 
   return (
-    <div
-      role="region"
-      aria-label={locale === 'zh' ? '足迹地图' : 'Footprint map'}
-      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5"
-    >
+    <div className={`card flex flex-col p-3.5 ${className || 'h-full'}`}>
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-balance">
           {locale === 'zh' ? '足迹地图' : 'Footprint Map'}
         </h2>
         <div className="flex items-center gap-2 text-xs text-[var(--color-muted)]">
@@ -143,7 +133,7 @@ export const ChinaMap = memo(function ChinaMap({
             </button>
           ) : (
             <>
-              <span className="font-mono font-bold text-[var(--color-accent)]">
+              <span className="metric font-semibold text-[var(--color-accent)]">
                 {visitedCount}
               </span>
               <span>
@@ -155,79 +145,65 @@ export const ChinaMap = memo(function ChinaMap({
         </div>
       </div>
 
-      {/* SVG Map — aspect-ratio wrapper prevents stretching */}
-      <div className="relative" style={{ aspectRatio: `${SVG_W} / ${SVG_H}` }}>
+      {/* Mobile: keep aspect; desktop: fill remaining height to align with heatmap */}
+      <div className="relative flex aspect-[240/174] min-h-[120px] min-w-0 flex-1 touch-manipulation items-center justify-center lg:aspect-auto">
         <svg
           key={filter}
-          role="group"
-          aria-label={
-            locale === 'zh' ? '按省份筛选路线' : 'Filter routes by province'
-          }
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           preserveAspectRatio="xMidYMid meet"
           width="100%"
           height="100%"
-          style={{ display: 'block', position: 'absolute', inset: 0 }}
+          className="absolute inset-0 block size-full"
         >
-          {paths.map((feature) => {
-            const name = feature.name;
-            const count = provinceCount.get(name) ?? 0;
-            const visited = count > 0;
-            const isHovered = hoveredProvince === name;
-            const isSelected = selectedProvince === name;
+          <g
+            transform={`translate(${SVG_W / 2} ${SVG_H / 2}) scale(${MAP_SCALE}) translate(${-SVG_W / 2} ${-SVG_H / 2})`}
+          >
+            {features.map((feature) => {
+              const name = feature.properties.name;
+              const count = provinceCount.get(name) ?? 0;
+              const visited = count > 0;
+              const isHovered = hoveredProvince === name;
+              const isSelected = selectedProvince === name;
 
-            let fill: string;
-            if (visited) {
-              if (isSelected) {
-                fill = 'var(--color-accent)';
-              } else if (isHovered) {
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 80%, transparent)';
-              } else if (selectedProvince) {
-                // dim other provinces when one is selected
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 25%, transparent)';
-              } else {
-                fill =
-                  'color-mix(in srgb, var(--color-accent) 55%, transparent)';
-              }
-            } else {
-              fill = 'var(--color-border)';
-            }
-
-            return (
-              <path
-                key={feature.adcode}
-                d={feature.path}
-                fill={fill}
-                stroke="var(--color-bg)"
-                strokeWidth="0.5"
-                className={`transition-all duration-150 ${visited ? 'cursor-pointer focus:outline-2 focus:outline-[var(--color-accent)]' : 'cursor-default'}`}
-                onMouseEnter={() => setHoveredProvince(name)}
-                onMouseLeave={() => setHoveredProvince(null)}
-                role={visited && onSelectProvince ? 'button' : undefined}
-                tabIndex={visited && onSelectProvince ? 0 : undefined}
-                aria-label={`${name} · ${count} ${locale === 'zh' ? '次活动' : 'activities'}`}
-                aria-pressed={
-                  visited && onSelectProvince ? isSelected : undefined
+              let fill: string;
+              if (visited) {
+                if (isSelected) {
+                  fill = 'var(--color-accent)';
+                } else if (isHovered) {
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 80%, transparent)';
+                } else if (selectedProvince) {
+                  // dim other provinces when one is selected
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 25%, transparent)';
+                } else {
+                  fill =
+                    'color-mix(in srgb, var(--color-accent) 55%, transparent)';
                 }
-                onFocus={() => setHoveredProvince(name)}
-                onBlur={() => setHoveredProvince(null)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    handleClick(name);
-                  }
-                }}
-                onClick={() => handleClick(name)}
-              />
-            );
-          })}
+              } else {
+                fill = 'var(--color-border)';
+              }
+
+              return (
+                <path
+                  key={feature.properties.adcode}
+                  d={featureToPath(feature, SVG_W, SVG_H)}
+                  fill={fill}
+                  stroke="var(--color-bg)"
+                  strokeWidth="0.75"
+                  className={`transition-all duration-150 ${visited ? 'cursor-pointer' : 'cursor-default'}`}
+                  onMouseEnter={() => setHoveredProvince(name)}
+                  onMouseLeave={() => setHoveredProvince(null)}
+                  onClick={() => handleClick(name)}
+                />
+              );
+            })}
+          </g>
         </svg>
       </div>
 
       {/* Tooltip */}
-      <div className="mt-1.5 h-4 text-xs text-[var(--color-muted)]">
+      <div className="mt-1.5 h-4 shrink-0 text-xs text-[var(--color-muted)]">
         {displayProvince && (
           <>
             <span className="font-medium text-[var(--color-text)]">
@@ -248,4 +224,4 @@ export const ChinaMap = memo(function ChinaMap({
       </div>
     </div>
   );
-});
+}

@@ -1,0 +1,154 @@
+/*
+ * dashboard_pro design layer — fully self-contained.
+ *
+ * This file deliberately does NOT import ../dashboard/index.css: the dashboard
+ * theme tracks upstream, and everything below is local to this theme so an
+ * upstream merge never conflicts with it.
+ */
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-bg: #f4f5f7;
+  --color-card: #ffffff;
+  /* Nested blocks inside a card (progress troughs, pills, zebra rows) — needs
+     more contrast than --color-border now that borders are intentionally light. */
+  --color-sunken: #e9ebf0;
+  --color-border: #e4e7ec;
+  --color-text: #1a1d23;
+  --color-muted: #6b7280;
+  --color-run: #e8663d;
+  --color-all: #7b61d9;
+  --color-accent: #7b61d9;
+
+  /* Softer than Strava but tighter than Tailwind's stock scale. Overriding the
+     scale itself keeps every existing `rounded-*` call site in sync. */
+  --radius-xs: 0.1875rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+
+  --shadow-card:
+    0 1px 2px -1px rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.05);
+  --shadow-card-hover:
+    0 2px 4px -2px rgb(16 24 40 / 0.08), 0 8px 20px -6px rgb(16 24 40 / 0.12);
+
+  /* Latin UI prefers Segoe UI Variable (Win11) / SF Pro (macOS); CJK falls
+     through the modern Chinese faces before landing on Microsoft YaHei. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI Variable Text',
+    'Segoe UI', Roboto, 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
+    'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', sans-serif;
+}
+
+.dark {
+  --color-bg: #0b0d10;
+  --color-card: #14171c;
+  --color-sunken: #1b1f26;
+  --color-border: #23272e;
+  --color-text: #e6e8ec;
+  --color-muted: #8b919c;
+  --color-run: #fb8a5c;
+  --color-all: #a78bfa;
+
+  /* Drop shadows are invisible on dark surfaces — lift cards with a top
+     highlight instead, and keep a real shadow only for the hover state. */
+  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  --shadow-card-hover:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.06), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+}
+
+[data-filter='all'] {
+  --color-accent: #7b61d9;
+}
+[data-filter='Run'] {
+  --color-accent: #e8663d;
+}
+[data-filter='Ride'] {
+  --color-accent: #4f7ce0;
+}
+
+.dark [data-filter='all'] {
+  --color-accent: #a78bfa;
+}
+.dark [data-filter='Run'] {
+  --color-accent: #fb8a5c;
+}
+.dark [data-filter='Ride'] {
+  --color-accent: #7aa5f5;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
+}
+
+/* Radius and elevation go through variables so a call site can adjust them
+   with `[--card-radius:…]` / `[--card-shadow:…]` instead of fighting `card`
+   with a `rounded-*` / `shadow-*` utility of equal precedence. */
+@utility card {
+  border-radius: var(--card-radius, var(--radius-xl));
+  border: 1px solid var(--color-border);
+  background-color: var(--color-card);
+  box-shadow: var(--card-shadow, var(--shadow-card));
+}
+
+@utility card-interactive {
+  transition-property: border-color, box-shadow, transform;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: color-mix(
+      in srgb,
+      var(--color-accent) 30%,
+      var(--color-border)
+    );
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+}
+
+/* Metric numbers: system sans with table figures instead of a code font.
+   Weight stays with the call site so `font-semibold` remains explicit. */
+@utility metric {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+  letter-spacing: -0.02em;
+}
+
+/* Small caps-style section labels. `uppercase` is a no-op on Chinese but the
+   wide tracking is not, so drop both when the document is in Chinese. */
+@utility eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+
+  &:lang(zh) {
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-interactive {
+    transition: none;
+  }
+  .card-interactive:hover {
+    transform: none;
+  }
+}

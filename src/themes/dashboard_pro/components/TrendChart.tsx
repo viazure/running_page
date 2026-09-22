@@ -8,8 +8,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { Activity } from '../types';
-import { useLocale } from '../hooks/useLocale';
+import type { Activity } from '@/types';
+import { useLocale } from '@/hooks/useLocale';
 import './TrendChart.css';
 
 interface TrendChartProps {
@@ -73,9 +73,7 @@ export function TrendChart({
   const unit = 'km';
 
   return (
-    <div
-      className={`flex min-h-0 min-w-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 ${className}`}
-    >
+    <div className={`card flex min-h-0 min-w-0 flex-col p-4 ${className}`}>
       <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-balance">{title}</h3>
         <span className="text-[11px] text-[var(--color-muted)]">{unit}</span>

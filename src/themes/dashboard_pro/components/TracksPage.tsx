@@ -1,0 +1,1186 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { toPng } from 'html-to-image';
+import * as polyline from '@mapbox/polyline';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import type { Activity } from '@/types';
+import {
+  getAvailableYears,
+  formatDistance,
+  parseMovingTime,
+  formatPace,
+} from '@/hooks/useActivities';
+import { useLocale } from '@/hooks/useLocale';
+import { MAPBOX_TOKEN } from '@/config';
+import {
+  blankMapStyle,
+  basemapStyleUrl,
+  initialBasemapProvider,
+  isMapboxAuthError,
+  mapboxControlLocale,
+  mapLabelLanguage,
+  MAP_STYLE_LOAD_TIMEOUT_MS,
+  type BasemapProvider,
+} from '@/core/mapStyle';
+import type { Coordinate } from '@/utils/routeAnimation';
+import {
+  CHASE_LAYER_IDS,
+  clearMapTerrain,
+  createChaseControlButton,
+  createMapChaseController,
+  injectMapTerrain,
+  removeChaseHighlight,
+  setChaseHighlightLine,
+  updateChaseControlButton,
+} from '@/utils/mapChase3d';
+import {
+  fitMapToSelectedRoute,
+  fitTrackMapOverview,
+} from '@/utils/mapRouteFit';
+import './RouteMap.css';
+
+type SportType = 'Run';
+
+interface TracksPageProps {
+  activities: Activity[];
+  /** Reserved for parent sport filter; Tracks manages its own sport tabs. */
+  filter?: string;
+  onBack: () => void;
+  onSelectActivity?: (a: Activity | null) => void;
+  getTitle?: (a: Activity) => string;
+  lightsOff?: boolean;
+  dark?: boolean;
+}
+
+function renderTrackSVG(summaryPolyline: string, size = 80): string {
+  try {
+    const coords = polyline.decode(summaryPolyline);
+    if (coords.length < 2) return '';
+    const lats = coords.map((c) => c[0]);
+    const lngs = coords.map((c) => c[1]);
+    const minLat = Math.min(...lats),
+      maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs),
+      maxLng = Math.max(...lngs);
+    const latRange = maxLat - minLat || 0.001;
+    const lngRange = maxLng - minLng || 0.001;
+    const scale = Math.min((size - 8) / lngRange, (size - 8) / latRange);
+    const offsetX = (size - lngRange * scale) / 2;
+    const offsetY = (size - latRange * scale) / 2;
+    return coords
+      .map(([lat, lng]) => {
+        const x = (lng - minLng) * scale + offsetX;
+        const y = size - ((lat - minLat) * scale + offsetY);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  } catch {
+    return '';
+  }
+}
+
+function TrackThumb({
+  activity,
+  color,
+  selected,
+  onClick,
+  title,
+}: {
+  activity: Activity;
+  color: string;
+  selected: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  const size = 80;
+  const points = activity.summary_polyline
+    ? renderTrackSVG(activity.summary_polyline, size)
+    : '';
+  if (!points) return null;
+  const label =
+    title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
+  return (
+    <div
+      className={`group relative h-[72px] w-[72px] cursor-pointer rounded transition-all md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
+      onClick={onClick}
+      title={label}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${size} ${size}`}
+        className={`transition-opacity ${selected ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
+      >
+        <polyline
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeWidth={selected ? '2' : '1.5'}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function TrackMap({
+  activity,
+  activities,
+  dark,
+  lightsOff = false,
+}: {
+  activity: Activity | null;
+  activities: Activity[];
+  dark?: boolean;
+  lightsOff?: boolean;
+}) {
+  const { locale, t } = useLocale();
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const mapReady = useRef(false);
+  const activityRef = useRef(activity);
+  const activitiesRef = useRef(activities);
+  const lightsOffRef = useRef(lightsOff);
+  const chaseRef = useRef(createMapChaseController());
+  const selectedCoordsRef = useRef<Coordinate[] | null>(null);
+  const styleIdleRef = useRef(false);
+  const refitViewRef = useRef<() => void>(() => {});
+  const [needsRecenter, setNeedsRecenter] = useState(false);
+  const animKeyRef = useRef<string | null>(null);
+  /** Non-null while a chase for this run_id should show as active in the UI. */
+  const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  const chasing =
+    chaseRunId != null &&
+    activity != null &&
+    String(activity.run_id) === chaseRunId;
+  const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toggle3dRef = useRef<() => void>(() => {});
+  const [provider, setProvider] = useState<BasemapProvider>(
+    initialBasemapProvider
+  );
+  const useBlank = lightsOff;
+  // Flat chase works on CARTO; Mapbox DEM/buildings are best-effort in injectMapTerrain.
+  const can3d = !lightsOff;
+  const bg = dark !== false ? '#0b0d10' : '#f4f5f7';
+  const style = useBlank
+    ? blankMapStyle(bg)
+    : basemapStyleUrl(provider, dark !== false);
+  const ROUTE_LAYER_IDS = new Set([
+    'selected',
+    'all-routes',
+    'animated-run',
+    'highlight-run',
+    ...CHASE_LAYER_IDS,
+  ]);
+
+  const stopAnimations = () => {
+    chaseRef.current.stop({ silent: true });
+  };
+
+  const removeRouteLayers = (m: mapboxgl.Map) => {
+    for (const id of [
+      'selected',
+      'all-routes',
+      'animated-run',
+      'highlight-run',
+    ]) {
+      if (m.getLayer(id)) m.removeLayer(id);
+      if (m.getSource(id)) m.removeSource(id);
+    }
+    removeChaseHighlight(m);
+  };
+
+  const applyLightsOff = (m: mapboxgl.Map, off: boolean) => {
+    const styleJson = m.getStyle();
+    if (!styleJson?.layers) return;
+    for (const layer of styleJson.layers) {
+      if (ROUTE_LAYER_IDS.has(layer.id) || layer.id === 'background') {
+        m.setLayoutProperty(layer.id, 'visibility', 'visible');
+        continue;
+      }
+      m.setLayoutProperty(layer.id, 'visibility', off ? 'none' : 'visible');
+    }
+  };
+
+  const showSelected2d = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    color: string,
+    privacy: boolean
+  ) => {
+    setChaseHighlightLine(m, coords, color);
+    fitMapToSelectedRoute(m, coords, privacy);
+  };
+
+  useEffect(() => {
+    activityRef.current = activity;
+    activitiesRef.current = activities;
+    lightsOffRef.current = lightsOff;
+  });
+
+  const updateRoutesRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    updateRoutesRef.current = () => {
+      const m = map.current;
+      if (!m || !mapReady.current) return;
+      const act = activityRef.current;
+      const acts = activitiesRef.current;
+      const privacy = lightsOffRef.current;
+
+      if (act?.summary_polyline && act.summary_polyline.length > 20) {
+        const runId = String(act.run_id);
+        const animKey = `${runId}|${privacy ? 1 : 0}|${useBlank ? 1 : 0}`;
+        // Keep camera/layers if same selection and chase already running
+        if (animKeyRef.current === animKey && chaseRef.current.isAnimating()) {
+          return;
+        }
+
+        stopAnimations();
+        removeRouteLayers(m);
+
+        const coords = polyline
+          .decode(act.summary_polyline)
+          .map(([lat, lng]) => [lng, lat] as Coordinate);
+        const color = getColor(act);
+        animKeyRef.current = animKey;
+        selectedCoordsRef.current = coords;
+
+        const features = acts
+          .filter((a) => a.summary_polyline)
+          .map((a) => ({
+            type: 'Feature' as const,
+            properties: { type: a.type, color: getColor(a) },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: polyline
+                .decode(a.summary_polyline!)
+                .map(([lat, lng]) => [lng, lat]),
+            },
+          }));
+        if (features.length) {
+          m.addSource('all-routes', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features },
+          });
+          m.addLayer({
+            id: 'all-routes',
+            type: 'line',
+            source: 'all-routes',
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': privacy ? 2 : 1.2,
+              'line-opacity': privacy ? 0.35 : 0.2,
+            },
+          });
+        }
+
+        // Manual 3D: selection always starts as 2D overview
+        showSelected2d(m, coords, color, privacy);
+        applyLightsOff(m, privacy);
+        return;
+      }
+
+      animKeyRef.current = null;
+      selectedCoordsRef.current = null;
+      stopAnimations();
+      removeRouteLayers(m);
+      clearMapTerrain(m);
+
+      const features = acts
+        .filter((a) => a.summary_polyline)
+        .map((a) => ({
+          type: 'Feature' as const,
+          properties: { type: a.type, color: getColor(a) },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: polyline
+              .decode(a.summary_polyline!)
+              .map(([lat, lng]) => [lng, lat]),
+          },
+        }));
+      if (!features.length) {
+        applyLightsOff(m, privacy);
+        return;
+      }
+      m.addSource('all-routes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features },
+      });
+      m.addLayer({
+        id: 'all-routes',
+        type: 'line',
+        source: 'all-routes',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': privacy ? 2 : 1.2,
+          'line-opacity': privacy ? 0.85 : 0.5,
+        },
+      });
+      const allCoords = features.flatMap(
+        (f) => f.geometry.coordinates as [number, number][]
+      );
+      if (!allCoords.length) {
+        applyLightsOff(m, privacy);
+        return;
+      }
+      fitTrackMapOverview(m, acts, privacy);
+      applyLightsOff(m, privacy);
+    };
+  });
+
+  useEffect(() => {
+    refitViewRef.current = () => {
+      const m = map.current;
+      if (!m?.isStyleLoaded() || !mapReady.current) return;
+      const act = activityRef.current;
+      const coords = selectedCoordsRef.current;
+      const privacy = lightsOffRef.current;
+      if (act && coords && coords.length > 0) {
+        showSelected2d(m, coords, getColor(act), privacy);
+      } else {
+        fitTrackMapOverview(m, activitiesRef.current, privacy);
+      }
+      setNeedsRecenter(false);
+    };
+  });
+
+  const handleToggle3d = () => {
+    const m = map.current;
+    const act = activityRef.current;
+    const coords = selectedCoordsRef.current;
+    if (!m || !act || !coords || !can3d) return;
+
+    if (chaseRef.current.isAnimating()) {
+      chaseRef.current.stop({ silent: true });
+      setChaseRunId(null);
+      showSelected2d(m, coords, getColor(act), lightsOffRef.current);
+      if (m.getLayer('all-routes')) {
+        m.setPaintProperty(
+          'all-routes',
+          'line-opacity',
+          lightsOffRef.current ? 0.35 : 0.2
+        );
+      }
+      return;
+    }
+
+    const runId = String(act.run_id);
+    chaseRef.current.start(
+      {
+        map: m,
+        coords,
+        color: getColor(act),
+        distanceKm: act.distance / 1000,
+        runId,
+        isDark: dark !== false,
+        overviewLayerId: 'all-routes',
+      },
+      {
+        onStart: () => setChaseRunId(runId),
+        onEnd: () => setChaseRunId(null),
+      }
+    );
+  };
+
+  useEffect(() => {
+    toggle3dRef.current = handleToggle3d;
+  });
+
+  useEffect(() => {
+    const btn = chaseButtonRef.current;
+    if (!btn) return;
+    updateChaseControlButton(btn, {
+      visible: Boolean(activity && can3d),
+      chasing,
+      title: chasing ? t('stopChase') : t('startChase'),
+    });
+  }, [chasing, activity, can3d, t]);
+
+  useEffect(() => {
+    if (!mapContainer.current) return;
+    if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
+
+    mapReady.current = false;
+    styleIdleRef.current = false;
+    animKeyRef.current = null;
+    chaseRef.current.stop({ silent: true });
+    const mapInstance = new mapboxgl.Map({
+      container: mapContainer.current,
+      style,
+      center: [108, 35],
+      zoom: 3,
+      pitch: 0,
+      maxPitch: 85,
+      attributionControl: false,
+      language: mapLabelLanguage(locale),
+      locale: mapboxControlLocale(t),
+    });
+    map.current = mapInstance;
+
+    if (!useBlank) {
+      mapInstance.addControl(
+        new mapboxgl.AttributionControl({ compact: true }),
+        'bottom-right'
+      );
+    }
+
+    mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    // Custom "3D chase" button as a real Mapbox control (no overlay).
+    const chaseControl: mapboxgl.IControl = {
+      onAdd: () => {
+        const root = document.createElement('div');
+        root.className = 'route-map-3d-ctrl mapboxgl-ctrl mapboxgl-ctrl-group';
+
+        const btn = createChaseControlButton();
+        chaseButtonRef.current = btn;
+        btn.onclick = () => toggle3dRef.current();
+        updateChaseControlButton(btn, {
+          visible: Boolean(activity && can3d),
+          chasing: false,
+          title: t('startChase'),
+        });
+
+        root.appendChild(btn);
+        return root;
+      },
+      onRemove: () => {
+        chaseButtonRef.current = null;
+      },
+    };
+    mapInstance.addControl(chaseControl, 'top-right');
+
+    if (!useBlank) {
+      // Add after chase so chase appears above fullscreen.
+      mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+    }
+
+    let settled = false;
+    let timedOut = false;
+    let styleSettled = false;
+
+    const fallBackFromMapbox = (reason: string) => {
+      if (settled || provider !== 'mapbox' || lightsOff) return;
+      settled = true;
+      console.warn(reason);
+      setProvider('carto');
+    };
+
+    const timer = window.setTimeout(() => {
+      if (
+        timedOut ||
+        styleSettled ||
+        !map.current ||
+        map.current !== mapInstance
+      )
+        return;
+      if (mapInstance.isStyleLoaded()) return;
+      timedOut = true;
+      if (provider === 'mapbox' && !lightsOff) {
+        fallBackFromMapbox(
+          'Track map style load timed out; falling back to CARTO basemap'
+        );
+      } else if (!lightsOff) {
+        console.warn(
+          'Track map CARTO style load timed out; falling back to blank basemap'
+        );
+        mapInstance.setStyle(blankMapStyle(bg));
+      }
+    }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
+    const onError = (event: mapboxgl.ErrorEvent) => {
+      if (map.current !== mapInstance) return;
+      if (isMapboxAuthError(event.error)) {
+        fallBackFromMapbox('Mapbox auth failed; falling back to CARTO basemap');
+      }
+    };
+    mapInstance.on('error', onError);
+
+    const onUserCameraChange = (event: { originalEvent?: Event }) => {
+      if (!event.originalEvent) return;
+      if (chaseRef.current.isAnimating()) return;
+      if (map.current !== mapInstance) return;
+      try {
+        if (
+          mapInstance.getLayer('all-routes') ||
+          mapInstance.getLayer('selected')
+        ) {
+          setNeedsRecenter(true);
+        }
+      } catch {
+        /* style not ready */
+      }
+    };
+
+    mapInstance.on('style.load', () => {
+      if (map.current !== mapInstance) return;
+      if (!timedOut) {
+        styleSettled = true;
+        settled = true;
+        window.clearTimeout(timer);
+      }
+      mapReady.current = true;
+      styleIdleRef.current = false;
+      mapInstance.once('idle', () => {
+        if (map.current !== mapInstance) return;
+        styleIdleRef.current = true;
+        injectMapTerrain(mapInstance, dark !== false, can3d);
+        updateRoutesRef.current();
+      });
+    });
+    mapInstance.on('dragend', onUserCameraChange);
+    mapInstance.on('zoomend', onUserCameraChange);
+    mapInstance.on('rotateend', onUserCameraChange);
+    mapInstance.on('pitchend', onUserCameraChange);
+
+    const chase = chaseRef.current;
+    return () => {
+      window.clearTimeout(timer);
+      chase.stop({ silent: true });
+      chaseButtonRef.current = null;
+      mapInstance.off('error', onError);
+      mapInstance.off('dragend', onUserCameraChange);
+      mapInstance.off('zoomend', onUserCameraChange);
+      mapInstance.off('rotateend', onUserCameraChange);
+      mapInstance.off('pitchend', onUserCameraChange);
+      mapInstance.remove();
+      if (map.current === mapInstance) {
+        map.current = null;
+      }
+      mapReady.current = false;
+      styleIdleRef.current = false;
+      animKeyRef.current = null;
+    };
+  }, [dark, lightsOff, provider, locale, t]);
+
+  useEffect(() => {
+    setNeedsRecenter(false);
+    if (mapReady.current && styleIdleRef.current) {
+      updateRoutesRef.current();
+    }
+  }, [activity, activities]);
+
+  useEffect(() => {
+    if (!map.current?.isStyleLoaded()) return;
+    applyLightsOff(map.current, lightsOff);
+    if (map.current.getLayer('all-routes') && !activityRef.current) {
+      map.current.setPaintProperty(
+        'all-routes',
+        'line-width',
+        lightsOff ? 2 : 1.2
+      );
+      map.current.setPaintProperty(
+        'all-routes',
+        'line-opacity',
+        lightsOff ? 0.85 : 0.5
+      );
+    }
+  }, [lightsOff]);
+
+  return (
+    <div
+      className="route-map-hover-ctrls relative h-full w-full"
+      style={lightsOff ? { backgroundColor: bg } : undefined}
+    >
+      {needsRecenter ? (
+        <button
+          type="button"
+          className="route-map-recenter absolute top-3 left-3 z-10"
+          aria-label={t('locateTrack')}
+          title={t('locateTrack')}
+          onClick={() => refitViewRef.current()}
+        >
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
+            />
+          </svg>
+        </button>
+      ) : null}
+      <div ref={mapContainer} className="h-full w-full" />
+    </div>
+  );
+}
+
+function getColor(a: Activity): string {
+  if (a.type === 'Run') {
+    const km = a.distance / 1000;
+    return km > 20 ? '#ef4444' : '#e8663d';
+  }
+  if (a.type === 'Ride') return '#4f7ce0';
+  if (a.type === 'Hike') return '#22c55e';
+  return '#7b61d9';
+}
+
+export function TracksPage({
+  activities,
+  onBack,
+  onSelectActivity,
+  getTitle,
+  lightsOff = false,
+  dark = true,
+}: TracksPageProps) {
+  const { locale } = useLocale();
+  const allYears = getAvailableYears(activities);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [sportFilter, setSportFilter] = useState<SportType | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
+    null
+  );
+  const [sortBy, setSortBy] = useState<'date' | 'distance'>('date');
+
+  // Export
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  // Year pagination
+  const MAX_YEARS = 10;
+  const [yearPage, setYearPage] = useState(0);
+  const totalYearPages = Math.ceil(allYears.length / MAX_YEARS);
+  const visibleYears = allYears.slice(
+    yearPage * MAX_YEARS,
+    yearPage * MAX_YEARS + MAX_YEARS
+  );
+
+  // Determine which sport types exist
+  const hasSport = (t: SportType) => activities.some((a) => a.type === t);
+
+  // Filtered base (year + sport)
+  const base = activities.filter((a) => {
+    if (
+      selectedYear !== null &&
+      new Date(a.start_date_local).getFullYear() !== selectedYear
+    )
+      return false;
+    if (sportFilter !== null && a.type !== sportFilter) return false;
+    return true;
+  });
+
+  const withPolyline = base.filter(
+    (a) => a.summary_polyline && a.summary_polyline.length > 20
+  );
+
+  // Stats for left panel
+  const totalDist = base.reduce((s, a) => s + a.distance, 0);
+  const totalTime = base.reduce(
+    (s, a) => s + parseMovingTime(a.moving_time),
+    0
+  );
+  const runs = base.filter((a) => a.type === 'Run' && a.average_speed > 0);
+  const avgPace =
+    runs.length > 0
+      ? runs.reduce((s, a) => s + a.average_speed, 0) / runs.length
+      : 0;
+
+  // Cluster tracks — defer heavy work
+  type Cluster = { representative: Activity; count: number; color: string };
+  const [clusteredTracks, setClusteredTracks] = useState<Cluster[]>([]);
+  const [clustering, setClustering] = useState(true);
+
+  useEffect(() => {
+    setClustering(true);
+    const id = setTimeout(() => {
+      const acts = [...withPolyline].sort(
+        (a, b) =>
+          new Date(b.start_date_local).getTime() -
+          new Date(a.start_date_local).getTime()
+      );
+      type Decoded = {
+        start: [number, number];
+        end: [number, number];
+        distBucket: number;
+      };
+      const decoded: (Decoded | null)[] = acts.map((a) => {
+        try {
+          const coords = polyline.decode(a.summary_polyline!);
+          if (coords.length < 2) return null;
+          return {
+            start: coords[0] as [number, number],
+            end: coords[coords.length - 1] as [number, number],
+            distBucket: Math.round(a.distance / 2000),
+          };
+        } catch {
+          return null;
+        }
+      });
+      const clusters: Cluster[] = [];
+      const used = new Set<number>();
+      for (let i = 0; i < acts.length; i++) {
+        if (used.has(i)) continue;
+        const di = decoded[i];
+        if (!di) continue;
+        let count = 1;
+        for (let j = i + 1; j < acts.length; j++) {
+          if (used.has(j)) continue;
+          const dj = decoded[j];
+          if (!dj || di.distBucket !== dj.distBucket) continue;
+          const startClose =
+            Math.abs(di.start[0] - dj.start[0]) < 0.005 &&
+            Math.abs(di.start[1] - dj.start[1]) < 0.005;
+          const endClose =
+            Math.abs(di.end[0] - dj.end[0]) < 0.005 &&
+            Math.abs(di.end[1] - dj.end[1]) < 0.005;
+          if (startClose && endClose) {
+            used.add(j);
+            count++;
+          }
+        }
+        used.add(i);
+        clusters.push({
+          representative: acts[i],
+          count,
+          color: getColor(acts[i]),
+        });
+      }
+      setClusteredTracks(clusters);
+      setClustering(false);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [withPolyline.length, selectedYear, sportFilter]);
+
+  const handleSelectTrack = (a: Activity) => {
+    setSelectedActivity((prev) => (prev?.run_id === a.run_id ? null : a));
+    onSelectActivity?.(a);
+  };
+
+  const allSportTabs: { label: string; value: SportType; color: string }[] = [
+    { label: locale === 'zh' ? '跑步' : 'Run', value: 'Run', color: '#e8663d' },
+  ];
+  const availableSportTabs = allSportTabs.filter((t) => hasSport(t.value));
+  const showSportFilter = availableSportTabs.length > 1;
+
+  return (
+    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
+      {/* Top bar: back + title */}
+      <div className="mb-5 flex items-center gap-4">
+        <button
+          onClick={onBack}
+          className="flex shrink-0 items-center gap-1.5 text-sm text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+        >
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
+          </svg>
+          {locale === 'zh' ? '返回' : 'Back'}
+        </button>
+        <h1 className="shrink-0 text-lg font-bold">
+          {locale === 'zh' ? '轨迹墙' : 'Track Wall'}
+        </h1>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr]">
+        {/* Mobile: contents so map can sticky while track wall scrolls.
+            Desktop: stacked left column. */}
+        <div className="contents lg:flex lg:flex-col lg:gap-4">
+          {/* Stats card */}
+          <div className="card order-1 p-4 lg:order-none">
+            <p className="eyebrow mb-3 text-[10px] text-[var(--color-muted)]">
+              {selectedYear ?? (locale === 'zh' ? '全部' : 'Total')}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <p className="eyebrow text-[10px] text-[var(--color-muted)]">
+                  {locale === 'zh' ? '活动' : 'Activities'}
+                </p>
+                <p className="metric text-2xl font-semibold text-[var(--color-accent)]">
+                  {base.length}
+                </p>
+              </div>
+              <div>
+                <p className="eyebrow text-[10px] text-[var(--color-muted)]">
+                  {locale === 'zh' ? '距离' : 'Distance'}
+                </p>
+                <p className="metric text-2xl font-semibold">
+                  {formatDistance(totalDist)}{' '}
+                  <span className="text-sm font-normal text-[var(--color-muted)]">
+                    km
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p className="eyebrow text-[10px] text-[var(--color-muted)]">
+                  {locale === 'zh' ? '时间' : 'Time'}
+                </p>
+                <p className="metric text-lg font-semibold">
+                  {Math.floor(totalTime / 3600)}h{' '}
+                  {Math.floor((totalTime % 3600) / 60)}m
+                </p>
+              </div>
+              {avgPace > 0 && (
+                <div>
+                  <p className="eyebrow text-[10px] text-[var(--color-muted)]">
+                    {locale === 'zh' ? '均配速' : 'Avg Pace'}
+                  </p>
+                  <p className="metric text-lg font-semibold">
+                    {formatPace(avgPace)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Activity detail — only when a single track is selected */}
+          {selectedActivity && (
+            <div className="card order-3 px-4 py-3 lg:order-none">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="eyebrow text-[10px] text-[var(--color-muted)]">
+                  {locale === 'zh' ? '已选记录' : 'Selected'}
+                </p>
+                <button
+                  onClick={() => setSelectedActivity(null)}
+                  className="text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <p className="mb-0.5 truncate text-xs font-semibold">
+                {getTitle ? getTitle(selectedActivity) : selectedActivity.name}
+              </p>
+              <p className="mb-2 text-[10px] text-[var(--color-muted)]">
+                {new Date(selectedActivity.start_date_local).toLocaleDateString(
+                  locale === 'zh' ? 'zh-CN' : 'en-US',
+                  { year: 'numeric', month: 'short', day: 'numeric' }
+                )}{' '}
+                {new Date(selectedActivity.start_date_local).toLocaleTimeString(
+                  locale === 'zh' ? 'zh-CN' : 'en-US',
+                  { hour: '2-digit', minute: '2-digit' }
+                )}
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <p className="eyebrow text-[9px] text-[var(--color-muted)]">
+                    {locale === 'zh' ? '距离' : 'Distance'}
+                  </p>
+                  <p className="metric text-base leading-tight font-semibold">
+                    {(selectedActivity.distance / 1000).toFixed(2)}{' '}
+                    <span className="text-[10px] font-normal text-[var(--color-muted)]">
+                      km
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="eyebrow text-[9px] text-[var(--color-muted)]">
+                    {locale === 'zh' ? '时间' : 'Time'}
+                  </p>
+                  <p className="metric text-base leading-tight font-semibold">
+                    {(() => {
+                      const s = parseMovingTime(selectedActivity.moving_time);
+                      return `${Math.floor(s / 3600) ? Math.floor(s / 3600) + 'h ' : ''}${Math.floor((s % 3600) / 60)}m`;
+                    })()}
+                  </p>
+                </div>
+                {selectedActivity.average_speed > 0 && (
+                  <div>
+                    <p className="eyebrow text-[9px] text-[var(--color-muted)]">
+                      {locale === 'zh' ? '配速' : 'Pace'}
+                    </p>
+                    <p className="metric text-base leading-tight font-semibold">
+                      {formatPace(selectedActivity.average_speed)}{' '}
+                      <span className="text-[10px] font-normal text-[var(--color-muted)]">
+                        /km
+                      </span>
+                    </p>
+                  </div>
+                )}
+                {selectedActivity.elevation_gain != null &&
+                  selectedActivity.elevation_gain > 0 && (
+                    <div>
+                      <p className="eyebrow text-[9px] text-[var(--color-muted)]">
+                        {locale === 'zh' ? '爬升' : 'Elev'}
+                      </p>
+                      <p className="metric text-base leading-tight font-semibold">
+                        {Math.round(selectedActivity.elevation_gain)}{' '}
+                        <span className="text-[10px] font-normal text-[var(--color-muted)]">
+                          m
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                {selectedActivity.average_heartrate != null &&
+                  selectedActivity.average_heartrate > 0 && (
+                    <div>
+                      <p className="eyebrow text-[9px] text-[var(--color-muted)]">
+                        {locale === 'zh' ? '心率' : 'HR'}
+                      </p>
+                      <p className="metric text-base leading-tight font-semibold">
+                        {Math.round(selectedActivity.average_heartrate)}{' '}
+                        <span className="text-[10px] font-normal text-[var(--color-muted)]">
+                          bpm
+                        </span>
+                      </p>
+                    </div>
+                  )}
+              </div>
+            </div>
+          )}
+
+          {/* Map — sticky on mobile while browsing the track wall */}
+          <div className="sticky top-16 z-40 order-2 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:py-0">
+            <div className="card h-[220px] overflow-hidden [--card-shadow:var(--shadow-card-hover)] md:h-[360px] lg:[--card-shadow:var(--shadow-card)]">
+              <TrackMap
+                activity={selectedActivity}
+                activities={withPolyline}
+                dark={dark}
+                lightsOff={lightsOff}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Right: track grid with year filter inside */}
+        <div className="order-4 min-w-0 lg:order-none">
+          <div ref={captureRef} className="card p-4">
+            {/* Year pills (scroll) + export; sport filter only when multiple sports */}
+            <div className="mb-4 space-y-2.5 border-b border-[var(--color-border)] pb-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {totalYearPages > 1 && (
+                    <button
+                      onClick={() => setYearPage((p) => Math.max(0, p - 1))}
+                      disabled={yearPage === 0}
+                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+                    >
+                      ‹
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedYear(null)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '全部' : 'All'}
+                  </button>
+                  {visibleYears.map((yr) => (
+                    <button
+                      key={yr}
+                      onClick={() =>
+                        setSelectedYear(selectedYear === yr ? null : yr)
+                      }
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
+                  {totalYearPages > 1 && (
+                    <button
+                      onClick={() =>
+                        setYearPage((p) => Math.min(totalYearPages - 1, p + 1))
+                      }
+                      disabled={yearPage === totalYearPages - 1}
+                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+                    >
+                      ›
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!captureRef.current || exporting) return;
+                    setExporting(true);
+                    try {
+                      const el = captureRef.current;
+                      const prevOverflow = el.style.overflow;
+                      el.style.overflow = 'visible';
+                      await new Promise((resolve) =>
+                        requestAnimationFrame(resolve)
+                      );
+                      const dataUrl = await toPng(el, {
+                        pixelRatio: 2,
+                        cacheBust: true,
+                      });
+                      el.style.overflow = prevOverflow;
+                      const link = document.createElement('a');
+                      const label = selectedYear ?? 'all';
+                      link.download = `tracks-${label}.png`;
+                      link.href = dataUrl;
+                      link.click();
+                    } catch (err) {
+                      console.error('Export failed:', err);
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  disabled={exporting}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:opacity-50"
+                  title={locale === 'zh' ? '导出图片' : 'Export as image'}
+                >
+                  {exporting ? (
+                    <svg
+                      className="h-3.5 w-3.5 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-3.5 w-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {showSportFilter ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setSportFilter(null)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '全部' : 'All'}
+                  </button>
+                  {availableSportTabs.map(({ label, value, color }) => (
+                    <button
+                      key={value}
+                      onClick={() =>
+                        setSportFilter(sportFilter === value ? null : value)
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === value ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                      style={
+                        sportFilter === value ? { backgroundColor: color } : {}
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {clustering ? (
+              <div className="flex flex-wrap gap-1">
+                {Array.from({ length: 40 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-[72px] w-[72px] animate-pulse rounded bg-[var(--color-sunken)] md:h-[80px] md:w-[80px]"
+                    style={{ animationDelay: `${i * 20}ms` }}
+                  />
+                ))}
+              </div>
+            ) : clusteredTracks.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[var(--color-muted)]">
+                {locale === 'zh' ? '暂无轨迹数据' : 'No tracks found'}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {[...clusteredTracks]
+                  .sort((a, b) =>
+                    sortBy === 'distance'
+                      ? b.representative.distance - a.representative.distance
+                      : new Date(b.representative.start_date_local).getTime() -
+                        new Date(a.representative.start_date_local).getTime()
+                  )
+                  .map(({ representative: a, count, color }) => (
+                    <div key={a.run_id} className="relative">
+                      <TrackThumb
+                        activity={a}
+                        color={color}
+                        selected={selectedActivity?.run_id === a.run_id}
+                        onClick={() => handleSelectTrack(a)}
+                        title={
+                          getTitle
+                            ? `${getTitle(a)} — ${(a.distance / 1000).toFixed(1)} km`
+                            : undefined
+                        }
+                      />
+                      {count > 1 && (
+                        <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-[var(--color-bg)]/80 px-1 py-0.5 text-[9px] leading-none font-bold text-[var(--color-muted)]">
+                          ×{count}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Legend + sort */}
+            {!clustering && clusteredTracks.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-muted)]">
+                {sportFilter === null || sportFilter === 'Run' ? (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-0.5 w-3 rounded bg-[#e8663d]" />
+                      {locale === 'zh' ? '跑步' : 'Run'}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block h-0.5 w-3 rounded bg-[#ef4444]" />
+                      {locale === 'zh' ? '跑步 >20km' : 'Run >20km'}
+                    </span>
+                  </>
+                ) : null}
+                {null}
+                {null}
+                <div className="ml-auto flex items-center gap-1">
+                  <span>
+                    {clusteredTracks.length}{' '}
+                    {locale === 'zh' ? '条路线' : 'routes'}
+                  </span>
+                  <span className="mx-1.5 text-[var(--color-border)]">·</span>
+                  <button
+                    onClick={() => setSortBy('date')}
+                    className={`transition-colors ${sortBy === 'date' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '时间' : 'Date'}
+                  </button>
+                  <span className="text-[var(--color-border)]">/</span>
+                  <button
+                    onClick={() => setSortBy('distance')}
+                    className={`transition-colors ${sortBy === 'distance' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
+                  >
+                    {locale === 'zh' ? '距离' : 'Dist'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* end track grid card */}
+        </div>
+        {/* end right column */}
+      </div>
+    </div>
+  );
+}

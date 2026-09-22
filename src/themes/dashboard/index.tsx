@@ -1,5 +1,13 @@
 import './index.css';
-import { useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { Activity } from '@/types';
 import {
   useFilteredActivities,
@@ -8,6 +16,7 @@ import {
   getActivityData,
 } from '@/hooks/useActivities';
 import { useTheme } from '@/hooks/useTheme';
+import { useLocale } from '@/hooks/useLocale';
 import { Header } from '@/components/Header';
 import { StatsCards } from '@/components/StatsCards';
 import { ContributionHeatmap } from '@/components/ContributionHeatmap';
@@ -16,27 +25,68 @@ import { RouteMap } from '@/components/RouteMap';
 import { CalendarWidget } from '@/components/CalendarWidget';
 import { ProfileCard } from '@/components/ProfileCard';
 import { PersonalBest } from '@/components/PersonalBest';
-import { TracksPage } from '@/components/TracksPage';
 import { ChinaMap } from '@/components/ChinaMap';
-import { GITHUB_URL } from '@/core/config';
 
-type Page = 'home' | 'tracks';
+const TracksPage = lazy(() =>
+  import('@/components/TracksPage').then((module) => ({
+    default: module.TracksPage,
+  }))
+);
+const SummaryPage = lazy(() =>
+  import('@/components/SummaryPage').then((module) => ({
+    default: module.SummaryPage,
+  }))
+);
 
-const FOOTER_YEAR = new Date().getFullYear();
+type Page = 'home' | 'tracks' | 'summary';
+const pageFromPath = (): Page =>
+  window.location.pathname
+    .slice(import.meta.env.BASE_URL.length)
+    .replace(/\/$/, '') === 'summary'
+    ? 'summary'
+    : window.location.pathname
+          .slice(import.meta.env.BASE_URL.length)
+          .replace(/\/$/, '') === 'tracks'
+      ? 'tracks'
+      : 'home';
 
 function Dashboard() {
+  const routeSectionRef = useRef<HTMLDivElement>(null);
   const activities = getActivityData() as Activity[];
   const { dark, toggle } = useTheme();
+  const { t } = useLocale();
   const [filter] = useState('all' as const);
   const [year, setYear] = useState<number | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
-  const [page, setPage] = useState<Page>('home');
+  const [page, setPage] = useState<Page>(pageFromPath);
 
-  const years = getAvailableYears(activities);
+  useEffect(() => {
+    const onPopState = () => setPage(pageFromPath());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  const navigate = (next: Page) => {
+    window.history.pushState(
+      null,
+      '',
+      `${import.meta.env.BASE_URL}${next === 'home' ? '' : next}`
+    );
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const selectProvince = useCallback((province: string | null) => {
+    setSelectedProvince(province);
+    setSelectedActivity(null);
+  }, []);
+
+  const [currentYear] = useState(() => new Date().getFullYear());
+  const years = useMemo(() => getAvailableYears(activities), [activities]);
   const filtered = useFilteredActivities(activities, filter, year);
+  const heatmapYear = year ?? years[0] ?? currentYear;
 
   // Activities filtered to the selected province (for RouteMap)
   const provinceFiltered = useMemo(() => {
@@ -46,110 +96,144 @@ function Dashboard() {
     );
   }, [filtered, selectedProvince]);
 
+  const selectActivity = useCallback(
+    (activity: Activity | null) => {
+      setSelectedActivity(activity);
+      if (activity) {
+        setSelectedProvince(null);
+        if (window.matchMedia('(max-width: 1023px)').matches) {
+          requestAnimationFrame(() =>
+            routeSectionRef.current?.scrollIntoView({
+              block: 'start',
+              behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+                .matches
+                ? 'instant'
+                : 'smooth',
+            })
+          );
+        }
+        if (
+          year !== null &&
+          new Date(activity.start_date_local).getFullYear() !== year
+        ) {
+          setYear(new Date(activity.start_date_local).getFullYear());
+        }
+      }
+    },
+    [year]
+  );
+
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]" data-filter={filter}>
+    <div
+      className="dashboard min-h-screen bg-[var(--color-bg)]"
+      data-filter={filter}
+    >
       <Header
         dark={dark}
         toggleTheme={toggle}
         activities={activities}
         page={page}
-        onNavigate={(p) => {
-          if (p === 'home' || p === 'tracks') setPage(p);
-        }}
+        onNavigate={navigate}
       />
 
-      {page === 'tracks' ? (
-        <TracksPage
-          activities={activities}
-          filter={filter}
-          onSelectActivity={setSelectedActivity}
-          onBack={() => setPage('home')}
-          dark={dark}
-        />
-      ) : (
-        <main className="mx-auto max-w-[1400px] px-6 py-6">
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
-            {/* Left column */}
-            <div className="min-w-0 space-y-6 overflow-hidden">
-              <StatsCards
-                activities={filtered}
-                allActivities={activities}
-                year={year}
-                filter={filter}
-                onSelectActivity={setSelectedActivity}
-              />
-              <ContributionHeatmap
-                activities={activities}
-                year={year}
-                filter={filter}
-                onSelectActivity={setSelectedActivity}
-                onYearChange={setYear}
-              />
-              <ActivityLog
-                activities={filtered}
-                years={years}
-                year={year}
-                setYear={setYear}
-                selectedActivity={selectedActivity}
-                onSelectActivity={setSelectedActivity}
-                filter={filter}
-              />
-            </div>
+      <Suspense
+        fallback={
+          <main
+            className="mx-auto flex min-h-[60vh] max-w-[1400px] items-center justify-center p-6 text-sm text-[var(--color-muted)]"
+            role="status"
+          >
+            {t('loading')}
+          </main>
+        }
+      >
+        {page === 'summary' ? (
+          <SummaryPage
+            activities={activities}
+            onSelectActivity={(activity) => {
+              navigate('home');
+              setYear(null);
+              selectActivity(activity);
+            }}
+          />
+        ) : page === 'tracks' ? (
+          <TracksPage
+            activities={activities}
+            dark={dark}
+            filter={filter}
+            onSelectActivity={selectActivity}
+            onBack={() => {
+              navigate('home');
+              window.scrollTo({ top: 0, behavior: 'instant' });
+            }}
+          />
+        ) : (
+          <main className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6">
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
+              {/* Left column */}
+              <div className="min-w-0 space-y-6 overflow-hidden">
+                <StatsCards
+                  activities={filtered}
+                  allActivities={activities}
+                  year={year}
+                  filter={filter}
+                  onSelectActivity={selectActivity}
+                />
+                <ContributionHeatmap
+                  activities={activities}
+                  year={heatmapYear}
+                  filter={filter}
+                  onSelectActivity={selectActivity}
+                />
+                <ActivityLog
+                  activities={filtered}
+                  years={years}
+                  year={year}
+                  setYear={(value) => {
+                    setYear(value);
+                    setSelectedActivity(null);
+                    setSelectedProvince(null);
+                  }}
+                  selectedActivity={selectedActivity}
+                  onSelectActivity={selectActivity}
+                  filter={filter}
+                />
+              </div>
 
-            {/* Right column */}
-            <div className="flex min-w-0 flex-col gap-6 overflow-hidden">
-              <ProfileCard activities={activities} filter={filter} />
-              <ChinaMap
-                activities={filtered}
-                filter={filter}
-                selectedProvince={selectedProvince}
-                onSelectProvince={(p) => {
-                  setSelectedProvince(p);
-                  setSelectedActivity(null);
-                }}
-              />
-              <RouteMap
-                activities={provinceFiltered}
-                selectedActivity={selectedActivity}
-                dark={dark}
-                onClearSelection={() => setSelectedActivity(null)}
-              />
-              <PersonalBest
-                activities={activities}
-                onSelectActivity={setSelectedActivity}
-              />
-              <CalendarWidget
-                activities={activities}
-                onSelectActivity={setSelectedActivity}
-              />
+              {/* Right column */}
+              <div className="flex min-w-0 flex-col gap-6 overflow-hidden">
+                <ProfileCard activities={activities} filter={filter} />
+                <ChinaMap
+                  activities={filtered}
+                  filter={filter}
+                  selectedProvince={selectedProvince}
+                  onSelectProvince={selectProvince}
+                />
+                <div ref={routeSectionRef} className="scroll-mt-28">
+                  <RouteMap
+                    activities={provinceFiltered}
+                    selectedActivity={selectedActivity}
+                    dark={dark}
+                    onClearSelection={() => setSelectedActivity(null)}
+                  />
+                </div>
+                <PersonalBest
+                  activities={activities}
+                  onSelectActivity={selectActivity}
+                />
+                <CalendarWidget
+                  key={year ?? 'all'}
+                  selectedActivity={selectedActivity}
+                  activities={filtered}
+                  onSelectActivity={selectActivity}
+                />
+              </div>
             </div>
-          </div>
-        </main>
-      )}
+          </main>
+        )}
+      </Suspense>
 
       <footer className="border-t border-[var(--color-border)] py-6 text-center text-sm text-[var(--color-muted)]">
-        &copy; {FOOTER_YEAR} Running Page 3.0
-        {GITHUB_URL ? (
-          <>
-            {' · '}
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 transition-colors hover:text-[var(--color-accent)]"
-            >
-              <svg
-                className="h-3.5 w-3.5"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden
-              >
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.26.82-.577 0-.285-.01-1.04-.016-2.04-3.338.726-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.757-1.333-1.757-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.76-1.605-2.665-.303-5.467-1.333-5.467-5.931 0-1.31.468-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.29-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.625-5.48 5.921.43.372.814 1.103.814 2.222 0 1.606-.015 2.898-.015 3.293 0 .32.216.694.825.576C20.565 21.796 24 17.297 24 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-              GitHub
-            </a>
-          </>
-        ) : null}
+        &copy; {currentYear} Running Page 3.0
       </footer>
     </div>
   );

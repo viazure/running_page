@@ -1,5 +1,12 @@
-import '../dashboard/index.css';
-import { lazy, startTransition, Suspense, useMemo, useState } from 'react';
+import './index.css';
+import {
+  lazy,
+  startTransition,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import type { Activity } from '@/types';
 import {
   useFilteredActivities,
@@ -9,12 +16,12 @@ import {
 } from '@/hooks/useActivities';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocale } from '@/hooks/useLocale';
-import { Header } from '@/components/Header';
-import { StatsCards } from '@/components/StatsCards';
-import { ContributionHeatmap } from '@/components/ContributionHeatmap';
-import { ActivityLog } from '@/components/ActivityLog';
-import { DualCalendarWidget } from '@/components/DualCalendarWidget';
-import { ProfileCard } from '@/components/ProfileCard';
+import { Header } from './components/Header';
+import { StatsCards } from './components/StatsCards';
+import { ContributionHeatmap } from './components/ContributionHeatmap';
+import { ActivityLog } from './components/ActivityLog';
+import { DualCalendarWidget } from './components/DualCalendarWidget';
+import { ProfileCard } from './components/ProfileCard';
 import {
   PrivacyUnlockProvider,
   usePrivacyUnlock,
@@ -27,16 +34,16 @@ import {
 } from '@/core/config';
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
-import { TrendChart } from '@/components/TrendChart';
+import { TrendChart } from './components/TrendChart';
 
 const loadRouteMap = () =>
-  import('@/components/RouteMap').then((m) => ({ default: m.RouteMap }));
+  import('./components/RouteMap').then((m) => ({ default: m.RouteMap }));
 const loadTracksPage = () =>
-  import('@/components/TracksPage').then((m) => ({ default: m.TracksPage }));
+  import('./components/TracksPage').then((m) => ({ default: m.TracksPage }));
 const loadSummaryPage = () =>
-  import('@/components/SummaryPage').then((m) => ({ default: m.SummaryPage }));
+  import('./components/SummaryPage').then((m) => ({ default: m.SummaryPage }));
 const loadChinaMap = () =>
-  import('@/components/ChinaMap').then((m) => ({ default: m.ChinaMap }));
+  import('./components/ChinaMap').then((m) => ({ default: m.ChinaMap }));
 
 const RouteMap = lazy(loadRouteMap);
 const TracksPage = lazy(loadTracksPage);
@@ -61,7 +68,7 @@ function MapFallback({
 }) {
   return (
     <div
-      className={`flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] text-sm text-[var(--color-muted)] ${className}`}
+      className={`card flex items-center justify-center text-sm text-[var(--color-muted)] ${className}`}
     >
       …
     </div>
@@ -238,7 +245,7 @@ function DashboardProContent({
                 dark={dark}
                 lightsOff={privacyActive}
                 onClearSelection={() => setSelectedActivity(null)}
-                className="h-[220px] shadow-md md:h-[260px] lg:shadow-none"
+                className="h-[220px] [--card-shadow:var(--shadow-card-hover)] md:h-[260px] lg:[--card-shadow:var(--shadow-card)]"
               />
             </Suspense>
           </div>
@@ -264,8 +271,15 @@ function DashboardProContent({
 
 function DashboardProInner() {
   const { dark, toggle } = useTheme();
+  const { locale } = useLocale();
   const [filter] = useState('all' as const);
   const [page, setPage] = useState<Page>('home');
+
+  // Drives the `:lang(zh)` rules in index.css (e.g. the `eyebrow` utility,
+  // where uppercase/wide tracking only makes sense for Latin labels).
+  useEffect(() => {
+    document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
+  }, [locale]);
 
   const navigate = (next: Page) => {
     // Keep previous page painted while lazy chunks resolve (avoids Suspense flash).
