@@ -14,8 +14,11 @@ import { useLocale } from '../hooks/useLocale';
 import { MAPBOX_TOKEN } from '../config';
 import {
   blankMapStyle,
-  mapboxBasemapStyle,
+  basemapStyleUrl,
+  initialBasemapProvider,
+  isMapboxAuthError,
   MAP_STYLE_LOAD_TIMEOUT_MS,
+  type BasemapProvider,
 } from '../core/mapStyle';
 import type { Coordinate } from '../utils/routeAnimation';
 import {
@@ -28,6 +31,10 @@ import {
   setChaseHighlightLine,
   updateChaseControlButton,
 } from '../utils/mapChase3d';
+import {
+  fitMapToSelectedRoute,
+  fitTrackMapOverview,
+} from '../utils/mapRouteFit';
 import './RouteMap.css';
 
 type SportType = 'Run';
@@ -126,7 +133,7 @@ function TrackMap({
   dark?: boolean;
   lightsOff?: boolean;
 }) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const mapReady = useRef(false);
@@ -136,6 +143,8 @@ function TrackMap({
   const chaseRef = useRef(createMapChaseController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
   const styleIdleRef = useRef(false);
+  const refitViewRef = useRef<() => void>(() => {});
+  const [needsRecenter, setNeedsRecenter] = useState(false);
   const animKeyRef = useRef<string | null>(null);
   /** Non-null while a chase for this run_id should show as active in the UI. */
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
@@ -145,13 +154,16 @@ function TrackMap({
     String(activity.run_id) === chaseRunId;
   const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
   const toggle3dRef = useRef<() => void>(() => {});
-  const useBlank = lightsOff || !MAPBOX_TOKEN;
-  const can3d = !useBlank;
+  const [provider, setProvider] = useState<BasemapProvider>(
+    initialBasemapProvider
+  );
+  const useBlank = lightsOff;
+  // Flat chase works on CARTO; Mapbox DEM/buildings are best-effort in injectMapTerrain.
+  const can3d = !lightsOff;
   const bg = dark !== false ? '#0d1117' : '#f6f8fa';
   const style = useBlank
     ? blankMapStyle(bg)
-    : mapboxBasemapStyle(dark !== false);
-
+    : basemapStyleUrl(provider, dark !== false);
   const ROUTE_LAYER_IDS = new Set([
     'selected',
     'all-routes',
@@ -196,14 +208,7 @@ function TrackMap({
     privacy: boolean
   ) => {
     setChaseHighlightLine(m, coords, color);
-    const bounds = new mapboxgl.LngLatBounds();
-    coords.forEach((c) => bounds.extend(c));
-    m.easeTo({ pitch: 0, bearing: 0, duration: privacy ? 200 : 400 });
-    m.fitBounds(bounds, {
-      padding: 50,
-      maxZoom: 14,
-      duration: privacy ? 200 : 800,
-    });
+    fitMapToSelectedRoute(m, coords, privacy);
   };
 
   useEffect(() => {
@@ -317,22 +322,24 @@ function TrackMap({
         applyLightsOff(m, privacy);
         return;
       }
-      const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
-      const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
-      const t = Math.floor(lngs.length * 0.1);
-      m.easeTo({ pitch: 0, bearing: 0, duration: privacy ? 200 : 600 });
-      m.fitBounds(
-        new mapboxgl.LngLatBounds(
-          [lngs[t], lats[t]],
-          [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
-        ),
-        {
-          padding: 30,
-          maxZoom: 13,
-          duration: privacy ? 200 : 800,
-        }
-      );
+      fitTrackMapOverview(m, acts, privacy);
       applyLightsOff(m, privacy);
+    };
+  });
+
+  useEffect(() => {
+    refitViewRef.current = () => {
+      const m = map.current;
+      if (!m?.isStyleLoaded() || !mapReady.current) return;
+      const act = activityRef.current;
+      const coords = selectedCoordsRef.current;
+      const privacy = lightsOffRef.current;
+      if (act && coords && coords.length > 0) {
+        showSelected2d(m, coords, getColor(act), privacy);
+      } else {
+        fitTrackMapOverview(m, activitiesRef.current, privacy);
+      }
+      setNeedsRecenter(false);
     };
   });
 
@@ -409,9 +416,17 @@ function TrackMap({
       zoom: 3,
       pitch: 0,
       maxPitch: 85,
-      attributionControl: !useBlank,
+      attributionControl: false,
     });
     map.current = mapInstance;
+
+    if (!useBlank) {
+      mapInstance.addControl(
+        new mapboxgl.AttributionControl({ compact: true }),
+        'bottom-right'
+      );
+    }
+
     mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     // Custom "3D chase" button as a real Mapbox control (no overlay).
@@ -443,8 +458,17 @@ function TrackMap({
       mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
     }
 
+    let settled = false;
     let timedOut = false;
     let styleSettled = false;
+
+    const fallBackFromMapbox = (reason: string) => {
+      if (settled || provider !== 'mapbox' || lightsOff) return;
+      settled = true;
+      console.warn(reason);
+      setProvider('carto');
+    };
+
     const timer = window.setTimeout(() => {
       if (
         timedOut ||
@@ -455,16 +479,47 @@ function TrackMap({
         return;
       if (mapInstance.isStyleLoaded()) return;
       timedOut = true;
-      console.warn(
-        'Track map style load timed out; falling back to blank basemap'
-      );
-      mapInstance.setStyle(blankMapStyle(bg));
+      if (provider === 'mapbox' && !lightsOff) {
+        fallBackFromMapbox(
+          'Track map style load timed out; falling back to CARTO basemap'
+        );
+      } else if (!lightsOff) {
+        console.warn(
+          'Track map CARTO style load timed out; falling back to blank basemap'
+        );
+        mapInstance.setStyle(blankMapStyle(bg));
+      }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
+    const onError = (event: mapboxgl.ErrorEvent) => {
+      if (map.current !== mapInstance) return;
+      if (isMapboxAuthError(event.error)) {
+        fallBackFromMapbox('Mapbox auth failed; falling back to CARTO basemap');
+      }
+    };
+    mapInstance.on('error', onError);
+
+    const onUserCameraChange = (event: { originalEvent?: Event }) => {
+      if (!event.originalEvent) return;
+      if (chaseRef.current.isAnimating()) return;
+      if (map.current !== mapInstance) return;
+      try {
+        if (
+          mapInstance.getLayer('all-routes') ||
+          mapInstance.getLayer('selected')
+        ) {
+          setNeedsRecenter(true);
+        }
+      } catch {
+        /* style not ready */
+      }
+    };
 
     mapInstance.on('style.load', () => {
       if (map.current !== mapInstance) return;
       if (!timedOut) {
         styleSettled = true;
+        settled = true;
         window.clearTimeout(timer);
       }
       mapReady.current = true;
@@ -476,12 +531,21 @@ function TrackMap({
         updateRoutesRef.current();
       });
     });
+    mapInstance.on('dragend', onUserCameraChange);
+    mapInstance.on('zoomend', onUserCameraChange);
+    mapInstance.on('rotateend', onUserCameraChange);
+    mapInstance.on('pitchend', onUserCameraChange);
 
     const chase = chaseRef.current;
     return () => {
       window.clearTimeout(timer);
       chase.stop({ silent: true });
       chaseButtonRef.current = null;
+      mapInstance.off('error', onError);
+      mapInstance.off('dragend', onUserCameraChange);
+      mapInstance.off('zoomend', onUserCameraChange);
+      mapInstance.off('rotateend', onUserCameraChange);
+      mapInstance.off('pitchend', onUserCameraChange);
       mapInstance.remove();
       if (map.current === mapInstance) {
         map.current = null;
@@ -490,9 +554,10 @@ function TrackMap({
       styleIdleRef.current = false;
       animKeyRef.current = null;
     };
-  }, [dark, useBlank]);
+  }, [dark, lightsOff, provider]);
 
   useEffect(() => {
+    setNeedsRecenter(false);
     if (mapReady.current && styleIdleRef.current) {
       updateRoutesRef.current();
     }
@@ -518,8 +583,32 @@ function TrackMap({
   return (
     <div
       className="route-map-hover-ctrls relative h-full w-full"
-      style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
+      style={lightsOff ? { backgroundColor: bg } : undefined}
     >
+      {needsRecenter ? (
+        <button
+          type="button"
+          className="route-map-recenter absolute top-3 left-3 z-10"
+          aria-label={t('locateTrack')}
+          title={t('locateTrack')}
+          onClick={() => refitViewRef.current()}
+        >
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
+            />
+          </svg>
+        </button>
+      ) : null}
       <div ref={mapContainer} className="h-full w-full" />
     </div>
   );

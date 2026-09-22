@@ -55,6 +55,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     prevPage: '上一页',
     nextPage: '下一页',
     keyboardHint: '↑↓ 记录 · ←→ 年份 · Esc 取消',
+    locateTrack: '定位轨迹',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -110,5 +111,6 @@ export const messages: Record<Locale, Record<string, string>> = {
     prevPage: 'Previous page',
     nextPage: 'Next page',
     keyboardHint: '↑↓ run · ←→ year · Esc to clear',
+    locateTrack: 'Fit route',
   },
 };

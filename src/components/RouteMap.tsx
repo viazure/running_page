@@ -7,8 +7,11 @@ import type { Activity } from '../types';
 import { MAPBOX_TOKEN } from '../config';
 import {
   blankMapStyle,
-  mapboxBasemapStyle,
+  basemapStyleUrl,
+  initialBasemapProvider,
+  isMapboxAuthError,
   MAP_STYLE_LOAD_TIMEOUT_MS,
+  type BasemapProvider,
 } from '../core/mapStyle';
 import { useLocale } from '../hooks/useLocale';
 import type { Coordinate } from '../utils/routeAnimation';
@@ -19,6 +22,10 @@ import {
   removeChaseHighlight,
   updateChaseControlButton,
 } from '../utils/mapChase3d';
+import {
+  fitMapToRouteOverview,
+  fitMapToSelectedRoute,
+} from '../utils/mapRouteFit';
 
 const ROUTE_LAYER_IDS = new Set(['routes', 'selected', ...CHASE_LAYER_IDS]);
 
@@ -64,7 +71,7 @@ export function RouteMap({
   lightsOff = false,
   className = '',
 }: RouteMapProps) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const lightsOffRef = useRef(lightsOff);
@@ -78,12 +85,18 @@ export function RouteMap({
   const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
   const toggle3dRef = useRef<() => void>(() => {});
   const styleIdleRef = useRef(false);
-  const useBlank = lightsOff || !MAPBOX_TOKEN;
-  const can3d = !useBlank;
+  const refitViewRef = useRef<() => void>(() => {});
+  const [needsRecenter, setNeedsRecenter] = useState(false);
+  const [provider, setProvider] = useState<BasemapProvider>(
+    initialBasemapProvider
+  );
+  const useBlank = lightsOff;
+  // Flat chase works on CARTO; Mapbox DEM/buildings are best-effort in injectMapTerrain.
+  const can3d = !lightsOff;
   const bg = dark !== false ? '#0d1117' : '#f6f8fa';
   const style = useBlank
     ? blankMapStyle(bg)
-    : mapboxBasemapStyle(dark !== false);
+    : basemapStyleUrl(provider, dark !== false);
 
   const stopChase = () => {
     chaseRef.current.stop({ silent: true });
@@ -136,19 +149,7 @@ export function RouteMap({
         },
       });
 
-      const bounds = new mapboxgl.LngLatBounds();
-      for (const c of coords) bounds.extend(c);
-      map.easeTo({
-        pitch: 0,
-        bearing: 0,
-        duration: lightsOffRef.current ? 200 : 400,
-      });
-      map.fitBounds(
-        bounds,
-        lightsOffRef.current
-          ? { padding: 50, maxZoom: 14, duration: 200 }
-          : { padding: 50, maxZoom: 14 }
-      );
+      fitMapToSelectedRoute(map, coords, lightsOffRef.current);
       applyLightsOff(map, lightsOffRef.current);
       return;
     }
@@ -215,28 +216,23 @@ export function RouteMap({
       return;
     }
 
-    const trimPct = 0.1;
-    const trimCount = Math.floor(allCoords.length * trimPct);
-    const lngs = allCoords.map((c) => c[0]).sort((a, b) => a - b);
-    const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
-
-    const bounds = new mapboxgl.LngLatBounds(
-      [lngs[trimCount], lats[trimCount]],
-      [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
-    );
-
-    map.easeTo({
-      pitch: 0,
-      bearing: 0,
-      duration: lightsOffRef.current ? 200 : 400,
-    });
-    map.fitBounds(
-      bounds,
-      lightsOffRef.current
-        ? { padding: 30, maxZoom: 13, duration: 200 }
-        : { padding: 30, maxZoom: 13 }
-    );
+    fitMapToRouteOverview(map, acts, lightsOffRef.current);
     applyLightsOff(map, lightsOffRef.current);
+  });
+
+  useEffect(() => {
+    refitViewRef.current = () => {
+      const map = mapRef.current;
+      if (!map?.isStyleLoaded()) return;
+      const selected = selectedRef.current;
+      const coords = selectedCoordsRef.current;
+      if (selected && coords && coords.length > 0) {
+        fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+      } else {
+        fitMapToRouteOverview(map, activitiesRef.current, lightsOffRef.current);
+      }
+      setNeedsRecenter(false);
+    };
   });
 
   const handleToggle3d = () => {
@@ -339,24 +335,77 @@ export function RouteMap({
       zoom: 10,
       pitch: 0,
       maxPitch: 85,
-      attributionControl: !useBlank,
+      attributionControl: false,
       keyboard: false,
     });
 
+    if (!useBlank) {
+      mapRef.current.addControl(
+        new mapboxgl.AttributionControl({ compact: true }),
+        'bottom-right'
+      );
+    }
+
+    let settled = false;
     let timedOut = false;
+
+    const fallBackFromMapbox = (reason: string) => {
+      if (settled || provider !== 'mapbox' || lightsOff) return;
+      settled = true;
+      console.warn(reason);
+      setProvider('carto');
+    };
+
     const timer = window.setTimeout(() => {
       if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
       timedOut = true;
-      console.warn('Map style load timed out; falling back to blank basemap');
-      mapRef.current.setStyle(blankMapStyle(bg));
+      if (provider === 'mapbox' && !lightsOff) {
+        fallBackFromMapbox(
+          'Map style load timed out; falling back to CARTO basemap'
+        );
+      } else if (!lightsOff) {
+        console.warn(
+          'CARTO style load timed out; falling back to blank basemap'
+        );
+        mapRef.current.setStyle(blankMapStyle(bg));
+      }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
+
+    const onError = (event: mapboxgl.ErrorEvent) => {
+      if (isMapboxAuthError(event.error)) {
+        fallBackFromMapbox('Mapbox auth failed; falling back to CARTO basemap');
+      }
+    };
+
+    mapRef.current.on('error', onError);
+    const onUserCameraChange = (event: { originalEvent?: Event }) => {
+      // Programmatic fitBounds/easeTo have no originalEvent; ignore those.
+      if (!event.originalEvent) return;
+      if (chaseRef.current.isAnimating()) return;
+      const map = mapRef.current;
+      if (!map) return;
+      try {
+        if (map.getLayer('routes') || map.getLayer('selected')) {
+          setNeedsRecenter(true);
+        }
+      } catch {
+        /* style not ready */
+      }
+    };
 
     mapRef.current.on('style.load', () => {
       styleIdleRef.current = false;
-      if (!timedOut) window.clearTimeout(timer);
+      if (!timedOut) {
+        settled = true;
+        window.clearTimeout(timer);
+      }
       ensureRoutes();
     });
     mapRef.current.on('idle', ensureRoutes);
+    mapRef.current.on('dragend', onUserCameraChange);
+    mapRef.current.on('zoomend', onUserCameraChange);
+    mapRef.current.on('rotateend', onUserCameraChange);
+    mapRef.current.on('pitchend', onUserCameraChange);
     if (mapRef.current.isStyleLoaded()) ensureRoutes();
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -405,13 +454,19 @@ export function RouteMap({
       window.clearTimeout(timer);
       chase.stop({ silent: true });
       styleIdleRef.current = false;
+      mapRef.current?.off('error', onError);
+      mapRef.current?.off('dragend', onUserCameraChange);
+      mapRef.current?.off('zoomend', onUserCameraChange);
+      mapRef.current?.off('rotateend', onUserCameraChange);
+      mapRef.current?.off('pitchend', onUserCameraChange);
       mapRef.current?.remove();
       mapRef.current = null;
     };
-    // Recreate when basemap mode changes (blank ↔ mapbox)
-  }, [dark, useBlank]);
+    // Recreate when basemap mode changes (blank ↔ mapbox ↔ carto)
+  }, [dark, lightsOff, provider]);
 
   useEffect(() => {
+    setNeedsRecenter(false);
     if (styleIdleRef.current) {
       updateRoutesRef.current();
     }
@@ -437,34 +492,60 @@ export function RouteMap({
   return (
     <div
       className={`route-map-hover-ctrls relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] ${className || 'h-[220px] md:h-[380px]'}`}
-      style={lightsOff || useBlank ? { backgroundColor: bg } : undefined}
+      style={lightsOff ? { backgroundColor: bg } : undefined}
     >
-      {selectedActivity && onClearSelection ? (
-        <button
-          type="button"
-          onClick={() => {
-            stopChase();
-            setChaseRunId(null);
-            onClearSelection();
-          }}
-          className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
-        >
-          <svg
-            className="h-3.5 w-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+        {selectedActivity && onClearSelection ? (
+          <button
+            type="button"
+            onClick={() => {
+              stopChase();
+              setChaseRunId(null);
+              onClearSelection();
+            }}
+            className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
-          </svg>
-          Overview
-        </button>
-      ) : null}
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            Overview
+          </button>
+        ) : null}
+        {needsRecenter ? (
+          <button
+            type="button"
+            className="route-map-recenter"
+            aria-label={t('locateTrack')}
+            title={t('locateTrack')}
+            onClick={() => refitViewRef.current()}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
+              />
+            </svg>
+          </button>
+        ) : null}
+      </div>
       <div ref={mapContainerRef} className="h-full w-full" />
     </div>
   );
