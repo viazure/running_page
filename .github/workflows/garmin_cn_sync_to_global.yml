@@ -77,7 +77,8 @@ jobs:
             ${{ env.DATA_CACHE_PREFIX }}-${{ github.sha }}-
             ${{ env.DATA_CACHE_PREFIX }}-
 
-      # 运行「仅同步佳明国区数据到国际区」脚本
+      # CN → Global (FIT only). Tracks uploaded CN IDs in FIT_OUT/.synced_to_global.json
+      # so shared cache with daily garmin_cn sync does not skip uploads.
       - name: Run sync Garmin CN to Garmin script only
         run: |
           python run_page/garmin_only_sync_cn_global.py ${{ secrets.GARMIN_SECRET_STRING_CN }} ${{ secrets.GARMIN_SECRET_STRING }} --only-run
