@@ -59,7 +59,9 @@ async def upload_fit_file(client, path):
         return True
     except Exception as e:  # noqa: BLE001
         # Duplicate / already-imported responses often lack detailedImportResult.
-        print(f"garmin upload response: status={res.status_code} body={res.text[:300]} ({e})")
+        print(
+            f"garmin upload response: status={res.status_code} body={res.text[:300]} ({e})"
+        )
         return 200 <= res.status_code < 300
 
 
@@ -113,9 +115,7 @@ if __name__ == "__main__":
     new_ids, _id2title = future.result()
     print(f"Newly downloaded from CN: {len(new_ids)}")
 
-    local_fit_ids = [
-        i for i in get_downloaded_ids(FIT_FOLDER) if i.isdigit()
-    ]
+    local_fit_ids = [i for i in get_downloaded_ids(FIT_FOLDER) if i.isdigit()]
     pending_ids = sorted(set(local_fit_ids) - synced_to_global)
     to_upload_files = [
         os.path.join(FIT_FOLDER, f"{i}.fit")
