@@ -17,6 +17,8 @@ import {
   basemapStyleUrl,
   initialBasemapProvider,
   isMapboxAuthError,
+  mapboxControlLocale,
+  mapLabelLanguage,
   MAP_STYLE_LOAD_TIMEOUT_MS,
   type BasemapProvider,
 } from '../core/mapStyle';
@@ -391,15 +393,9 @@ function TrackMap({
     updateChaseControlButton(btn, {
       visible: Boolean(activity && can3d),
       chasing,
-      title: chasing
-        ? locale === 'zh'
-          ? '停止巡航'
-          : 'Stop chase'
-        : locale === 'zh'
-          ? '开始巡航'
-          : 'Play chase',
+      title: chasing ? t('stopChase') : t('startChase'),
     });
-  }, [chasing, locale, activity, can3d]);
+  }, [chasing, activity, can3d, t]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -417,6 +413,8 @@ function TrackMap({
       pitch: 0,
       maxPitch: 85,
       attributionControl: false,
+      language: mapLabelLanguage(locale),
+      locale: mapboxControlLocale(t),
     });
     map.current = mapInstance;
 
@@ -441,7 +439,7 @@ function TrackMap({
         updateChaseControlButton(btn, {
           visible: Boolean(activity && can3d),
           chasing: false,
-          title: locale === 'zh' ? '开始巡航' : 'Play chase',
+          title: t('startChase'),
         });
 
         root.appendChild(btn);
@@ -554,7 +552,7 @@ function TrackMap({
       styleIdleRef.current = false;
       animKeyRef.current = null;
     };
-  }, [dark, lightsOff, provider]);
+  }, [dark, lightsOff, provider, locale, t]);
 
   useEffect(() => {
     setNeedsRecenter(false);

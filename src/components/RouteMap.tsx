@@ -10,6 +10,8 @@ import {
   basemapStyleUrl,
   initialBasemapProvider,
   isMapboxAuthError,
+  mapboxControlLocale,
+  mapLabelLanguage,
   MAP_STYLE_LOAD_TIMEOUT_MS,
   type BasemapProvider,
 } from '../core/mapStyle';
@@ -293,15 +295,9 @@ export function RouteMap({
     updateChaseControlButton(btn, {
       visible: Boolean(selectedActivity && can3d),
       chasing,
-      title: chasing
-        ? locale === 'zh'
-          ? '停止巡航'
-          : 'Stop chase'
-        : locale === 'zh'
-          ? '开始巡航'
-          : 'Play chase',
+      title: chasing ? t('stopChase') : t('startChase'),
     });
-  }, [chasing, locale, selectedActivity, can3d]);
+  }, [chasing, selectedActivity, can3d, t]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -337,6 +333,8 @@ export function RouteMap({
       maxPitch: 85,
       attributionControl: false,
       keyboard: false,
+      language: mapLabelLanguage(locale),
+      locale: mapboxControlLocale(t),
     });
 
     if (!useBlank) {
@@ -422,7 +420,7 @@ export function RouteMap({
         updateChaseControlButton(btn, {
           visible: Boolean(selectedActivity && can3d),
           chasing: false,
-          title: locale === 'zh' ? '开始巡航' : 'Play chase',
+          title: t('startChase'),
         });
 
         root.appendChild(btn);
@@ -462,8 +460,8 @@ export function RouteMap({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-    // Recreate when basemap mode changes (blank ↔ mapbox ↔ carto)
-  }, [dark, lightsOff, provider]);
+    // Recreate when basemap mode or UI language changes
+  }, [dark, lightsOff, provider, locale, t]);
 
   useEffect(() => {
     setNeedsRecenter(false);
@@ -518,7 +516,7 @@ export function RouteMap({
                 d="M10 19l-7-7m0 0l7-7m-7 7h18"
               />
             </svg>
-            Overview
+            {t('overview')}
           </button>
         ) : null}
         {needsRecenter ? (

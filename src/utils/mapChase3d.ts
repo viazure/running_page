@@ -367,4 +367,5 @@ export function updateChaseControlButton(
   btn.classList.toggle('is-hidden', !state.visible);
   btn.classList.toggle('is-chasing', state.chasing);
   btn.title = state.title;
+  btn.setAttribute('aria-label', state.title);
 }

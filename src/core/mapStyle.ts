@@ -44,6 +44,25 @@ export function basemapStyleUrl(
     : cartoBasemapStyle(dark);
 }
 
+/** Mapbox/MapLibre label language code from app locale. */
+export function mapLabelLanguage(locale: 'zh' | 'en'): string {
+  return locale === 'zh' ? 'zh-Hans' : 'en';
+}
+
+/** Mapbox built-in control UI strings (overrides English defaults). */
+export function mapboxControlLocale(t: (key: string) => string): {
+  [key: string]: string;
+} {
+  return {
+    'NavigationControl.ZoomIn': t('zoomIn'),
+    'NavigationControl.ZoomOut': t('zoomOut'),
+    'NavigationControl.ResetBearing': t('resetNorth'),
+    'FullscreenControl.Enter': t('enterFullscreen'),
+    'FullscreenControl.Exit': t('exitFullscreen'),
+    'AttributionControl.ToggleAttribution': t('toggleAttribution'),
+  };
+}
+
 /** If Mapbox style never loads (e.g. blocked network), fall back to CARTO. */
 export const MAP_STYLE_LOAD_TIMEOUT_MS = 8000;
 
