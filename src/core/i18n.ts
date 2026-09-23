@@ -81,6 +81,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     times: '次',
     totalTime: '总时间',
     longestStreak: '最长连续',
+    routeFallback: '此活动没有可用的 GPS 轨迹，现显示 {date} 的路线。',
+    routeFallbackNone: '此活动没有可用的 GPS 轨迹。',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -162,5 +164,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     times: 'acts',
     totalTime: 'Total time',
     longestStreak: 'Longest streak',
+    routeFallback: 'No GPS on this activity. Showing the route from {date}.',
+    routeFallbackNone: 'This activity has no usable GPS route.',
   },
 };

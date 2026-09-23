@@ -158,6 +158,7 @@ function DashboardProContent({
       <Suspense fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}>
         <RouteMap
           activities={provinceFiltered}
+          allActivities={activities}
           selectedActivity={selectedActivity}
           dark={dark}
           lightsOff={privacyActive}

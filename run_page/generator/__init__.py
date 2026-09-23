@@ -267,9 +267,12 @@ class Generator:
                 streak = 1
             activity.streak = streak  # type: ignore
             last_date = date
+            exported_activity = activity.to_dict()
             if not IGNORE_BEFORE_SAVING:
-                activity.summary_polyline = filter_out(activity.summary_polyline)  # type: ignore
-            activity_list.append(activity.to_dict())
+                exported_activity["summary_polyline"] = filter_out(
+                    exported_activity["summary_polyline"]
+                )
+            activity_list.append(exported_activity)
 
         activity_list = self._fix_indoor_locations(activity_list)
 

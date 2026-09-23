@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './RouteMap.css';
@@ -28,11 +28,14 @@ import {
   fitMapToRouteOverview,
   fitMapToSelectedRoute,
 } from '@/utils/mapRouteFit';
+import { routeForActivity } from '@/core/routeFallback';
 
 const ROUTE_LAYER_IDS = new Set(['routes', 'selected', ...CHASE_LAYER_IDS]);
 
 interface RouteMapProps {
   activities: Activity[];
+  /** Full history used to find a display-only route when the selection has no GPS. */
+  allActivities?: Activity[];
   selectedActivity?: Activity | null;
   dark?: boolean;
   onClearSelection?: () => void;
@@ -67,6 +70,7 @@ function routeColor(a: Activity): string {
 
 export function RouteMap({
   activities,
+  allActivities,
   selectedActivity,
   dark,
   onClearSelection,
@@ -77,8 +81,21 @@ export function RouteMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const lightsOffRef = useRef(lightsOff);
+  const routePool = allActivities ?? activities;
+  const displayActivity = useMemo(
+    () =>
+      selectedActivity ? routeForActivity(selectedActivity, routePool) : null,
+    [selectedActivity, routePool]
+  );
+  const fallbackActivity =
+    selectedActivity &&
+    displayActivity &&
+    displayActivity.run_id !== selectedActivity.run_id
+      ? displayActivity
+      : null;
   const activitiesRef = useRef(activities);
   const selectedRef = useRef(selectedActivity);
+  const displayRef = useRef(displayActivity);
   const chaseRef = useRef(createMapChaseController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
@@ -108,6 +125,7 @@ export function RouteMap({
     lightsOffRef.current = lightsOff;
     activitiesRef.current = activities;
     selectedRef.current = selectedActivity;
+    displayRef.current = displayActivity;
   });
 
   const updateRoutesRef = useRef(() => {
@@ -122,14 +140,18 @@ export function RouteMap({
     removeChaseHighlight(map);
 
     const selected = selectedRef.current;
+    const display = displayRef.current;
     const acts = activitiesRef.current;
+    const showingFallback = Boolean(
+      selected && display && display.run_id !== selected.run_id
+    );
 
-    if (selected?.summary_polyline) {
+    if (selected && display?.summary_polyline) {
       const coords = polyline
-        .decode(selected.summary_polyline)
+        .decode(display.summary_polyline)
         .map(([lat, lng]) => [lng, lat] as Coordinate);
       selectedCoordsRef.current = coords;
-      const color = routeColor(selected);
+      const color = routeColor(display);
 
       map.addSource('selected', {
         type: 'geojson',
@@ -147,11 +169,18 @@ export function RouteMap({
         paint: {
           'line-color': color,
           'line-width': 3,
-          'line-opacity': 0.9,
+          'line-opacity': showingFallback ? 0.75 : 0.9,
+          ...(showingFallback ? { 'line-dasharray': [2, 2] } : {}),
         },
       });
 
       fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+      applyLightsOff(map, lightsOffRef.current);
+      return;
+    }
+
+    if (selected) {
+      selectedCoordsRef.current = null;
       applyLightsOff(map, lightsOffRef.current);
       return;
     }
@@ -293,11 +322,15 @@ export function RouteMap({
     const btn = chaseButtonRef.current;
     if (!btn) return;
     updateChaseControlButton(btn, {
-      visible: Boolean(selectedActivity && can3d),
+      visible: Boolean(
+        selectedActivity &&
+        displayActivity?.run_id === selectedActivity.run_id &&
+        can3d
+      ),
       chasing,
       title: chasing ? t('stopChase') : t('startChase'),
     });
-  }, [chasing, selectedActivity, can3d, t]);
+  }, [chasing, selectedActivity, displayActivity, can3d, t]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -468,7 +501,7 @@ export function RouteMap({
     if (styleIdleRef.current) {
       updateRoutesRef.current();
     }
-  }, [activities, selectedActivity]);
+  }, [activities, selectedActivity, displayActivity]);
 
   useEffect(() => {
     if (!mapRef.current?.isStyleLoaded()) return;
@@ -544,6 +577,24 @@ export function RouteMap({
           </button>
         ) : null}
       </div>
+      {fallbackActivity ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute top-12 left-3 z-10 max-w-sm rounded-lg bg-[var(--color-card)] px-3 py-1.5 text-xs text-pretty text-[var(--color-muted)] shadow-md"
+        >
+          {t('routeFallback').replace(
+            '{date}',
+            fallbackActivity.start_date_local.slice(0, 10)
+          )}
+        </p>
+      ) : selectedActivity && !displayActivity ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute top-12 left-3 z-10 max-w-sm rounded-lg bg-[var(--color-card)] px-3 py-1.5 text-xs text-pretty text-[var(--color-muted)] shadow-md"
+        >
+          {t('routeFallbackNone')}
+        </p>
+      ) : null}
       <div ref={mapContainerRef} className="h-full w-full" />
     </div>
   );
