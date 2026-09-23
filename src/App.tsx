@@ -1,13 +1,14 @@
 import {
   lazy,
-  type LazyExoticComponent,
-  type ComponentType,
   Suspense,
+  type ComponentType,
+  type LazyExoticComponent,
 } from 'react';
 import { LocaleProvider } from './hooks/useLocale';
 import { THEME_PRESET } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PageSkeleton } from './components/PageSkeleton';
+import { ThemeProvider } from './core/theme';
 
 type ThemeModule = { default: ComponentType };
 
@@ -31,12 +32,14 @@ void themeLoaders[preset]();
 
 export default function App() {
   return (
-    <LocaleProvider>
-      <ErrorBoundary>
-        <Suspense fallback={<PageSkeleton />}>
-          <ThemeComponent />
-        </Suspense>
-      </ErrorBoundary>
-    </LocaleProvider>
+    <ThemeProvider>
+      <LocaleProvider>
+        <ErrorBoundary>
+          <Suspense fallback={<PageSkeleton />}>
+            <ThemeComponent />
+          </Suspense>
+        </ErrorBoundary>
+      </LocaleProvider>
+    </ThemeProvider>
   );
 }
