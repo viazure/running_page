@@ -435,7 +435,8 @@ const toDisplaySummary = (summary: ActivitySummary): DisplaySummary => ({
 function useActivityListMeasurements(
   itemWidth: number,
   gap: number,
-  embedded = false
+  embedded = false,
+  interval: IntervalType = 'month'
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLDivElement | null>(null);
@@ -482,9 +483,11 @@ function useActivityListMeasurements(
     if (!container) return;
     const containerWidth = container.clientWidth;
     if (embedded) {
+      // Year/month/week: one full-width card on mobile. Day stays two columns —
+      // those cards are lighter and look better side by side.
       const isMobile = containerWidth <= 640;
       const count = isMobile
-        ? containerWidth >= 300
+        ? interval === 'day' && containerWidth >= 300
           ? 2
           : 1
         : Math.max(1, Math.floor((containerWidth + gap) / (itemWidth + gap)));
@@ -498,7 +501,7 @@ function useActivityListMeasurements(
     const count = Math.floor((containerWidth + gap) / (itemWidth + gap));
     itemsPerRowStore.setSnapshot(count);
     cardWidthStore.setSnapshot(itemWidth);
-  }, [embedded, gap, itemWidth, itemsPerRowStore, cardWidthStore]);
+  }, [embedded, gap, interval, itemWidth, itemsPerRowStore, cardWidthStore]);
 
   const updateListHeight = useCallback(() => {
     const containerEl = containerRef.current;
@@ -1048,7 +1051,7 @@ const ActivityListInner: React.FC<
     setFilterContainerRef,
     setSampleCardRef,
     setSummaryContainerRef,
-  } = useActivityListMeasurements(ITEM_WIDTH, ITEM_GAP, embedded);
+  } = useActivityListMeasurements(ITEM_WIDTH, ITEM_GAP, embedded, interval);
 
   // ref to the VirtualList DOM node so we can control scroll position
   const virtualListRef = useRef<HTMLDivElement | null>(null);
