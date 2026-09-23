@@ -234,7 +234,9 @@ export function ActivityLog({
       tabIndex={-1}
       onKeyDown={handleLogKeyDown}
       className={
-        isPro ? 'card p-4 outline-none md:p-6' : 'card p-6 outline-none'
+        isPro
+          ? 'card flex min-h-0 flex-col p-4 outline-none md:p-6 lg:flex-1'
+          : 'card p-6 outline-none'
       }
     >
       {/* Header */}
@@ -481,7 +483,7 @@ export function ActivityLog({
       )}
 
       {/* Pagination */}
-      <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-4">
+      <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-4 lg:mt-auto">
         <button
           type="button"
           onClick={() => setPage((p) => Math.max(0, p - 1))}

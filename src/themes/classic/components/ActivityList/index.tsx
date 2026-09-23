@@ -16,7 +16,7 @@ import {
 } from 'react-router-dom';
 import styles from './style.module.css';
 import embedStyles from './embedded.module.css';
-import { ACTIVITY_TOTAL, LOADING_TEXT, IS_CHINESE } from '../../utils/const';
+import { ACTIVITY_TOTAL, LOADING_TEXT } from '../../utils/const';
 import { totalStat, yearSummaryStats } from '@assets/index';
 import { loadSvgComponent } from '../../utils/svgUtils';
 import { SHOW_ELEVATION_GAIN, HOME_PAGE_TITLE } from '../../utils/const';
@@ -156,6 +156,8 @@ interface ActivityCardProps {
   embedded?: boolean;
   /** Responsive card width (dashboard_pro Summary mobile columns). */
   cardWidth?: number;
+  /** Bust memo when language toggles (embedded cards call t()). */
+  locale?: string;
 }
 
 interface ActivityGroups {
@@ -350,7 +352,7 @@ const groupActivitiesByInterval = (
       acc[key].totalDistance += distance;
       acc[key].totalTime += timeInSeconds;
 
-      if (SHOW_ELEVATION_GAIN && activity.elevation_gain) {
+      if (activity.elevation_gain) {
         acc[key].totalElevationGain += activity.elevation_gain;
       }
 
@@ -423,9 +425,7 @@ const toDisplaySummary = (summary: ActivitySummary): DisplaySummary => ({
   maxDistance: summary.maxDistance,
   maxSpeed: summary.maxSpeed,
   location: summary.location,
-  totalElevationGain: SHOW_ELEVATION_GAIN
-    ? summary.totalElevationGain
-    : undefined,
+  totalElevationGain: summary.totalElevationGain,
   averageHeartRate:
     summary.heartRateCount > 0
       ? summary.totalHeartRate / summary.heartRateCount
@@ -677,6 +677,7 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
   embedded = false,
   cardWidth,
 }) => {
+  const { t } = useLocale();
   const cs = embedded ? embedStyles : styles;
   const [isFlipped, setIsFlipped] = useState(false);
   const showChart = ['month', 'week', 'year'].includes(interval);
@@ -719,6 +720,9 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
 
   const avgDistance =
     summary.count > 0 ? summary.totalDistance / summary.count : 0;
+  const elevationGain = summary.totalElevationGain ?? 0;
+  // Classic still gates on SHOW_ELEVATION_GAIN; embed shows climb only when > 0.
+  const showElevation = embedded && elevationGain > 0;
 
   return (
     <div
@@ -735,76 +739,83 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
           <h2 className={cs.activityName}>{period}</h2>
           {embedded ? (
             <>
-              <p className={cs.statHero}>
-                {summary.totalDistance.toFixed(2)}
-                <span className={cs.statHeroUnit}> {DIST_UNIT}</span>
-              </p>
-              <p className={cs.statMeta}>
-                {formatTime(summary.totalTime)}
-                {interval !== 'day' && (
-                  <>
-                    <span className={cs.statMetaSep}>·</span>
-                    {summary.count} {IS_CHINESE ? '次' : 'acts'}
-                  </>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <p className={cs.statHero}>
+                    {summary.totalDistance.toFixed(2)}
+                    <span className={cs.statHeroUnit}> {DIST_UNIT}</span>
+                  </p>
+                  <p className={cs.statMeta}>
+                    {formatTime(summary.totalTime)}
+                    {interval !== 'day' && (
+                      <>
+                        <span className={cs.statMetaSep}>·</span>
+                        {summary.count} {t('times')}
+                      </>
+                    )}
+                  </p>
+                </div>
+                {showElevation && (
+                  <div
+                    className={cs.statCell}
+                    style={{
+                      flex: '0 0 auto',
+                      alignItems: 'flex-end',
+                      textAlign: 'right',
+                    }}
+                  >
+                    <span className={cs.statLabel}>{t('elevationGain')}</span>
+                    <span className={cs.statValue}>
+                      {elevationGain.toFixed(0)} m
+                    </span>
+                  </div>
                 )}
-              </p>
+              </div>
               <div className={cs.statGrid}>
                 <div className={cs.statCell}>
-                  <span className={cs.statLabel}>
-                    {ACTIVITY_TOTAL.AVERAGE_SPEED_TITLE}
-                  </span>
+                  <span className={cs.statLabel}>{t('avgPace')}</span>
                   <span className={cs.statValue}>
                     {formatPace(summary.averageSpeed)}
                   </span>
                 </div>
-                {SHOW_ELEVATION_GAIN &&
-                  summary.totalElevationGain !== undefined && (
-                    <div className={cs.statCell}>
-                      <span className={cs.statLabel}>
-                        {ACTIVITY_TOTAL.TOTAL_ELEVATION_GAIN_TITLE}
-                      </span>
-                      <span className={cs.statValue}>
-                        {summary.totalElevationGain.toFixed(0)} m
-                      </span>
-                    </div>
-                  )}
-                {summary.averageHeartRate !== undefined && (
-                  <div className={cs.statCell}>
-                    <span className={cs.statLabel}>
-                      {ACTIVITY_TOTAL.AVERAGE_HEART_RATE_TITLE}
-                    </span>
-                    <span className={cs.statValue}>
-                      {summary.averageHeartRate.toFixed(0)} bpm
-                    </span>
-                  </div>
-                )}
+                <div className={cs.statCell}>
+                  <span className={cs.statLabel}>{t('avgDistance')}</span>
+                  <span className={cs.statValue}>
+                    {avgDistance.toFixed(2)} {DIST_UNIT}
+                  </span>
+                </div>
                 {interval !== 'day' && (
                   <>
                     <div className={cs.statCell}>
                       <span className={cs.statLabel}>
-                        {ACTIVITY_TOTAL.MAX_DISTANCE_TITLE}
+                        {t('longestActivity')}
                       </span>
                       <span className={cs.statValue}>
                         {summary.maxDistance.toFixed(2)} {DIST_UNIT}
                       </span>
                     </div>
                     <div className={cs.statCell}>
-                      <span className={cs.statLabel}>
-                        {ACTIVITY_TOTAL.MAX_SPEED_TITLE}
-                      </span>
+                      <span className={cs.statLabel}>{t('fastestPace')}</span>
                       <span className={cs.statValue}>
                         {formatPace(summary.maxSpeed)}
                       </span>
                     </div>
-                    <div className={cs.statCell}>
-                      <span className={cs.statLabel}>
-                        {ACTIVITY_TOTAL.AVERAGE_DISTANCE_TITLE}
-                      </span>
-                      <span className={cs.statValue}>
-                        {avgDistance.toFixed(2)} {DIST_UNIT}
-                      </span>
-                    </div>
                   </>
+                )}
+                {summary.averageHeartRate !== undefined && (
+                  <div className={cs.statCell}>
+                    <span className={cs.statLabel}>{t('avgHeartRate')}</span>
+                    <span className={cs.statValue}>
+                      {summary.averageHeartRate.toFixed(0)} bpm
+                    </span>
+                  </div>
                 )}
               </div>
             </>
@@ -906,6 +917,7 @@ const activityCardAreEqual = (
   if (prev.omitChart !== next.omitChart) return false;
   if (prev.embedded !== next.embedded) return false;
   if (prev.cardWidth !== next.cardWidth) return false;
+  if (prev.locale !== next.locale) return false;
   const s1 = prev.summary;
   const s2 = next.summary;
   if (
@@ -1097,13 +1109,21 @@ const ActivityListInner: React.FC<
         ? 'Ride'
         : 'all';
 
-  const intervalOptions: { value: IntervalType; label: string }[] = [
-    { value: 'year', label: ACTIVITY_TOTAL.YEARLY_TITLE },
-    { value: 'month', label: ACTIVITY_TOTAL.MONTHLY_TITLE },
-    { value: 'week', label: ACTIVITY_TOTAL.WEEKLY_TITLE },
-    { value: 'day', label: ACTIVITY_TOTAL.DAILY_TITLE },
-    { value: 'life', label: 'Life' },
-  ];
+  const intervalOptions: { value: IntervalType; label: string }[] = embedded
+    ? [
+        { value: 'year', label: t('intervalYear') },
+        { value: 'month', label: t('intervalMonth') },
+        { value: 'week', label: t('intervalWeek') },
+        { value: 'day', label: t('intervalDay') },
+        { value: 'life', label: t('intervalLife') },
+      ]
+    : [
+        { value: 'year', label: ACTIVITY_TOTAL.YEARLY_TITLE },
+        { value: 'month', label: ACTIVITY_TOTAL.MONTHLY_TITLE },
+        { value: 'week', label: ACTIVITY_TOTAL.WEEKLY_TITLE },
+        { value: 'day', label: ACTIVITY_TOTAL.DAILY_TITLE },
+        { value: 'life', label: 'Life' },
+      ];
 
   const sportLabel = (type: string) => {
     if (type === 'all') return locale === 'zh' ? '全部' : 'All';
@@ -1278,6 +1298,7 @@ const ActivityListInner: React.FC<
                 omitChart={embedded}
                 embedded={embedded}
                 cardWidth={embedded ? cardWidth : undefined}
+                locale={locale}
                 activities={
                   interval === 'day'
                     ? dataList[0].summary.activities
@@ -1339,6 +1360,7 @@ const ActivityListInner: React.FC<
                             interval={interval}
                             embedded={embedded}
                             cardWidth={embedded ? cardWidth : undefined}
+                            locale={locale}
                             activities={
                               interval === 'day'
                                 ? cardData.summary.activities

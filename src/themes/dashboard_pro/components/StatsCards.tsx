@@ -34,6 +34,19 @@ export function StatsCards({
   // Current year stats (for yearly goal)
   const now = new Date();
   const currentYear = year ?? now.getFullYear();
+  // Past years follow the same month/weekday as today. Current year and All stay on now.
+  const viewingPastYear = year != null && year !== now.getFullYear();
+  const anchorYear = viewingPastYear ? year : now.getFullYear();
+  const anchorDay = Math.min(
+    now.getDate(),
+    new Date(anchorYear, now.getMonth() + 1, 0).getDate()
+  );
+  const anchor = viewingPastYear
+    ? new Date(anchorYear, now.getMonth(), anchorDay, 12, 0, 0, 0)
+    : now;
+  const streakPool = allActivities.filter(
+    (a) => filter === 'all' || a.type === filter
+  );
   const yearActivities = activities.filter((a) => {
     const d = new Date(a.start_date_local);
     return d.getFullYear() === currentYear;
@@ -72,13 +85,12 @@ export function StatsCards({
       ? yearSeconds - lastYearSeconds
       : yearDistance - lastYearDistance;
 
-  // Current month stats — always reflects the current calendar month,
-  // independent of the year selected for the yearly card (H2 fix).
+  // Month stats follow the anchor: today, or the same month in a past year.
   const monthActivities = allActivities.filter((a) => {
     const d = new Date(a.start_date_local);
     if (
-      d.getFullYear() !== now.getFullYear() ||
-      d.getMonth() !== now.getMonth()
+      d.getFullYear() !== anchor.getFullYear() ||
+      d.getMonth() !== anchor.getMonth()
     )
       return false;
     if (filter !== 'all' && a.type !== filter) return false;
@@ -94,13 +106,13 @@ export function StatsCards({
   // Last month same period comparison
   const lastMonthActivities = allActivities.filter((a) => {
     const d = new Date(a.start_date_local);
-    const targetMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+    const targetMonth = anchor.getMonth() === 0 ? 11 : anchor.getMonth() - 1;
     const targetYear =
-      now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      anchor.getMonth() === 0 ? anchor.getFullYear() - 1 : anchor.getFullYear();
     if (d.getFullYear() !== targetYear || d.getMonth() !== targetMonth)
       return false;
     if (filter !== 'all' && a.type !== filter) return false;
-    return d.getDate() <= now.getDate();
+    return d.getDate() <= anchor.getDate();
   });
   const lastMonthDistance = lastMonthActivities.reduce(
     (s, a) => s + a.distance,
@@ -115,14 +127,16 @@ export function StatsCards({
       ? monthSeconds - lastMonthSeconds
       : monthDistance - lastMonthDistance;
 
-  // Current week stats — week starts on Monday
-  const dayOfWeek = now.getDay(); // 0=Sun
+  // Week stats — week starts on Monday, through the anchor day
+  const dayOfWeek = anchor.getDay(); // 0=Sun
   const daysSinceMon = (dayOfWeek + 6) % 7; // Mon=0 … Sun=6
-  const weekStart = new Date(now.getTime() - daysSinceMon * 86400000);
+  const weekStart = new Date(anchor.getTime() - daysSinceMon * 86400000);
   weekStart.setHours(0, 0, 0, 0);
+  const anchorEnd = new Date(anchor);
+  anchorEnd.setHours(23, 59, 59, 999);
   const weekActivities = allActivities.filter((a) => {
     const d = new Date(a.start_date_local);
-    if (d < weekStart) return false;
+    if (d < weekStart || d > anchorEnd) return false;
     if (filter !== 'all' && a.type !== filter) return false;
     return true;
   });
@@ -135,7 +149,7 @@ export function StatsCards({
 
   // Last week same period comparison
   const lastWeekStart = new Date(weekStart.getTime() - 7 * 86400000);
-  const lastWeekSamePoint = new Date(now.getTime() - 7 * 86400000);
+  const lastWeekSamePoint = new Date(anchor.getTime() - 7 * 86400000);
   const lastWeekActivities = allActivities.filter((a) => {
     const d = new Date(a.start_date_local);
     if (d < lastWeekStart || d > lastWeekSamePoint) return false;
@@ -160,15 +174,15 @@ export function StatsCards({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  // Streak calculation (consecutive days with activity)
+  // Current streak uses every activity, so a year filter cannot zero it out.
   const sortedDates = [
-    ...new Set(activities.map((a) => a.start_date_local.slice(0, 10))),
+    ...new Set(streakPool.map((a) => a.start_date_local.slice(0, 10))),
   ]
     .sort()
     .reverse();
 
   let currentStreak = 0;
-  if (sortedDates.length > 0) {
+  if (!viewingPastYear && sortedDates.length > 0) {
     const today = toLocalDateStr(now);
     const yesterday = toLocalDateStr(new Date(now.getTime() - 86400000));
     if (sortedDates[0] === today || sortedDates[0] === yesterday) {
@@ -195,7 +209,7 @@ export function StatsCards({
   }
 
   const weekSet = new Set(
-    activities.map((a) => {
+    streakPool.map((a) => {
       const d = new Date(a.start_date_local);
       return `${d.getFullYear()}-${getWeekNumber(d)}`;
     })
@@ -238,29 +252,39 @@ export function StatsCards({
     }
   }
 
-  // Longest streak ever
+  // Longest streak inside the year scope (all activities when no year is selected).
+  const scopedDates = [
+    ...new Set(activities.map((a) => a.start_date_local.slice(0, 10))),
+  ].sort();
   let longestStreak = 0;
-  if (sortedDates.length > 0) {
-    const ascending = [...sortedDates].reverse();
+  if (scopedDates.length > 0) {
     let streak = 1;
-    for (let i = 1; i < ascending.length; i++) {
-      const prev = new Date(ascending[i - 1] + 'T00:00:00');
-      const curr = new Date(ascending[i] + 'T00:00:00');
-      const diff = (curr.getTime() - prev.getTime()) / 86400000;
+    longestStreak = 1;
+    for (let i = 1; i < scopedDates.length; i++) {
+      const prev = new Date(scopedDates[i - 1] + 'T12:00:00');
+      const curr = new Date(scopedDates[i] + 'T12:00:00');
+      const diff = Math.round((curr.getTime() - prev.getTime()) / 86400000);
       if (diff === 1) {
         streak++;
       } else {
-        longestStreak = Math.max(longestStreak, streak);
         streak = 1;
       }
+      if (streak >= longestStreak) {
+        longestStreak = streak;
+      }
     }
-    longestStreak = Math.max(longestStreak, streak);
   }
+
+  const scopedWeekSet = new Set(
+    activities.map((a) => {
+      const d = new Date(a.start_date_local);
+      return `${d.getFullYear()}-${getWeekNumber(d)}`;
+    })
+  );
 
   // Longest week streak - iterate all weeks from earliest to latest
   let longestWeekStreak = 0;
   {
-    // Get all activity dates, find range, check each week
     if (activities.length > 0) {
       const earliest = new Date(
         Math.min(
@@ -276,7 +300,7 @@ export function StatsCards({
       let d = new Date(earliest);
       while (d <= latest) {
         const key = `${d.getFullYear()}-${getWeekNumber(d)}`;
-        if (weekSet.has(key)) {
+        if (scopedWeekSet.has(key)) {
           streak++;
           longestWeekStreak = Math.max(longestWeekStreak, streak);
         } else {
@@ -286,6 +310,22 @@ export function StatsCards({
       }
     }
   }
+
+  // Streak card always mirrors the「全部」layout: hero/calendar are "now",
+  // footnote is longest day/week inside the current year scope.
+  const calendarAnchor = now;
+  const calendarHighlight = toLocalDateStr(now);
+  const calendarActivities = streakPool;
+  const shownStreakDays = currentStreak;
+  const shownWeekStreak = currentWeekStreak;
+  const streakTitle = t('streak');
+  const monthHint = viewingPastYear
+    ? `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`
+    : '';
+  const weekHint = viewingPastYear
+    ? `${weekStart.getMonth() + 1}/${weekStart.getDate()}–${anchor.getMonth() + 1}/${anchor.getDate()}`
+    : '';
+  const streakFootnote = `${t('longest')}: ${longestStreak} ${t('days')} / ${longestWeekStreak} ${t('weeks')}`;
 
   const formatHours = (secs: number) => {
     const h = (secs / 3600).toFixed(1);
@@ -381,6 +421,11 @@ export function StatsCards({
               />
             </svg>
             {t('monthlyGoal')}
+            {monthHint ? (
+              <span className="font-normal tracking-normal normal-case">
+                {monthHint}
+              </span>
+            ) : null}
           </p>
           <p className="metric text-3xl font-semibold whitespace-nowrap">
             {goal.unit === 'time'
@@ -448,6 +493,11 @@ export function StatsCards({
               />
             </svg>
             {t('weeklyGoal')}
+            {weekHint ? (
+              <span className="font-normal tracking-normal normal-case">
+                {weekHint}
+              </span>
+            ) : null}
           </p>
           <p className="metric text-3xl font-semibold whitespace-nowrap">
             {goal.unit === 'time'
@@ -517,11 +567,11 @@ export function StatsCards({
                 d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
               />
             </svg>
-            {t('streak')}
+            {streakTitle}
           </p>
           <div className="flex items-baseline gap-3">
             <p className="metric text-3xl font-semibold">
-              {currentStreak}
+              {shownStreakDays}
               <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
                 {t('days')}
               </span>
@@ -530,8 +580,10 @@ export function StatsCards({
 
           {/* Week days visual */}
           {(() => {
-            const todayIdx = (now.getDay() + 6) % 7; // Mon=0 … Sun=6
-            const weekStart = new Date(now.getTime() - todayIdx * 86400000);
+            const todayIdx = (calendarAnchor.getDay() + 6) % 7; // Mon=0 … Sun=6
+            const weekStart = new Date(
+              calendarAnchor.getTime() - todayIdx * 86400000
+            );
             const weekLabels =
               locale === 'zh'
                 ? ['一', '二', '三', '四', '五', '六', '日']
@@ -548,13 +600,13 @@ export function StatsCards({
             const weekDays = Array.from({ length: 7 }, (_, i) => {
               const date = new Date(weekStart.getTime() + i * 86400000);
               const key = toLocalDateStr(date);
-              const dayActs = activities.filter(
+              const dayActs = calendarActivities.filter(
                 (a) => a.start_date_local.slice(0, 10) === key
               );
               return {
                 day: date.getDate(),
                 hasActivity: dayActs.length > 0,
-                isToday: i === todayIdx,
+                isToday: key === calendarHighlight,
                 acts: dayActs,
               };
             });
@@ -570,7 +622,7 @@ export function StatsCards({
                       <path d="M12 23c-3.866 0-7-3.134-7-7 0-2.468 1.5-5.093 3.03-6.97.44-.54 1.47-.36 1.64.3.17.66.54 1.44 1.13 2.07.26-.94.76-2.06 1.57-3.04.81-.98 1.49-2.09 1.78-3.36.12-.53.71-.78 1.15-.46C17.09 6.46 19 9.58 19 13.5c0 5.247-3.134 9.5-7 9.5z" />
                     </svg>
                     <span className="absolute right-0 bottom-[18%] left-0 flex items-center justify-center text-[9px] leading-none font-bold text-white">
-                      {currentWeekStreak}
+                      {shownWeekStreak}
                     </span>
                   </div>
                   <span className="-mt-0.5 text-[11px] font-medium text-[var(--color-muted)]">
@@ -580,7 +632,8 @@ export function StatsCards({
                 <div className="flex flex-1 items-center gap-1.5">
                   {weekDays.map((wd, i) => {
                     const isPast =
-                      new Date(weekStart.getTime() + i * 86400000) <= now;
+                      new Date(weekStart.getTime() + i * 86400000) <=
+                      calendarAnchor;
                     const color = dayColor(wd.acts);
                     return (
                       <div
@@ -617,23 +670,24 @@ export function StatsCards({
             );
           })()}
 
-          <div className="mt-3 flex items-center gap-2 text-sm text-[var(--color-muted)]">
-            <svg
-              className="h-3.5 w-3.5 text-[var(--color-accent)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-              />
-            </svg>
-            {t('longest')}: {longestStreak} {t('days')} / {longestWeekStreak}{' '}
-            {t('weeks')}
-          </div>
+          {streakFootnote ? (
+            <div className="mt-3 flex items-center gap-2 text-sm text-[var(--color-muted)]">
+              <svg
+                className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                />
+              </svg>
+              {streakFootnote}
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -725,6 +779,11 @@ export function StatsCards({
             />
           </svg>
           <span className="truncate">{t('monthlyGoal')}</span>
+          {monthHint ? (
+            <span className="truncate font-normal tracking-normal normal-case">
+              {monthHint}
+            </span>
+          ) : null}
         </p>
         <p className="metric text-base font-semibold whitespace-nowrap md:text-2xl lg:text-3xl">
           {goal.unit === 'time'
@@ -792,6 +851,11 @@ export function StatsCards({
             />
           </svg>
           <span className="truncate">{t('weeklyGoal')}</span>
+          {weekHint ? (
+            <span className="truncate font-normal tracking-normal normal-case">
+              {weekHint}
+            </span>
+          ) : null}
         </p>
         <p className="metric text-base font-semibold whitespace-nowrap md:text-2xl lg:text-3xl">
           {goal.unit === 'time'
@@ -861,31 +925,32 @@ export function StatsCards({
                 d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
               />
             </svg>
-            {t('streak')}
+            {streakTitle}
           </p>
-          <div className="flex items-center gap-1 text-[10px] text-[var(--color-muted)] lg:hidden">
-            <svg
-              className="h-3 w-3 text-[var(--color-accent)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-              />
-            </svg>
-            {t('longest')}: {longestStreak} {t('days')} / {longestWeekStreak}{' '}
-            {t('weeks')}
-          </div>
+          {streakFootnote ? (
+            <div className="flex items-center gap-1 text-[10px] text-[var(--color-muted)] lg:hidden">
+              <svg
+                className="h-3 w-3 text-[var(--color-accent)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                />
+              </svg>
+              {streakFootnote}
+            </div>
+          ) : null}
         </div>
 
         {/* Mobile: number + week on one row; desktop: stacked */}
         <div className="flex items-center gap-2.5 lg:block lg:gap-3">
           <p className="metric shrink-0 text-2xl font-semibold lg:text-3xl">
-            {currentStreak}
+            {shownStreakDays}
             <span className="ml-1 text-sm font-normal text-[var(--color-muted)] lg:text-base">
               {t('days')}
             </span>
@@ -893,8 +958,10 @@ export function StatsCards({
 
           {/* Week days visual */}
           {(() => {
-            const todayIdx = (now.getDay() + 6) % 7; // Mon=0 … Sun=6
-            const weekStart = new Date(now.getTime() - todayIdx * 86400000);
+            const todayIdx = (calendarAnchor.getDay() + 6) % 7; // Mon=0 … Sun=6
+            const weekStart = new Date(
+              calendarAnchor.getTime() - todayIdx * 86400000
+            );
             const weekLabels =
               locale === 'zh'
                 ? ['一', '二', '三', '四', '五', '六', '日']
@@ -911,13 +978,13 @@ export function StatsCards({
             const weekDays = Array.from({ length: 7 }, (_, i) => {
               const date = new Date(weekStart.getTime() + i * 86400000);
               const key = toLocalDateStr(date);
-              const dayActs = activities.filter(
+              const dayActs = calendarActivities.filter(
                 (a) => a.start_date_local.slice(0, 10) === key
               );
               return {
                 day: date.getDate(),
                 hasActivity: dayActs.length > 0,
-                isToday: i === todayIdx,
+                isToday: key === calendarHighlight,
                 acts: dayActs,
               };
             });
@@ -933,7 +1000,7 @@ export function StatsCards({
                       <path d="M12 23c-3.866 0-7-3.134-7-7 0-2.468 1.5-5.093 3.03-6.97.44-.54 1.47-.36 1.64.3.17.66.54 1.44 1.13 2.07.26-.94.76-2.06 1.57-3.04.81-.98 1.49-2.09 1.78-3.36.12-.53.71-.78 1.15-.46C17.09 6.46 19 9.58 19 13.5c0 5.247-3.134 9.5-7 9.5z" />
                     </svg>
                     <span className="absolute right-0 bottom-[18%] left-0 flex items-center justify-center text-[9px] leading-none font-bold text-white">
-                      {currentWeekStreak}
+                      {shownWeekStreak}
                     </span>
                   </div>
                   <span className="-mt-0.5 text-[10px] font-medium text-[var(--color-muted)] lg:text-[11px]">
@@ -944,7 +1011,8 @@ export function StatsCards({
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2.5 px-1 lg:justify-between lg:gap-0.5 lg:px-0">
                   {weekDays.map((wd, i) => {
                     const isPast =
-                      new Date(weekStart.getTime() + i * 86400000) <= now;
+                      new Date(weekStart.getTime() + i * 86400000) <=
+                      calendarAnchor;
                     const color = dayColor(wd.acts);
                     return (
                       <div
@@ -982,23 +1050,24 @@ export function StatsCards({
           })()}
         </div>
 
-        <div className="mt-3 hidden items-center gap-2 text-sm text-[var(--color-muted)] lg:flex">
-          <svg
-            className="h-3.5 w-3.5 text-[var(--color-accent)]"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-            />
-          </svg>
-          {t('longest')}: {longestStreak} {t('days')} / {longestWeekStreak}{' '}
-          {t('weeks')}
-        </div>
+        {streakFootnote ? (
+          <div className="mt-3 hidden items-center gap-2 text-sm text-[var(--color-muted)] lg:flex">
+            <svg
+              className="h-3.5 w-3.5 text-[var(--color-accent)]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+              />
+            </svg>
+            {streakFootnote}
+          </div>
+        ) : null}
       </div>
     </div>
   );

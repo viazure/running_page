@@ -90,8 +90,8 @@ function DashboardProContent({
   const isUnlocked = usePrivacyUnlock();
   const { locale } = useLocale();
   const years = getAvailableYears(activities);
-  /** Default ALL so China map / stats show full history (not just current year). */
-  const [year, setYear] = useState<number | null>(null);
+  /** Default to the latest year that has data (falls back to ALL if none). */
+  const [year, setYear] = useState<number | null>(() => years[0] ?? null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
@@ -136,19 +136,85 @@ function DashboardProContent({
     );
   }
 
+  const allYears = year == null;
+
+  const activityLog = (
+    <ActivityLog
+      activities={filtered}
+      years={years}
+      year={year}
+      setYear={setYear}
+      selectedActivity={selectedActivity}
+      onSelectActivity={setSelectedActivity}
+      filter={filter}
+      getTitle={activityTitle}
+      pageSize={ACTIVITY_LOG_PAGE_SIZE}
+      variant="pro"
+    />
+  );
+
+  const routeMap = (
+    <div className="sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0">
+      <Suspense fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}>
+        <RouteMap
+          activities={provinceFiltered}
+          selectedActivity={selectedActivity}
+          dark={dark}
+          lightsOff={privacyActive}
+          onClearSelection={() => setSelectedActivity(null)}
+          className="h-[220px] [--card-shadow:var(--shadow-card-hover)] md:h-[260px] lg:[--card-shadow:var(--shadow-card)]"
+        />
+      </Suspense>
+    </div>
+  );
+
+  const calendar = (
+    <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+      <DualCalendarWidget
+        activities={activities}
+        selectedActivity={selectedActivity}
+        onSelectActivity={setSelectedActivity}
+      />
+    </div>
+  );
+
+  const trend = (
+    <div
+      className={`order-7 flex min-w-0 flex-col lg:order-none ${
+        allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+      }`}
+    >
+      <TrendChart
+        activities={filtered}
+        year={chartYear}
+        className={
+          allYears
+            ? 'h-[260px]'
+            : 'h-[260px] lg:h-auto lg:min-h-[220px] lg:flex-1'
+        }
+      />
+    </div>
+  );
+
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
       {/*
         Mobile order: Profile → Stats → sticky RouteMap → Calendar → ActivityLog
         → ChinaMap → Yearly Distance → Heatmap (bottom).
-        Desktop (2×2):
-          [Stats+Heatmap] [Profile(含PB) + Map]  ← row1 stretch
-          [ActivityLog  ] [RouteMap+Calendar+Distance]  ← row2 stretch
+        Desktop, one year (2×2, each row stretches):
+          [Stats+Heatmap] [Profile + Map]
+          [ActivityLog  ] [RouteMap+Calendar+Distance]
+        Desktop, all years: one left column and one right column.
+        The China map and yearly distance chart keep a fixed height.
       */}
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_380px] lg:grid-rows-[auto_auto] xl:grid-cols-[1fr_400px]">
-        {/* Row1 left: stats + heatmap */}
-        <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:flex-col lg:gap-6">
-          <div className="order-2 min-w-0 lg:order-none">
+      <div
+        className={`flex flex-col gap-6 lg:grid lg:grid-cols-[1fr_380px] lg:items-stretch xl:grid-cols-[1fr_400px] ${
+          allYears ? '' : 'lg:grid-rows-[auto_auto]'
+        }`}
+      >
+        {/* Left: stats + heatmap, plus the log when every year is shown */}
+        <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
+          <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
             <StatsCards
               activities={filtered}
               allActivities={activities}
@@ -158,7 +224,7 @@ function DashboardProContent({
               compact
             />
           </div>
-          <div className="order-9 min-w-0 overflow-hidden lg:order-none">
+          <div className="order-9 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <ContributionHeatmap
               activities={activities}
               year={year}
@@ -167,10 +233,19 @@ function DashboardProContent({
               onYearChange={setYear}
             />
           </div>
+          {allYears ? (
+            <div className="order-5 flex min-w-0 flex-col overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
+              {activityLog}
+            </div>
+          ) : null}
         </div>
 
-        {/* Row1 right: profile (with PB) + map — stretches to heatmap bottom */}
-        <div className="contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:gap-4 lg:overflow-hidden">
+        {/* Right: profile + map. All years also stacks route, calendar, chart. */}
+        <div
+          className={`contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden ${
+            allYears ? '' : 'lg:h-full'
+          }`}
+        >
           <div className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <ProfileCard
               activities={activities}
@@ -184,14 +259,14 @@ function DashboardProContent({
           </div>
           <div
             className={`order-6 min-w-0 overflow-hidden lg:order-none ${
-              year == null ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+              allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
             }`}
           >
             <Suspense
               fallback={
                 <MapFallback
                   className={
-                    year == null
+                    allYears
                       ? 'h-[220px] lg:h-[260px]'
                       : 'h-[200px] lg:h-full lg:min-h-[180px]'
                   }
@@ -207,63 +282,33 @@ function DashboardProContent({
                   setSelectedActivity(null);
                 }}
                 className={
-                  year == null
-                    ? 'h-[220px] lg:h-[260px]'
-                    : 'h-[200px] lg:h-full'
+                  allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
                 }
               />
             </Suspense>
           </div>
+          {allYears ? (
+            <>
+              {routeMap}
+              {calendar}
+              {trend}
+            </>
+          ) : null}
         </div>
 
-        {/* Row2 left: activity log */}
-        <div className="order-5 min-w-0 overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2">
-          <ActivityLog
-            activities={filtered}
-            years={years}
-            year={year}
-            setYear={setYear}
-            selectedActivity={selectedActivity}
-            onSelectActivity={setSelectedActivity}
-            filter={filter}
-            getTitle={activityTitle}
-            pageSize={ACTIVITY_LOG_PAGE_SIZE}
-            variant="pro"
-          />
-        </div>
+        {allYears ? null : (
+          <div className="order-5 flex min-w-0 flex-col overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2 lg:min-h-0">
+            {activityLog}
+          </div>
+        )}
 
-        {/* Row2 right: route map + calendar + trend — stretch to log bottom */}
-        <div className="contents min-w-0 lg:col-start-2 lg:row-start-2 lg:flex lg:h-full lg:flex-col lg:gap-4 lg:overflow-hidden">
-          {/* Mobile sticky: py-2 keeps light air above/below while stuck */}
-          <div className="sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0">
-            <Suspense
-              fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}
-            >
-              <RouteMap
-                activities={provinceFiltered}
-                selectedActivity={selectedActivity}
-                dark={dark}
-                lightsOff={privacyActive}
-                onClearSelection={() => setSelectedActivity(null)}
-                className="h-[220px] [--card-shadow:var(--shadow-card-hover)] md:h-[260px] lg:[--card-shadow:var(--shadow-card)]"
-              />
-            </Suspense>
+        {allYears ? null : (
+          <div className="contents min-w-0 lg:col-start-2 lg:row-start-2 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden">
+            {routeMap}
+            {calendar}
+            {trend}
           </div>
-          <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
-            <DualCalendarWidget
-              activities={activities}
-              selectedActivity={selectedActivity}
-              onSelectActivity={setSelectedActivity}
-            />
-          </div>
-          <div className="order-7 min-w-0 lg:order-none lg:min-h-0 lg:flex-1">
-            <TrendChart
-              activities={filtered}
-              year={chartYear}
-              className="h-[260px] lg:h-full lg:min-h-[220px]"
-            />
-          </div>
-        </div>
+        )}
       </div>
     </main>
   );
