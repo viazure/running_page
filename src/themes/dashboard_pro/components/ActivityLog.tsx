@@ -276,7 +276,7 @@ export function ActivityLog({
             setYear(null);
             setPage(0);
           }}
-          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+          className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
         >
           {locale === 'zh' ? '全部' : 'All'}
         </button>
@@ -288,7 +288,7 @@ export function ActivityLog({
               setYear(y);
               setPage(0);
             }}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
           >
             {y}
           </button>
@@ -317,7 +317,7 @@ export function ActivityLog({
               setDistFilter(val);
               setPage(0);
             }}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${distFilter === val ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            className={`cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${distFilter === val ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
           >
             {label}
           </button>

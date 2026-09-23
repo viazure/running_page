@@ -106,22 +106,6 @@ body {
   box-shadow: var(--card-shadow, var(--shadow-card));
 }
 
-@utility card-interactive {
-  transition-property: border-color, box-shadow, transform;
-  transition-duration: 200ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-
-  &:hover {
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 30%,
-      var(--color-border)
-    );
-    box-shadow: var(--shadow-card-hover);
-    transform: translateY(-1px);
-  }
-}
-
 /* Metric numbers: system sans with table figures instead of a code font.
    Weight stays with the call site so `font-semibold` remains explicit. */
 @utility metric {
@@ -141,14 +125,5 @@ body {
   &:lang(zh) {
     text-transform: none;
     letter-spacing: 0.02em;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card-interactive {
-    transition: none;
-  }
-  .card-interactive:hover {
-    transform: none;
   }
 }

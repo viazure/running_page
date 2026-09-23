@@ -136,7 +136,7 @@ export function ProfileCard({
     : '';
 
   return (
-    <div className="card card-interactive p-5">
+    <div className="card p-5">
       {/* Avatar top-left + Distance */}
       <div className="flex items-center gap-4">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[var(--color-border)]">

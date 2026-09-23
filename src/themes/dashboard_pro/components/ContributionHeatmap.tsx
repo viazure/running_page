@@ -379,8 +379,9 @@ export function ContributionHeatmap({
           {/* Year tabs — swipe/scroll like ActivityLog */}
           <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
+              type="button"
               onClick={() => handleSelectYear('all')}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+              className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${
                 selectedYear === 'all'
                   ? 'bg-[var(--color-accent)] text-white'
                   : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -390,9 +391,10 @@ export function ContributionHeatmap({
             </button>
             {allYears.map((y) => (
               <button
+                type="button"
                 key={y}
                 onClick={() => handleSelectYear(y)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${
                   selectedYear === y
                     ? 'bg-[var(--color-accent)] text-white'
                     : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -405,10 +407,11 @@ export function ContributionHeatmap({
 
           {/* Export button */}
           <button
+            type="button"
             onClick={handleExport}
             disabled={exporting}
             data-export-hidden
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:opacity-50"
+            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--color-muted)] transition-all hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
             title={locale === 'zh' ? '导出图片' : 'Export as image'}
           >
             {exporting ? (

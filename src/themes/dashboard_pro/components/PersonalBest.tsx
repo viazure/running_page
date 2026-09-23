@@ -134,7 +134,7 @@ export function PersonalBest({
   }
 
   return (
-    <div className={`card card-interactive px-4 py-3 ${className}`}>
+    <div className={`card px-4 py-3 ${className}`}>
       <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
         <svg
           className="h-4 w-4 text-[var(--color-accent)]"

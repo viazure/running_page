@@ -967,37 +967,41 @@ export function TracksPage({
                 <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {totalYearPages > 1 && (
                     <button
+                      type="button"
                       onClick={() => setYearPage((p) => Math.max(0, p - 1))}
                       disabled={yearPage === 0}
-                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+                      className="shrink-0 cursor-pointer px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       ‹
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => setSelectedYear(null)}
-                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                    className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                   >
                     {locale === 'zh' ? '全部' : 'All'}
                   </button>
                   {visibleYears.map((yr) => (
                     <button
+                      type="button"
                       key={yr}
                       onClick={() =>
                         setSelectedYear(selectedYear === yr ? null : yr)
                       }
-                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                      className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                     >
                       {yr}
                     </button>
                   ))}
                   {totalYearPages > 1 && (
                     <button
+                      type="button"
                       onClick={() =>
                         setYearPage((p) => Math.min(totalYearPages - 1, p + 1))
                       }
                       disabled={yearPage === totalYearPages - 1}
-                      className="shrink-0 px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-30"
+                      className="shrink-0 cursor-pointer px-1 text-base leading-none text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       ›
                     </button>
@@ -1068,18 +1072,20 @@ export function TracksPage({
               {showSportFilter ? (
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
+                    type="button"
                     onClick={() => setSportFilter(null)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                    className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === null ? 'border-transparent bg-[var(--color-accent)] text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                   >
                     {locale === 'zh' ? '全部' : 'All'}
                   </button>
                   {availableSportTabs.map(({ label, value, color }) => (
                     <button
+                      type="button"
                       key={value}
                       onClick={() =>
                         setSportFilter(sportFilter === value ? null : value)
                       }
-                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === value ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                      className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-all ${sportFilter === value ? 'border-transparent text-white' : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                       style={
                         sportFilter === value ? { backgroundColor: color } : {}
                       }
@@ -1161,15 +1167,17 @@ export function TracksPage({
                   </span>
                   <span className="mx-1.5 text-[var(--color-border)]">·</span>
                   <button
+                    type="button"
                     onClick={() => setSortBy('date')}
-                    className={`transition-colors ${sortBy === 'date' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
+                    className={`cursor-pointer transition-colors ${sortBy === 'date' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
                   >
                     {locale === 'zh' ? '时间' : 'Date'}
                   </button>
                   <span className="text-[var(--color-border)]">/</span>
                   <button
+                    type="button"
                     onClick={() => setSortBy('distance')}
-                    className={`transition-colors ${sortBy === 'distance' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
+                    className={`cursor-pointer transition-colors ${sortBy === 'distance' ? 'font-medium text-[var(--color-text)]' : 'hover:text-[var(--color-text)]'}`}
                   >
                     {locale === 'zh' ? '距离' : 'Dist'}
                   </button>

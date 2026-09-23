@@ -5,6 +5,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import type { Activity } from '@/types';
@@ -112,6 +113,26 @@ function DashboardProContent({
     );
   }, [filtered, selectedProvince]);
 
+  const allYears = year == null;
+  const mapSlotRef = useRef<HTMLDivElement>(null);
+  const [mapOutOfView, setMapOutOfView] = useState(false);
+  const pinRouteMap = page === 'home' && allYears && mapOutOfView;
+  if ((page !== 'home' || !allYears) && mapOutOfView) setMapOutOfView(false);
+
+  useEffect(() => {
+    if (page !== 'home' || !allYears) return;
+    const slot = mapSlotRef.current;
+    if (!slot) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setMapOutOfView(!entry.isIntersecting);
+      },
+      { rootMargin: '-64px 0px 0px 0px', threshold: 0 }
+    );
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, [page, allYears]);
+
   if (page === 'tracks') {
     return (
       <Suspense>
@@ -136,8 +157,6 @@ function DashboardProContent({
     );
   }
 
-  const allYears = year == null;
-
   const activityLog = (
     <ActivityLog
       activities={filtered}
@@ -154,18 +173,37 @@ function DashboardProContent({
   );
 
   const routeMap = (
-    <div className="sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0">
-      <Suspense fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}>
-        <RouteMap
-          activities={provinceFiltered}
-          allActivities={activities}
-          selectedActivity={selectedActivity}
-          dark={dark}
-          lightsOff={privacyActive}
-          onClearSelection={() => setSelectedActivity(null)}
-          className="h-[220px] [--card-shadow:var(--shadow-card-hover)] md:h-[260px] lg:[--card-shadow:var(--shadow-card)]"
-        />
-      </Suspense>
+    <div
+      ref={mapSlotRef}
+      className={
+        allYears
+          ? 'order-3 min-h-[220px] md:min-h-[260px] lg:order-none'
+          : 'sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0'
+      }
+    >
+      <div
+        className={
+          pinRouteMap
+            ? 'fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 h-[180px] lg:inset-x-auto lg:top-20 lg:right-6 lg:bottom-auto lg:h-[240px] lg:w-96'
+            : undefined
+        }
+      >
+        <Suspense fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}>
+          <RouteMap
+            activities={provinceFiltered}
+            allActivities={activities}
+            selectedActivity={selectedActivity}
+            dark={dark}
+            lightsOff={privacyActive}
+            onClearSelection={() => setSelectedActivity(null)}
+            className={
+              pinRouteMap
+                ? 'h-full shadow-lg [--card-shadow:var(--shadow-card-hover)]'
+                : 'h-[220px] [--card-shadow:var(--shadow-card-hover)] md:h-[260px] lg:[--card-shadow:var(--shadow-card)]'
+            }
+          />
+        </Suspense>
+      </div>
     </div>
   );
 
@@ -243,8 +281,8 @@ function DashboardProContent({
 
         {/* Right: profile + map. All years also stacks route, calendar, chart. */}
         <div
-          className={`contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-hidden ${
-            allYears ? '' : 'lg:h-full'
+          className={`contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 ${
+            allYears ? '' : 'lg:h-full lg:overflow-hidden'
           }`}
         >
           <div className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0">

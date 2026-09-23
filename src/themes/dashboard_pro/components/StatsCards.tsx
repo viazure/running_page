@@ -338,7 +338,7 @@ export function StatsCards({
     return (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_1fr_1.6fr]">
         {/* Yearly Goal */}
-        <div className="card card-interactive p-5">
+        <div className="card p-5">
           <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
             <svg
               className="h-3.5 w-3.5"
@@ -405,7 +405,7 @@ export function StatsCards({
         </div>
 
         {/* Monthly Goal */}
-        <div className="card card-interactive p-5">
+        <div className="card p-5">
           <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
             <svg
               className="h-3.5 w-3.5"
@@ -477,7 +477,7 @@ export function StatsCards({
         </div>
 
         {/* Weekly Goal */}
-        <div className="card card-interactive p-5">
+        <div className="card p-5">
           <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
             <svg
               className="h-3.5 w-3.5"
@@ -547,7 +547,7 @@ export function StatsCards({
         </div>
 
         {/* Streak */}
-        <div className="card card-interactive p-5">
+        <div className="card p-5">
           <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
             <svg
               className="h-3.5 w-3.5"
@@ -696,7 +696,7 @@ export function StatsCards({
   return (
     <div className="grid grid-cols-3 gap-2 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,1.35fr)] lg:gap-4">
       {/* Yearly Goal */}
-      <div className="card card-interactive min-w-0 p-2 md:p-4">
+      <div className="card min-w-0 p-2 md:p-4">
         <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
           <svg
             className="hidden h-3.5 w-3.5 md:block"
@@ -763,7 +763,7 @@ export function StatsCards({
       </div>
 
       {/* Monthly Goal */}
-      <div className="card card-interactive min-w-0 p-2 md:p-4">
+      <div className="card min-w-0 p-2 md:p-4">
         <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
           <svg
             className="hidden h-3.5 w-3.5 md:block"
@@ -835,7 +835,7 @@ export function StatsCards({
       </div>
 
       {/* Weekly Goal */}
-      <div className="card card-interactive min-w-0 p-2 md:p-4">
+      <div className="card min-w-0 p-2 md:p-4">
         <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
           <svg
             className="hidden h-3.5 w-3.5 md:block"
@@ -904,7 +904,7 @@ export function StatsCards({
       </div>
 
       {/* Streak */}
-      <div className="card card-interactive col-span-3 min-w-0 p-2 md:p-5 lg:col-span-1">
+      <div className="card col-span-3 min-w-0 p-2 md:p-5 lg:col-span-1">
         <div className="mb-1.5 flex items-center justify-between gap-2 md:mb-2">
           <p className="eyebrow flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:gap-1.5 md:text-xs">
             <svg

@@ -156,7 +156,7 @@ export function Header({
     <button
       type="button"
       onClick={toggleTheme}
-      className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-card)]"
+      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-card)]"
     >
       {dark ? (
         <svg
@@ -194,7 +194,7 @@ export function Header({
     <button
       type="button"
       onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-[var(--color-muted)] transition-colors hover:bg-[var(--color-card)] hover:text-[var(--color-text)]"
+      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-xs font-bold text-[var(--color-muted)] transition-colors hover:bg-[var(--color-card)] hover:text-[var(--color-text)]"
       title={locale === 'zh' ? 'Switch to English' : '切换中文'}
     >
       {locale === 'zh' ? 'EN' : '中'}
