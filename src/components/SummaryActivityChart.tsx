@@ -241,17 +241,6 @@ function SummaryActivityChartInner({
           );
         })}
 
-        <text
-          x={PAD.left - 6}
-          y={PAD.top - 2}
-          textAnchor="end"
-          fill="var(--color-run-table-thead)"
-          fontSize={8}
-          opacity={0.7}
-        >
-          {DIST_UNIT}
-        </text>
-
         {barLayout.map(({ day, value, x, y, h, i }) => {
           const radius = Math.min(2.5, barW / 2);
           const isActive = activeDay === day;

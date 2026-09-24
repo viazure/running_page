@@ -397,6 +397,15 @@ const sortPeriodSummaries = (
     })
     .map(([period, summary]) => ({ period, summary }));
 
+const periodMatchesYear = (
+  period: string,
+  year: string,
+  intervalArg: IntervalType
+) => {
+  if (intervalArg === 'year') return period === year;
+  return period.startsWith(`${year}-`) || period.startsWith(`${year}/`);
+};
+
 const getPeriodSummaries = (
   activityData: Activity[],
   intervalArg: IntervalType,
@@ -774,7 +783,26 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
                       textAlign: 'right',
                     }}
                   >
-                    <span className={cs.statLabel}>{t('elevationGain')}</span>
+                    <span className={cs.statLabel}>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        role="img"
+                        aria-label={t('elevationGain')}
+                      >
+                        <path d="M3 17l6-6 4 4 8-8" />
+                        <path d="M14 7h7v7" />
+                      </svg>
+                      <span className={cs.statTip} role="tooltip">
+                        {t('elevationGain')}
+                      </span>
+                    </span>
                     <span className={cs.statValue}>
                       {elevationGain.toFixed(0)} m
                     </span>
@@ -1038,10 +1066,13 @@ const ActivityListInner: React.FC<
     setInterval(newInterval);
   }
 
-  const dataList = useMemo(
-    () => getPeriodSummaries(activityData, interval, sportType),
-    [activityData, interval, sportType]
-  );
+  const dataList = useMemo(() => {
+    const summaries = getPeriodSummaries(activityData, interval, sportType);
+    if (!embedded || !selectedYear || interval === 'life') return summaries;
+    return summaries.filter(({ period }) =>
+      periodMatchesYear(period, selectedYear, interval)
+    );
+  }, [activityData, interval, sportType, embedded, selectedYear]);
 
   const {
     itemsPerRow,
@@ -1081,7 +1112,7 @@ const ActivityListInner: React.FC<
       cancelAnimationFrame(id);
       clearTimeout(t);
     };
-  }, [interval, sportType]);
+  }, [interval, sportType, selectedYear]);
 
   const calcGroup: RowGroup[] = useMemo(() => {
     if (itemsPerRow < 1) return [];
@@ -1198,6 +1229,26 @@ const ActivityListInner: React.FC<
                 </button>
               ))}
             </div>
+            {availableYears.length > 0 ? (
+              <div
+                className={cs.chipRow}
+                role="group"
+                aria-label={locale === 'zh' ? '年份' : 'Year'}
+              >
+                {availableYears.map((year) => (
+                  <button
+                    key={year}
+                    type="button"
+                    className={`${cs.filterChip} ${selectedYear === year ? cs.filterChipActive : ''}`}
+                    onClick={() =>
+                      setSelectedYear(selectedYear === year ? null : year)
+                    }
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </>
         ) : (
           <>
@@ -1231,20 +1282,9 @@ const ActivityListInner: React.FC<
 
       {interval === 'life' && (
         <div className={cs.lifeContainer}>
-          <div className={embedded ? cs.yearSelector : styles.yearSelector}>
-            {availableYears.map((year) =>
-              embedded ? (
-                <button
-                  key={year}
-                  type="button"
-                  className={`${cs.filterChip} ${selectedYear === year ? cs.filterChipActive : ''}`}
-                  onClick={() =>
-                    setSelectedYear(selectedYear === year ? null : year)
-                  }
-                >
-                  {year}
-                </button>
-              ) : (
+          {embedded ? null : (
+            <div className={styles.yearSelector}>
+              {availableYears.map((year) => (
                 <button
                   key={year}
                   className={`${styles.yearButton} ${selectedYear === year ? styles.yearButtonActive : ''}`}
@@ -1254,9 +1294,9 @@ const ActivityListInner: React.FC<
                 >
                   {year}
                 </button>
-              )
-            )}
-          </div>
+              ))}
+            </div>
+          )}
           <div className={embedded ? cs.lifeSvgWrap : undefined}>
             <Suspense fallback={<div>Loading SVG...</div>}>
               {SelectedYearSvg ? (

@@ -183,3 +183,14 @@
 .summary-page-root [class*='lifeContainer'] {
   min-height: 120px;
 }
+
+/* rc-virtual-list keeps its thumb visible for 3s after the pointer moves.
+   Hide as soon as the pointer leaves the list; show only while scrolling. */
+.summary-page-root .rc-virtual-list-scrollbar {
+  visibility: hidden !important;
+}
+
+.summary-page-root .rc-virtual-list:hover .rc-virtual-list-scrollbar-visible,
+.summary-page-root .rc-virtual-list-scrollbar:hover {
+  visibility: visible !important;
+}
