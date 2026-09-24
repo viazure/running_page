@@ -81,7 +81,10 @@ export function setChaseHighlightLine(
   const data = {
     type: 'Feature' as const,
     properties: {},
-    geometry: { type: 'LineString' as const, coordinates: coords },
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: coords.length >= 2 ? coords : [],
+    },
   };
   if (m.getSource(HIGHLIGHT_SOURCE)) {
     (m.getSource(HIGHLIGHT_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
@@ -296,7 +299,7 @@ export function createMapChaseController() {
       chaseRaf = requestAnimationFrame(animate);
     };
 
-    setChaseHighlightLine(m, [coords[0]], color);
+    setChaseHighlightLine(m, [], color);
 
     m.flyTo({
       center: coords[0],

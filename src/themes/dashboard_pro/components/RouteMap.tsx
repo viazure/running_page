@@ -286,9 +286,8 @@ export function RouteMap({
       return;
     }
 
-    // Prefer chase highlight over static selected line while flying
     if (map.getLayer('selected')) {
-      map.setPaintProperty('selected', 'line-opacity', 0.25);
+      map.setPaintProperty('selected', 'line-opacity', 0);
     }
 
     const runId = String(selected.run_id);

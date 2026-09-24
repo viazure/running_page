@@ -226,10 +226,11 @@ export function DualCalendarWidget({
   selectedActivity,
   onSelectActivity,
 }: DualCalendarWidgetProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [viewMode, setViewMode] = useState<ViewMode>('distance');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Jump calendar to the selected activity's month.
   useEffect(() => {
@@ -296,6 +297,32 @@ export function DualCalendarWidget({
     return map;
   }, [days, selectedActivity]);
 
+  const yearBounds = useMemo(() => {
+    let min = viewYear;
+    let max = viewYear;
+    for (const activity of activities) {
+      const year = new Date(activity.start_date_local).getFullYear();
+      if (year < min) min = year;
+      if (year > max) max = year;
+    }
+    return { min, max };
+  }, [activities, viewYear]);
+
+  const activeMonths = useMemo(() => {
+    const months = new Set<number>();
+    for (const activity of activities) {
+      const date = new Date(activity.start_date_local);
+      if (date.getFullYear() === viewYear) months.add(date.getMonth());
+    }
+    return months;
+  }, [activities, viewYear]);
+
+  const shiftYear = (delta: number) => {
+    const next = viewYear + delta;
+    if (next < yearBounds.min || next > yearBounds.max) return;
+    setViewYear(next);
+  };
+
   const prevMonth = () => {
     if (viewMonth === 0) {
       setViewYear(viewYear - 1);
@@ -334,12 +361,32 @@ export function DualCalendarWidget({
     { key: 'sat', label: 'S' },
   ];
   const monthStr = `${String(viewMonth + 1).padStart(2, '0')}/${viewYear}`;
+  const [currentMonthKey] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth()}`;
+  });
+  const viewingCurrentMonth = `${viewYear}-${viewMonth}` === currentMonthKey;
+  const goToCurrentMonth = () => {
+    const d = new Date();
+    setViewYear(d.getFullYear());
+    setViewMonth(d.getMonth());
+    setPickerOpen(false);
+  };
+  const currentMonthLabel = locale === 'zh' ? '本月' : 'This month';
 
   return (
     <div className="card flex w-full min-w-0 flex-col p-5 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="flex min-w-0 flex-1 items-baseline gap-2 text-lg font-bold whitespace-nowrap text-[var(--color-text)]">
-          <span className="tabular-nums">{monthStr}</span>
+          <button
+            type="button"
+            aria-expanded={pickerOpen}
+            aria-label={locale === 'zh' ? '选择月份' : 'Choose month'}
+            onClick={() => setPickerOpen((open) => !open)}
+            className="cursor-pointer border-0 bg-transparent p-0 font-bold text-inherit tabular-nums"
+          >
+            {monthStr}
+          </button>
           <span className="text-sm font-normal text-[var(--color-muted)] tabular-nums">
             {formatDistance(monthDistance)} km
           </span>
@@ -351,15 +398,24 @@ export function DualCalendarWidget({
               type="button"
               onClick={prevMonth}
               aria-label="Previous month"
-              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
+              className="cursor-pointer rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
             >
               <ChevronLeft />
             </button>
+            {!viewingCurrentMonth ? (
+              <button
+                type="button"
+                onClick={goToCurrentMonth}
+                className="cursor-pointer rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap text-[var(--color-text)] hover:bg-[var(--color-card)]"
+              >
+                {currentMonthLabel}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={nextMonth}
               aria-label="Next month"
-              className="rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
+              className="cursor-pointer rounded-full p-1 text-[var(--color-muted)] transition-colors duration-150 ease-out hover:bg-[var(--color-sunken)] hover:text-[var(--color-text)]"
             >
               <ChevronRight />
             </button>
@@ -376,7 +432,7 @@ export function DualCalendarWidget({
               aria-label={t('distanceView')}
               aria-pressed={viewMode === 'distance'}
               onClick={() => setViewMode('distance')}
-              className={`rounded-md p-1.5 transition-all duration-150 ease-out ${
+              className={`cursor-pointer rounded-md p-1.5 transition-all duration-150 ease-out ${
                 viewMode === 'distance'
                   ? 'bg-[var(--color-accent)] text-white shadow-sm'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -390,7 +446,7 @@ export function DualCalendarWidget({
               aria-label={t('routeView')}
               aria-pressed={viewMode === 'route'}
               onClick={() => setViewMode('route')}
-              className={`rounded-md p-1.5 transition-all duration-150 ease-out ${
+              className={`cursor-pointer rounded-md p-1.5 transition-all duration-150 ease-out ${
                 viewMode === 'route'
                   ? 'bg-[var(--color-accent)] text-white shadow-sm'
                   : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -401,6 +457,70 @@ export function DualCalendarWidget({
           </div>
         </div>
       </div>
+
+      {pickerOpen ? (
+        <div className="mb-4 rounded-lg bg-[var(--color-sunken)] p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <button
+              type="button"
+              aria-label={locale === 'zh' ? '上一年' : 'Previous year'}
+              disabled={viewYear <= yearBounds.min}
+              onClick={() => shiftYear(-1)}
+              className="cursor-pointer rounded-full p-1 text-[var(--color-muted)] hover:text-[var(--color-text)] disabled:cursor-default disabled:opacity-30"
+            >
+              <ChevronLeft />
+            </button>
+            <span className="text-sm font-medium text-[var(--color-text)] tabular-nums">
+              {viewYear}
+            </span>
+            <button
+              type="button"
+              aria-label={locale === 'zh' ? '下一年' : 'Next year'}
+              disabled={viewYear >= yearBounds.max}
+              onClick={() => shiftYear(1)}
+              className="cursor-pointer rounded-full p-1 text-[var(--color-muted)] hover:text-[var(--color-text)] disabled:cursor-default disabled:opacity-30"
+            >
+              <ChevronRight />
+            </button>
+          </div>
+          <div
+            className="grid grid-cols-4 gap-1.5"
+            role="group"
+            aria-label={locale === 'zh' ? '月份' : 'Month'}
+          >
+            {Array.from({ length: 12 }, (_, month) => {
+              const selected = month === viewMonth;
+              const hasActivity = activeMonths.has(month);
+              const label =
+                locale === 'zh'
+                  ? `${month + 1} 月`
+                  : new Date(2024, month, 1).toLocaleString('en', {
+                      month: 'short',
+                    });
+              return (
+                <button
+                  key={month}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => {
+                    setViewMonth(month);
+                    setPickerOpen(false);
+                  }}
+                  className={`cursor-pointer rounded-md px-2 py-1.5 text-xs tabular-nums ${
+                    selected
+                      ? 'bg-[var(--color-accent)] font-medium text-white'
+                      : hasActivity
+                        ? 'text-[var(--color-text)] hover:bg-[var(--color-card)]'
+                        : 'text-[var(--color-muted)] hover:bg-[var(--color-card)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4">
         {dayNames.map((d) => (

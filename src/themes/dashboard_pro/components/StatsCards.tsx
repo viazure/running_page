@@ -1,7 +1,48 @@
+import type { ReactNode } from 'react';
 import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
 import { GOALS, DEFAULT_GOAL } from '@/config';
+
+function formatWeekRange(start: Date, end: Date, locale: string) {
+  if (locale === 'zh') {
+    return `${start.getMonth() + 1} 月 ${start.getDate()} 日 – ${end.getMonth() + 1} 月 ${end.getDate()} 日`;
+  }
+  return `${start.getMonth() + 1}/${start.getDate()} – ${end.getMonth() + 1}/${end.getDate()}`;
+}
+
+function GoalHeading({
+  className,
+  icon,
+  label,
+  hint,
+}: {
+  className: string;
+  icon: ReactNode;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <div
+      className="group/period relative rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
+      tabIndex={hint ? 0 : undefined}
+      aria-label={hint ? `${label} ${hint}` : undefined}
+    >
+      <p className={className}>
+        {icon}
+        <span className="min-w-0 truncate">{label}</span>
+      </p>
+      {hint ? (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 hidden rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-normal whitespace-nowrap text-[var(--color-text)] normal-case tabular-nums shadow-md group-focus-within/period:block group-hover/period:block"
+        >
+          {hint}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 interface StatsCardsProps {
   activities: Activity[];
@@ -319,11 +360,15 @@ export function StatsCards({
   const shownStreakDays = currentStreak;
   const shownWeekStreak = currentWeekStreak;
   const streakTitle = t('streak');
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
   const monthHint = viewingPastYear
-    ? `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`
+    ? locale === 'zh'
+      ? `${anchor.getFullYear()} 年 ${anchor.getMonth() + 1} 月`
+      : `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`
     : '';
   const weekHint = viewingPastYear
-    ? `${weekStart.getMonth() + 1}/${weekStart.getDate()}–${anchor.getMonth() + 1}/${anchor.getDate()}`
+    ? formatWeekRange(weekStart, weekEnd, locale)
     : '';
   const streakFootnote = `${t('longest')}: ${longestStreak} ${t('days')} / ${longestWeekStreak} ${t('weeks')}`;
 
@@ -406,27 +451,26 @@ export function StatsCards({
 
         {/* Monthly Goal */}
         <div className="card p-5">
-          <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            {t('monthlyGoal')}
-            {monthHint ? (
-              <span className="font-normal tracking-normal normal-case">
-                {monthHint}
-              </span>
-            ) : null}
-          </p>
+          <GoalHeading
+            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
+            label={t('monthlyGoal')}
+            hint={monthHint}
+            icon={
+              <svg
+                className="h-3.5 w-3.5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+            }
+          />
           <p className="metric text-3xl font-semibold whitespace-nowrap">
             {goal.unit === 'time'
               ? formatHours(monthSeconds)
@@ -478,27 +522,26 @@ export function StatsCards({
 
         {/* Weekly Goal */}
         <div className="card p-5">
-          <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            {t('weeklyGoal')}
-            {weekHint ? (
-              <span className="font-normal tracking-normal normal-case">
-                {weekHint}
-              </span>
-            ) : null}
-          </p>
+          <GoalHeading
+            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
+            label={t('weeklyGoal')}
+            hint={weekHint}
+            icon={
+              <svg
+                className="h-3.5 w-3.5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            }
+          />
           <p className="metric text-3xl font-semibold whitespace-nowrap">
             {goal.unit === 'time'
               ? formatHours(weekSeconds)
@@ -764,27 +807,26 @@ export function StatsCards({
 
       {/* Monthly Goal */}
       <div className="card min-w-0 p-2 md:p-4">
-        <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
-          <svg
-            className="hidden h-3.5 w-3.5 md:block"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-          <span className="truncate">{t('monthlyGoal')}</span>
-          {monthHint ? (
-            <span className="truncate font-normal tracking-normal normal-case">
-              {monthHint}
-            </span>
-          ) : null}
-        </p>
+        <GoalHeading
+          className="eyebrow mb-1 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs"
+          label={t('monthlyGoal')}
+          hint={monthHint}
+          icon={
+            <svg
+              className="hidden h-3.5 w-3.5 shrink-0 md:block"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+          }
+        />
         <p className="metric text-base font-semibold whitespace-nowrap md:text-2xl lg:text-3xl">
           {goal.unit === 'time'
             ? formatHours(monthSeconds)
@@ -836,27 +878,26 @@ export function StatsCards({
 
       {/* Weekly Goal */}
       <div className="card min-w-0 p-2 md:p-4">
-        <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
-          <svg
-            className="hidden h-3.5 w-3.5 md:block"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span className="truncate">{t('weeklyGoal')}</span>
-          {weekHint ? (
-            <span className="truncate font-normal tracking-normal normal-case">
-              {weekHint}
-            </span>
-          ) : null}
-        </p>
+        <GoalHeading
+          className="eyebrow mb-1 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs"
+          label={t('weeklyGoal')}
+          hint={weekHint}
+          icon={
+            <svg
+              className="hidden h-3.5 w-3.5 shrink-0 md:block"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          }
+        />
         <p className="metric text-base font-semibold whitespace-nowrap md:text-2xl lg:text-3xl">
           {goal.unit === 'time'
             ? formatHours(weekSeconds)

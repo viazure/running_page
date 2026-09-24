@@ -116,15 +116,26 @@ function DashboardProContent({
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
   const [mapOutOfView, setMapOutOfView] = useState(false);
-  const pinRouteMap = page === 'home' && allYears && mapOutOfView;
+  const [mapFrame, setMapFrame] = useState<{
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const pinRouteMap =
+    page === 'home' && allYears && mapOutOfView && mapFrame != null;
   if ((page !== 'home' || !allYears) && mapOutOfView) setMapOutOfView(false);
 
   useEffect(() => {
     if (page !== 'home' || !allYears) return;
     const slot = mapSlotRef.current;
     if (!slot) return;
+    const readFrame = () => {
+      const rect = slot.getBoundingClientRect();
+      setMapFrame({ left: rect.left, width: rect.width, height: rect.height });
+    };
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!entry.isIntersecting) readFrame();
         setMapOutOfView(!entry.isIntersecting);
       },
       { rootMargin: '-64px 0px 0px 0px', threshold: 0 }
@@ -132,6 +143,23 @@ function DashboardProContent({
     observer.observe(slot);
     return () => observer.disconnect();
   }, [page, allYears]);
+
+  useEffect(() => {
+    if (!pinRouteMap) return;
+    const slot = mapSlotRef.current;
+    if (!slot) return;
+    const readFrame = () => {
+      const rect = slot.getBoundingClientRect();
+      setMapFrame({ left: rect.left, width: rect.width, height: rect.height });
+    };
+    const resizeObserver = new ResizeObserver(readFrame);
+    resizeObserver.observe(slot);
+    window.addEventListener('resize', readFrame);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', readFrame);
+    };
+  }, [pinRouteMap]);
 
   if (page === 'tracks') {
     return (
@@ -182,9 +210,14 @@ function DashboardProContent({
       }
     >
       <div
-        className={
-          pinRouteMap
-            ? 'fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 h-[180px] lg:inset-x-auto lg:top-20 lg:right-6 lg:bottom-auto lg:h-[240px] lg:w-96'
+        className={pinRouteMap ? 'fixed top-20 z-40' : undefined}
+        style={
+          pinRouteMap && mapFrame
+            ? {
+                left: mapFrame.left,
+                width: mapFrame.width,
+                height: mapFrame.height,
+              }
             : undefined
         }
       >
