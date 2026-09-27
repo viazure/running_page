@@ -327,6 +327,17 @@ def get_downloaded_ids(folder):
     return [i.split(".")[0] for i in os.listdir(folder) if not i.startswith(".")]
 
 
+def _parse_garmin_start_time_gmt(start_time_gmt: str) -> dt.datetime:
+    # Garmin CN often returns "2024-12-30T22:49:38.0" (no Z). Upstream
+    # `[:-1] + "+00:00"` strips the fractional digit and yields "...38.+00:00".
+    s = (start_time_gmt or "").strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    elif len(s) < 6 or s[-6] not in "+-":
+        s = s + "+00:00"
+    return dt.datetime.fromisoformat(s)
+
+
 def get_garmin_summary_infos(activity_summary, activity_id):
     garmin_summary_infos = {}
     try:
@@ -334,9 +345,7 @@ def get_garmin_summary_infos(activity_summary, activity_id):
         garmin_summary_infos["distance"] = summary_dto.get("distance")
         garmin_summary_infos["average_hr"] = summary_dto.get("averageHR")
         garmin_summary_infos["average_speed"] = summary_dto.get("averageSpeed")
-        start_time = dt.datetime.fromisoformat(
-            summary_dto.get("startTimeGMT")[:-1] + "+00:00"  # noqa: FURB162
-        )
+        start_time = _parse_garmin_start_time_gmt(summary_dto.get("startTimeGMT"))
         duration_second = summary_dto.get("duration")
         end_time = start_time + dt.timedelta(seconds=duration_second)
         garmin_summary_infos["start_time"] = start_time.isoformat()
@@ -444,8 +453,7 @@ if __name__ == "__main__":
         # points; merging those IDs would skip FIT and leave fake indoor
         # routes (upstream #1111 / #1134).
 
-    loop = asyncio.get_event_loop()
-    future = asyncio.ensure_future(
+    new_ids, id2title = asyncio.run(
         download_new_activities(
             secret_string,
             auth_domain,
@@ -455,8 +463,6 @@ if __name__ == "__main__":
             file_type,
         )
     )
-    loop.run_until_complete(future)
-    new_ids, id2title = future.result()
     # Import FIT only. Re-reading Garmin CN GPX first would wipe GPS: those
     # files often have distance/HR extensions but no track points.
     make_activities_file(
