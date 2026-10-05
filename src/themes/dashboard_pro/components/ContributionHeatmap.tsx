@@ -27,33 +27,43 @@ function toDisplayType(type: string): 'Run' | 'Ride' | 'Hike' | 'Training' {
   return 'Training';
 }
 
+const EMPTY_CELL = 'var(--color-sunken)';
+
+function accentScale(accent: string): string[] {
+  return [
+    `color-mix(in srgb, ${accent} 25%, var(--color-sunken))`,
+    `color-mix(in srgb, ${accent} 50%, var(--color-sunken))`,
+    `color-mix(in srgb, ${accent} 78%, var(--color-sunken))`,
+    accent,
+  ];
+}
+
 const TYPE_PALETTES: Record<string, string[]> = {
-  // Level 1 stays off pure white so the lightest cells do not outshine the
-  // hottest ones on the dark background.
-  Run: ['#f0c6b2', '#e79b7a', '#e8663d', '#c2502e'],
-  Ride: ['#cbdbf6', '#8fadea', '#4f7ce0', '#3a62ba'],
-  Hike: ['#bbf7d0', '#4ade80', '#22c55e', '#16a34a'],
-  Training: ['#fce7f3', '#f9a8d4', '#ec4899', '#db2777'],
+  Run: accentScale('var(--color-run)'),
+  Ride: accentScale('#4f7ce0'),
+  Hike: accentScale('#22c55e'),
+  Training: accentScale('#ec4899'),
+};
+
+const FILTER_PALETTES: Record<string, string[]> = {
+  all: accentScale('var(--color-accent)'),
+  Run: TYPE_PALETTES.Run,
+  Ride: TYPE_PALETTES.Ride,
+  Hike: TYPE_PALETTES.Hike,
+  Gym: accentScale('#c026d3'),
 };
 
 // Color for single-filter modes (intensity by global max)
 function getColor(distance: number, max: number, filter: SportFilter): string {
-  if (distance === 0) return 'var(--color-sunken)';
+  if (distance === 0) return EMPTY_CELL;
   const level = Math.ceil(Math.min(distance / max, 1) * 4);
-  const colors: Record<string, string[]> = {
-    all: ['#d6cdf0', '#ac9ce2', '#7b61d9', '#5f47b0'],
-    Run: TYPE_PALETTES.Run,
-    Ride: TYPE_PALETTES.Ride,
-    Hike: TYPE_PALETTES.Hike,
-    Gym: ['#f5d0fe', '#d946ef', '#c026d3', '#a21caf'],
-  };
-  const palette = colors[filter] ?? colors.all;
+  const palette = FILTER_PALETTES[filter] ?? FILTER_PALETTES.all;
   return palette[level - 1] ?? palette[0];
 }
 
 // Color for "all" mode: ratio is per-type (dayDist / typeMax)
 function getColorAll(typeRatio: number, displayType: string): string {
-  if (typeRatio === 0) return 'var(--color-sunken)';
+  if (typeRatio === 0) return EMPTY_CELL;
   const level = Math.ceil(Math.min(typeRatio, 1) * 4);
   const palette = TYPE_PALETTES[displayType] ?? TYPE_PALETTES.Training;
   return palette[level - 1] ?? palette[0];
@@ -84,6 +94,25 @@ function dominantDisplayType(
 
 function toSelectedYear(year: number | null): number | 'all' {
   return year === null ? 'all' : year;
+}
+
+function DistanceStatIcon() {
+  return (
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="6" cy="19" r="3" />
+      <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+      <circle cx="18" cy="5" r="3" />
+    </svg>
+  );
 }
 
 export function ContributionHeatmap({
@@ -346,7 +375,7 @@ export function ContributionHeatmap({
   }, [yearData, selectedYear]);
 
   return (
-    <div ref={captureRef} className="card overflow-x-auto p-5">
+    <div ref={captureRef} className="card min-w-0 overflow-hidden p-5">
       <style>{`
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -472,18 +501,16 @@ export function ContributionHeatmap({
                 </span>
               </div>
             )}
-            <div className="ml-5 flex">
+            <div className="flex w-full min-w-0">
+              <div className="w-3 shrink-0" aria-hidden />
               {monthPositions.map((m, i) => {
                 const nextStart = monthPositions[i + 1]?.weekIdx ?? grid.length;
                 const span = nextStart - m.weekIdx;
                 return (
                   <div
                     key={i}
-                    className="text-xs text-[var(--color-muted)]"
-                    style={{
-                      width: `${span * 14}px`,
-                      minWidth: `${span * 14}px`,
-                    }}
+                    className="min-w-0 truncate text-[10px] text-[var(--color-muted)] sm:text-xs"
+                    style={{ flex: `${span} 1 0` }}
                   >
                     {locale === 'zh'
                       ? `${m.label}月`
@@ -505,23 +532,26 @@ export function ContributionHeatmap({
                 );
               })}
             </div>
-            <div className="mt-1 flex gap-[3px]">
-              <div className="mr-1 flex flex-col gap-[3px]">
+            <div className="mt-1 flex w-full min-w-0 gap-px sm:gap-[2px] md:gap-[3px]">
+              <div className="flex w-3 shrink-0 flex-col gap-px sm:gap-[2px] md:gap-[3px]">
                 {dayLabels.map((d, i) => (
                   <div
                     key={i}
-                    className="flex h-3 w-3 items-center justify-center text-[10px] text-[var(--color-muted)]"
+                    className="flex min-h-0 flex-1 items-center justify-center text-[8px] text-[var(--color-muted)] sm:text-[10px]"
                   >
                     {d}
                   </div>
                 ))}
               </div>
               {grid.map((week, wi) => (
-                <div key={wi} className="flex flex-col gap-[3px]">
+                <div
+                  key={wi}
+                  className="flex min-w-0 flex-1 flex-col gap-px sm:gap-[2px] md:gap-[3px]"
+                >
                   {week.map((day, di) => {
                     const bgColor =
                       day.distance === 0
-                        ? 'var(--color-border)'
+                        ? EMPTY_CELL
                         : isAll
                           ? getColorAll(day.typeRatio, day.domType)
                           : getColor(day.distance, max, filter);
@@ -536,7 +566,7 @@ export function ContributionHeatmap({
                     return (
                       <div
                         key={di}
-                        className="h-3 w-3 cursor-pointer rounded-sm transition-colors hover:ring-1 hover:ring-[var(--color-muted)]"
+                        className="aspect-square w-full min-h-0 cursor-pointer rounded-[1px] transition-colors hover:ring-1 hover:ring-[var(--color-muted)] sm:rounded-sm"
                         style={{ backgroundColor: bgColor }}
                         title={titleText}
                         onClick={() => {
@@ -639,19 +669,7 @@ export function ContributionHeatmap({
               </span>
               {!isGym && (
                 <span className="metric flex items-center gap-1">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
+                  <DistanceStatIcon />
                   {formatDistance(allStats.distance)} km
                 </span>
               )}
@@ -693,19 +711,7 @@ export function ContributionHeatmap({
               </span>
               {!isGym && (
                 <span className="metric flex items-center gap-1">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
+                  <DistanceStatIcon />
                   {formatDistance(yearData[0].stats.distance)} km
                 </span>
               )}
