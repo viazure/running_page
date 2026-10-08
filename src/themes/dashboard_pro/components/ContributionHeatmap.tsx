@@ -566,7 +566,7 @@ export function ContributionHeatmap({
                     return (
                       <div
                         key={di}
-                        className="aspect-square w-full min-h-0 cursor-pointer rounded-[1px] transition-colors hover:ring-1 hover:ring-[var(--color-muted)] sm:rounded-sm"
+                        className="aspect-square min-h-0 w-full cursor-pointer rounded-[1px] transition-colors hover:ring-1 hover:ring-[var(--color-muted)] sm:rounded-sm"
                         style={{ backgroundColor: bgColor }}
                         title={titleText}
                         onClick={() => {

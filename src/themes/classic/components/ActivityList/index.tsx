@@ -723,11 +723,16 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
     };
   }, [data, showChart]);
 
+  // Embed chart only: absolute +10 over-pads daily month bars (e.g. 16 km →
+  // axis 26). Use a small relative headroom so the tallest bar nearly fills.
   const yAxisMaxOnly = useMemo(() => {
     if (!showChart) return 0;
-    return Math.ceil(
-      Math.max(...data.map((d) => parseFloat(d.distance)), 0) + 10
+    const dataMax = Math.max(
+      ...data.map((d) => parseFloat(d.distance) || 0),
+      0
     );
+    if (dataMax <= 0) return 1;
+    return Math.ceil(dataMax * 1.05);
   }, [data, showChart]);
 
   const avgDistance =

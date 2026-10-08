@@ -156,22 +156,30 @@
 
 .statHero {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.15;
+  /* Match dashboard_pro `@utility metric` — tabular sans, not code mono.
+     Sans reads larger than the old mono at the same size, so keep this a
+     step under 1.5rem / 700 to avoid a cramped card. */
+  font-family: inherit;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+  letter-spacing: -0.01em;
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--color-summary-accent, var(--color-primary));
 }
 
 .statHeroUnit {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-summary-chip-fg, var(--color-run-table-thead));
 }
 
 .statMeta {
-  margin: 4px 0 8px;
-  font-size: 12px;
+  margin: 4px 0 10px;
+  font-size: 11px;
   color: var(--color-summary-chip-fg, var(--color-run-table-thead));
 }
 
@@ -183,7 +191,7 @@
 .statGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px 10px;
+  gap: 8px 12px;
   margin-bottom: 0;
 }
 
@@ -191,7 +199,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
 }
 
 .statLabel {
@@ -229,9 +237,15 @@
 }
 
 .statValue {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+  letter-spacing: -0.01em;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.25;
   color: var(--color-summary-fg, var(--color-primary));
 }
 

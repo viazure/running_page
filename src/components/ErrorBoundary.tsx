@@ -1,5 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { resetActivityData } from '../hooks/useActivities';
+import {
+  isChunkLoadError,
+  reloadOnceForChunkError,
+} from '../utils/chunkLoadRecovery';
 
 interface Props {
   children: ReactNode;
@@ -7,30 +11,40 @@ interface Props {
 interface State {
   hasError: boolean;
   message: string;
+  isChunkError: boolean;
 }
 
 /**
  * Catches render-time errors thrown by descendants (e.g. the Suspense data
  * source throwing a fetch error instead of a promise) so a failed
  * activities.json load degrades gracefully instead of blanking the page.
+ * Also recovers from stale lazy chunks after a GitHub Pages redeploy.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, message: '' };
+  state: State = { hasError: false, message: '', isChunkError: false };
 
   static getDerivedStateFromError(error: unknown): State {
     return {
       hasError: true,
       message: error instanceof Error ? error.message : String(error),
+      isChunkError: isChunkLoadError(error),
     };
   }
 
   componentDidCatch(error: unknown, _info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error);
+    if (isChunkLoadError(error)) {
+      reloadOnceForChunkError();
+    }
   }
 
   private handleRetry = () => {
+    if (this.state.isChunkError) {
+      window.location.reload();
+      return;
+    }
     resetActivityData();
-    this.setState({ hasError: false, message: '' });
+    this.setState({ hasError: false, message: '', isChunkError: false });
   };
 
   render() {
@@ -47,7 +61,9 @@ export class ErrorBoundary extends Component<Props, State> {
             className="text-base font-medium"
             style={{ color: 'var(--color-text, #e6edf3)' }}
           >
-            Failed to load activities
+            {this.state.isChunkError
+              ? 'Site updated — please refresh'
+              : 'Failed to load activities'}
           </p>
           <p className="text-xs">{this.state.message}</p>
           <button
@@ -59,7 +75,7 @@ export class ErrorBoundary extends Component<Props, State> {
               color: 'var(--color-on-accent, #ffffff)',
             }}
           >
-            Retry
+            {this.state.isChunkError ? 'Refresh' : 'Retry'}
           </button>
         </div>
       );
