@@ -390,12 +390,12 @@ def _lap_entry(lap: dict, idx: int, per_leg: bool) -> dict:
         "vertical_ratio": _r(_positive(lap.get("avg_vertical_ratio")), 1),
         "temperature": _r(_num(lap.get("avg_temperature")), 0),
         "calories": _r(_num(lap.get("total_calories")), 0),
-        "intensity": lap.get("intensity")
-        if isinstance(lap.get("intensity"), str)
-        else None,
-        "trigger": lap.get("lap_trigger")
-        if isinstance(lap.get("lap_trigger"), str)
-        else None,
+        "intensity": (
+            lap.get("intensity") if isinstance(lap.get("intensity"), str) else None
+        ),
+        "trigger": (
+            lap.get("lap_trigger") if isinstance(lap.get("lap_trigger"), str) else None
+        ),
     }
 
 
@@ -408,12 +408,14 @@ def _zones(msgs: dict) -> dict:
         if isinstance(hr_t, list) and any(_num(x) for x in hr_t):
             out["hr"] = {
                 "seconds": [_r(_num(x) or 0, 0) for x in hr_t],
-                "high_boundary": [_num(x) for x in hr_b]
-                if isinstance(hr_b, list)
-                else None,
-                "calc_type": z.get("hr_calc_type")
-                if isinstance(z.get("hr_calc_type"), str)
-                else None,
+                "high_boundary": (
+                    [_num(x) for x in hr_b] if isinstance(hr_b, list) else None
+                ),
+                "calc_type": (
+                    z.get("hr_calc_type")
+                    if isinstance(z.get("hr_calc_type"), str)
+                    else None
+                ),
                 "max_hr": _num(z.get("max_heart_rate")),
                 "resting_hr": _num(z.get("resting_heart_rate")),
                 "threshold_hr": _num(z.get("threshold_heart_rate")),
@@ -422,9 +424,9 @@ def _zones(msgs: dict) -> dict:
         if isinstance(p_t, list) and any(_num(x) for x in p_t):
             out["power"] = {
                 "seconds": [_r(_num(x) or 0, 0) for x in p_t],
-                "high_boundary": [_num(x) for x in p_b]
-                if isinstance(p_b, list)
-                else None,
+                "high_boundary": (
+                    [_num(x) for x in p_b] if isinstance(p_b, list) else None
+                ),
                 "ftp": _num(z.get("functional_threshold_power")),
             }
         break
@@ -481,9 +483,11 @@ def _summary(session: dict, recs: list[dict], per_leg: bool, msgs: dict) -> dict
             "vo2max": _r(_vo2max_from_garmin_140(msgs), 1),
             "temperature_min": _r(_num(session.get("min_temperature")), 0),
             "temperature_max": _r(_num(session.get("max_temperature")), 0),
-            "steps": _r(_num(session.get("total_strides")) * (2 if per_leg else 1), 0)
-            if _num(session.get("total_strides")) and per_leg
-            else None,
+            "steps": (
+                _r(_num(session.get("total_strides")) * (2 if per_leg else 1), 0)
+                if _num(session.get("total_strides")) and per_leg
+                else None
+            ),
             "rpe": _r((_num(session.get("workout_rpe")) or 0) / 10, 0) or None,
             "feel": _r(_num(session.get("workout_feel")), 0),
         }
@@ -647,18 +651,24 @@ def parse_gpx(text: str | bytes) -> tuple[list[dict], str | None]:
                     "pos": (lat, lon) if lat is not None and lon is not None else None,
                     "dist": None,
                     "alt": _num_s(_child_text(p, "ele")),
-                    "hr": _num_s(_find_desc(ext, ("hr", "heartrate")))
-                    if ext is not None
-                    else None,
-                    "cad": _num_s(_find_desc(ext, ("cad", "cadence", "runcadence")))
-                    if ext is not None
-                    else None,
-                    "speed": _num_s(_find_desc(ext, ("speed",)))
-                    if ext is not None
-                    else None,
-                    "power": _num_s(_find_desc(ext, ("power", "watts")))
-                    if ext is not None
-                    else None,
+                    "hr": (
+                        _num_s(_find_desc(ext, ("hr", "heartrate")))
+                        if ext is not None
+                        else None
+                    ),
+                    "cad": (
+                        _num_s(_find_desc(ext, ("cad", "cadence", "runcadence")))
+                        if ext is not None
+                        else None
+                    ),
+                    "speed": (
+                        _num_s(_find_desc(ext, ("speed",))) if ext is not None else None
+                    ),
+                    "power": (
+                        _num_s(_find_desc(ext, ("power", "watts")))
+                        if ext is not None
+                        else None
+                    ),
                 }
             )
     return pts, sport
@@ -678,8 +688,14 @@ def parse_tcx(text: str | bytes) -> tuple[list[dict], str | None]:
             if _local(p.tag) != "trackpoint":
                 continue
             pos = _child(p, "position")
-            lat = _num_s(_child_text(pos, "latitudedegrees")) if pos is not None else None
-            lon = _num_s(_child_text(pos, "longitudedegrees")) if pos is not None else None
+            lat = (
+                _num_s(_child_text(pos, "latitudedegrees")) if pos is not None else None
+            )
+            lon = (
+                _num_s(_child_text(pos, "longitudedegrees"))
+                if pos is not None
+                else None
+            )
             hr_el = _child(p, "heartratebpm")
             ext = _child(p, "extensions")
             cad = _num_s(_child_text(p, "cadence"))
@@ -691,16 +707,20 @@ def parse_tcx(text: str | bytes) -> tuple[list[dict], str | None]:
                     "pos": (lat, lon) if lat is not None and lon is not None else None,
                     "dist": _num_s(_child_text(p, "distancemeters")),
                     "alt": _num_s(_child_text(p, "altitudemeters")),
-                    "hr": _num_s(_child_text(hr_el, "value"))
-                    if hr_el is not None
-                    else None,
+                    "hr": (
+                        _num_s(_child_text(hr_el, "value"))
+                        if hr_el is not None
+                        else None
+                    ),
                     "cad": cad,
-                    "speed": _num_s(_find_desc(ext, ("speed",)))
-                    if ext is not None
-                    else None,
-                    "power": _num_s(_find_desc(ext, ("watts", "power")))
-                    if ext is not None
-                    else None,
+                    "speed": (
+                        _num_s(_find_desc(ext, ("speed",))) if ext is not None else None
+                    ),
+                    "power": (
+                        _num_s(_find_desc(ext, ("watts", "power")))
+                        if ext is not None
+                        else None
+                    ),
                 }
             )
     return pts, sport
@@ -715,7 +735,9 @@ def _num_s(s: Any) -> float | None:
     return _num(s)
 
 
-def _track_records(points: list[dict], per_leg: bool) -> tuple[list[dict], float, float]:
+def _track_records(
+    points: list[dict], per_leg: bool
+) -> tuple[list[dict], float, float]:
     """Returns (records, start_ts, elapsed_s). Distance: TCX DistanceMeters when
     present on most points, else haversine along the positions."""
     pts = sorted((p for p in points if p["ts"] is not None), key=lambda p: p["ts"])
@@ -787,7 +809,9 @@ _EMPTY_SUMMARY_EXTRA = (
 )
 
 
-def analyze_track(points: list[dict], sport_raw: str | None, source: str) -> dict | None:
+def analyze_track(
+    points: list[dict], sport_raw: str | None, source: str
+) -> dict | None:
     sport = _norm_sport(sport_raw)
     per_leg = sport in STEP_SPORTS
     recs, start_ts, elapsed = _track_records(points, per_leg)
@@ -994,9 +1018,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         help=f"TCX folder (repeatable, default {DEFAULT_TCX_DIR})",
     )
-    p.add_argument(
-        "--fit-only", action="store_true", help="ignore GPX/TCX folders"
-    )
+    p.add_argument("--fit-only", action="store_true", help="ignore GPX/TCX folders")
     p.add_argument(
         "--activities",
         default=DEFAULT_ACTIVITIES,

@@ -270,7 +270,9 @@ def _gpx(n=601, step_s=1, step_m=4.0, pause_at=None, pause_s=0, hr=True):
     for i in range(n):
         if pause_at is not None and i == pause_at:
             t += pause_s
-        ts = __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime(t))
+        ts = __import__("time").strftime(
+            "%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime(t)
+        )
         ext = (
             f"<extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>{140 + i % 20}</gpxtpx:hr>"
             "</gpxtpx:TrackPointExtension></extensions>"
@@ -294,7 +296,9 @@ def _tcx(n=601, step_m=4.0, cadence=None):
     pts = []
     t = 1_700_000_000
     for i in range(n):
-        ts = __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime(t + i))
+        ts = __import__("time").strftime(
+            "%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime(t + i)
+        )
         cad = f"<Cadence>{cadence}</Cadence>" if cadence else ""
         pts.append(
             f"<Trackpoint><Time>{ts}</Time><DistanceMeters>{i * step_m}</DistanceMeters>"
