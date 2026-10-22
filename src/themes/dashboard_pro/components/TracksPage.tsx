@@ -543,6 +543,7 @@ function TrackMap({
     const syncFullscreen = () => {
       const next = isMapFullscreen(mapInstance);
       setIsFullscreen(next);
+      requestAnimationFrame(() => mapInstance.resize());
       if (!next && chaseRef.current.isAnimating()) {
         chaseRef.current.stop({ silent: true });
         setChaseRunId(null);

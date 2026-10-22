@@ -564,6 +564,7 @@ export function RouteMap({
       const map = mapRef.current;
       const next = isMapFullscreen(map);
       setIsFullscreen(next);
+      requestAnimationFrame(() => mapRef.current?.resize());
       if (!next && chaseRef.current.isAnimating()) {
         chaseRef.current.stop({ silent: true });
         setChaseRunId(null);
