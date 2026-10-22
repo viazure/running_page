@@ -15,7 +15,11 @@ export function calculateBearing(start: Coordinate, end: Coordinate): number {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-/** Terrain DEM + extruded buildings for chase camera. No-op if style lacks sources. */
+/**
+ * Terrain DEM + extruded buildings. Only for Mapbox streets styles that expose
+ * the `composite` source. CARTO / blank styles skip this so a missing DEM
+ * token cannot black out the canvas; pitch/orbit still work.
+ */
 export function injectMapTerrain(
   m: mapboxgl.Map,
   isDark: boolean,
@@ -23,6 +27,7 @@ export function injectMapTerrain(
 ): void {
   if (!enabled) return;
   try {
+    if (!m.getSource('composite')) return;
     if (!m.getSource('mapbox-dem')) {
       m.addSource('mapbox-dem', {
         type: 'raster-dem',
@@ -34,7 +39,7 @@ export function injectMapTerrain(
     if (!m.getTerrain()) {
       m.setTerrain({ source: 'mapbox-dem', exaggeration: 1 });
     }
-    if (!m.getLayer('3d-buildings') && m.getSource('composite')) {
+    if (!m.getLayer('3d-buildings')) {
       m.addLayer({
         id: '3d-buildings',
         source: 'composite',
