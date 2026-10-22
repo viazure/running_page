@@ -1,5 +1,6 @@
 """Synthetic checks for run_page/gen_splits.py (no FIT file needed)."""
 
+import json
 import os
 import re
 import sys
@@ -9,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "run_page"))
 from gen_splits import (  # noqa: E402
     FIT_EPOCH_S,
     MAX_CHART_POINTS,
+    PACE_ZONE_LTP_FACTORS,
     _hr_zones_from_records,
     _pace_zones_from_records,
     _pref_elev,
@@ -296,6 +298,73 @@ def test_pace_zones_from_session_time_in_speed_zone():
     z = analyze_messages(m)["zones"]["pace"]
     assert z["seconds"] == [10, 20, 30, 40, 50]
     assert z["calc_type"] == "speed_zone"
+
+
+def _pace_fmt(sec: float) -> str:
+    s = round(sec)
+    return f"{s // 60}'{s % 60:02d}\""
+
+
+def _chart_pace_zones(pace, t, vo2):
+    """Mirrors src/core/splits.ts paceZonesFromChart (time-weighted)."""
+    ltp = _threshold_pace_from_vo2max(vo2)
+    bounds = [ltp * f for f in PACE_ZONE_LTP_FACTORS]
+    secs = [0.0] * (len(bounds) + 1)
+    for i, p in enumerate(pace):
+        if p is None or p <= 0:
+            continue
+        dt = t[i + 1] - t[i] if i + 1 < len(t) else (t[i] - t[i - 1] if i else 0)
+        if dt <= 0 or dt > 120:
+            continue
+        z = len(bounds)
+        for b_i, b in enumerate(bounds):
+            if p > b:
+                z = b_i
+                break
+        secs[z] += dt
+    return [round(s) for s in secs], bounds, ltp
+
+
+def test_published_run_pace_zones_sum_to_timer_not_point_count():
+    """Production popup (2026-10-22 5.0 km / 34:11) counted 101 chart points
+    as 1:41 (0:02+0:25+0:48+0:07+0:08+0:11). After the fix, zone times must
+    sum to moving/timer duration (~34 min).
+    """
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "tests",
+        "fixtures",
+        "run_1792623245000_chart.json",
+    )
+    with open(path, encoding="utf-8") as f:
+        chart = json.load(f)
+    pace, t = chart["pace"], chart["t"]
+    assert len(pace) == 101 and len(t) == 101
+
+    # Legacy bug: one "second" per point, inverted 5:00/6:00/... bins.
+    old_bounds = [300, 360, 420, 480, 540]
+    old = [0] * 6
+    for p in pace:
+        z = 5
+        for i, b in enumerate(old_bounds):
+            if p < b:
+                z = i
+                break
+        old[z] += 1
+    assert old == [2, 25, 48, 7, 8, 11]
+    assert sum(old) == 101  # 1:41, not 34:11
+
+    secs, bounds, ltp = _chart_pace_zones(pace, t, chart["vo2max"])
+    total = sum(secs)
+    # Acceptance: ~timer duration, not the 101-point count.
+    assert abs(total - chart["time"]) <= 2
+    assert 34 * 60 - 5 <= total <= 34 * 60 + 20
+    assert total != 101
+    # Bounds are s/km that format as pace strings, not raw 300/360 labels.
+    labels = [_pace_fmt(b) for b in bounds]
+    assert all("'" in x for x in labels)
+    assert "300" not in "".join(labels)
+    assert ltp is not None and 4 * 60 < ltp < 5 * 60  # ~4'34"
 
 
 def test_weather_temp_not_watch_sensor():

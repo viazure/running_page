@@ -145,3 +145,73 @@ export function formatClock(sec: N | undefined): string {
   const r = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${r}` : `${m}:${r}`;
 }
+
+/** Garmin-like 5 zones from threshold pace (s/km). Faster → higher zone. */
+const PACE_LTP_FACTORS = [1.29, 1.14, 1.06, 0.99];
+const PACE_FIXED_BOUNDS = [540, 480, 420, 360];
+
+export function thresholdPaceFromVo2max(vo2: N | undefined): number | null {
+  if (vo2 == null || !Number.isFinite(vo2) || vo2 < 20 || vo2 > 95) return null;
+  const vMMin = (vo2 - 3.5) / 0.2;
+  if (vMMin <= 0) return null;
+  const vLtp = (vMMin / 60) * 0.88;
+  if (vLtp <= 0) return null;
+  return 1000 / vLtp;
+}
+
+/**
+ * Time-weighted pace zones from the downsampled chart.
+ * Must use `t` deltas — counting points as seconds is the production bug
+ * (101 points → 1:41 instead of ~34:11).
+ */
+export function paceZonesFromChart(
+  pace: (number | null)[] | undefined,
+  t?: number[],
+  thresholdPace?: number | null
+): ZoneInfo | null {
+  if (!pace || !t || t.length !== pace.length || pace.length < 2) return null;
+  const ltp =
+    thresholdPace != null && Number.isFinite(thresholdPace) && thresholdPace > 0
+      ? thresholdPace
+      : null;
+  const bounds = ltp ? PACE_LTP_FACTORS.map((f) => ltp * f) : PACE_FIXED_BOUNDS;
+  const secs = Array.from({ length: bounds.length + 1 }, () => 0);
+  for (let i = 0; i < pace.length; i++) {
+    const p = pace[i];
+    if (p == null || !Number.isFinite(p) || p <= 0) continue;
+    const dt = i + 1 < t.length ? t[i + 1] - t[i] : i > 0 ? t[i] - t[i - 1] : 0;
+    if (dt <= 0 || dt > 120) continue;
+    let z = bounds.length;
+    for (let b = 0; b < bounds.length; b++) {
+      if (p > bounds[b]) {
+        z = b;
+        break;
+      }
+    }
+    secs[z] += dt;
+  }
+  const total = secs.reduce((a, b) => a + b, 0);
+  if (total < 30) return null;
+  return {
+    seconds: secs.map((s) => Math.round(s)),
+    high_boundary: [...bounds, null],
+    calc_type: ltp
+      ? 'percent_threshold_pace_estimated'
+      : 'fixed_pace_estimated',
+    threshold_pace: ltp,
+  };
+}
+
+/** Pace bounds are s/km; show 5'00" not raw 300. */
+export function formatPaceZoneRange(
+  lo: number | null | undefined,
+  hi: number | null | undefined,
+  i: number
+): string {
+  const loP = formatPaceSeconds(lo);
+  const hiP = formatPaceSeconds(hi);
+  if (i === 0) return hiP !== '--' ? `> ${hiP}` : '';
+  if (hiP !== '--' && loP !== '--') return `${hiP}–${loP}`;
+  if (loP !== '--') return `< ${loP}`;
+  return '';
+}

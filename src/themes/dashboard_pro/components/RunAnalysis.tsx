@@ -12,8 +12,11 @@ import { useLocale } from '@/hooks/useLocale';
 import {
   formatClock,
   formatPaceSeconds,
+  formatPaceZoneRange,
   loadSplits,
   loadSplitsIndex,
+  paceZonesFromChart,
+  thresholdPaceFromVo2max,
   type RunChart,
   type RunSplits,
   type SplitRow,
@@ -115,6 +118,16 @@ function hrZoneIndex(
 }
 
 /** stride (m) from pace (s/km) and cadence (spm). */
+/** Prefer the chart series max when summary cadence_max is a sensor spike. */
+function cadenceChipMax(summaryMax: N, series?: (number | null)[]): N {
+  const vals = (series ?? []).filter((v): v is number => has(v));
+  const seriesMax = vals.length ? Math.max(...vals) : null;
+  if (has(summaryMax) && has(seriesMax) && summaryMax > seriesMax * 1.15) {
+    return Math.round(seriesMax);
+  }
+  return summaryMax;
+}
+
 function strideFrom(pace: N, cad: N): number | null {
   if (!has(pace) || !has(cad) || pace <= 0 || cad <= 0) return null;
   return 60000 / (pace * cad);
@@ -358,21 +371,13 @@ function TeScale({
 }
 
 // ---------------------------------------------------------------- zones
-/** HR/power: higher number = higher zone. Pace (s/km): lower number = faster = higher zone. */
+/** HR/power: higher number = higher zone. */
 function formatZoneRange(
   unit: string,
   lo: number | null | undefined,
   hi: number | null | undefined,
   i: number
 ): string {
-  if (unit === '/km') {
-    const loP = has(lo) ? formatPaceSeconds(lo) : null;
-    const hiP = has(hi) ? formatPaceSeconds(hi) : null;
-    if (i === 0) return hiP ? `> ${hiP}` : '';
-    if (hiP && loP) return `${hiP}–${loP}`;
-    if (loP) return `< ${loP}`;
-    return '';
-  }
   if (i === 0) return has(hi) ? `< ${Math.round(hi)}` : '';
   if (!has(lo)) return '';
   if (has(hi) && hi < 4000) {
@@ -406,7 +411,10 @@ function ZoneTable({
     .map((sec, i) => {
       const lo = i === 0 ? null : hb[i - 1];
       const hi = hb[i];
-      const range = formatZoneRange(unit, lo, hi, i);
+      const range =
+        unit === '/km'
+          ? formatPaceZoneRange(lo, hi, i)
+          : formatZoneRange(unit, lo, hi, i);
       const name = labels?.[i] ?? (i === 0 ? '<Z1' : `Z${i}`);
       return {
         i,
@@ -462,7 +470,7 @@ function ZoneTable({
               <p className="font-medium text-[var(--color-text)]">{r.name}</p>
               {r.range ? (
                 <p className="truncate text-[10px] text-[var(--color-muted)]">
-                  {r.range} {unit}
+                  {unit === '/km' ? r.range : `${r.range} ${unit}`}
                 </p>
               ) : null}
             </div>
@@ -486,55 +494,6 @@ function ZoneTable({
       </div>
     </div>
   );
-}
-
-/** Garmin-like 5 zones from threshold pace (s/km). Faster → higher zone. */
-const PACE_LTP_FACTORS = [1.29, 1.14, 1.06, 0.99];
-const PACE_FIXED_BOUNDS = [540, 480, 420, 360];
-
-function thresholdPaceFromVo2max(vo2: N): number | null {
-  if (!has(vo2) || vo2 < 20 || vo2 > 95) return null;
-  const vMMin = (vo2 - 3.5) / 0.2;
-  if (vMMin <= 0) return null;
-  const vLtp = (vMMin / 60) * 0.88;
-  if (vLtp <= 0) return null;
-  return 1000 / vLtp;
-}
-
-/** Time-weighted pace zones from the chart when FIT JSON has none. */
-function paceZonesFromChart(
-  pace: (number | null)[] | undefined,
-  t?: number[],
-  thresholdPace?: number | null
-): ZoneInfo | null {
-  if (!pace || !t || t.length !== pace.length || pace.length < 2) return null;
-  const ltp = has(thresholdPace) && thresholdPace > 0 ? thresholdPace : null;
-  const bounds = ltp ? PACE_LTP_FACTORS.map((f) => ltp * f) : PACE_FIXED_BOUNDS;
-  const secs = Array.from({ length: bounds.length + 1 }, () => 0);
-  for (let i = 0; i < pace.length; i++) {
-    const p = pace[i];
-    if (!has(p) || p <= 0) continue;
-    const dt = i + 1 < t.length ? t[i + 1] - t[i] : i > 0 ? t[i] - t[i - 1] : 0;
-    if (dt <= 0 || dt > 120) continue;
-    let z = bounds.length;
-    for (let b = 0; b < bounds.length; b++) {
-      if (p > bounds[b]) {
-        z = b;
-        break;
-      }
-    }
-    secs[z] += dt;
-  }
-  const total = secs.reduce((a, b) => a + b, 0);
-  if (total < 30) return null;
-  return {
-    seconds: secs.map((s) => Math.round(s)),
-    high_boundary: [...bounds, null],
-    calc_type: ltp
-      ? 'percent_threshold_pace_estimated'
-      : 'fixed_pace_estimated',
-    threshold_pace: ltp,
-  };
 }
 
 function paceZoneLabels(zone: ZoneInfo): string[] | undefined {
@@ -938,7 +897,7 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
       kind: 'scatter',
       format: (v) => v.toFixed(0),
       avg: s.cadence_avg,
-      max: s.cadence_max,
+      max: cadenceChipMax(s.cadence_max, chart.cad),
       avgLabel: tr('平均', 'Avg'),
       maxLabel: tr('最大', 'Max'),
       series: chart.cad ?? [],
