@@ -202,7 +202,7 @@ export function paceZonesFromChart(
   };
 }
 
-/** Pace bounds are s/km; show 5'00" not raw 300. */
+/** Pace bounds are s/km; show `5'00"–6'00" /km`, never raw `300 /km`. */
 export function formatPaceZoneRange(
   lo: number | null | undefined,
   hi: number | null | undefined,
@@ -210,8 +210,9 @@ export function formatPaceZoneRange(
 ): string {
   const loP = formatPaceSeconds(lo);
   const hiP = formatPaceSeconds(hi);
-  if (i === 0) return hiP !== '--' ? `> ${hiP}` : '';
-  if (hiP !== '--' && loP !== '--') return `${hiP}–${loP}`;
-  if (loP !== '--') return `< ${loP}`;
-  return '';
+  let core = '';
+  if (i === 0) core = hiP !== '--' ? `> ${hiP}` : '';
+  else if (hiP !== '--' && loP !== '--') core = `${hiP}–${loP}`;
+  else if (loP !== '--') core = `< ${loP}`;
+  return core ? `${core} /km` : '';
 }

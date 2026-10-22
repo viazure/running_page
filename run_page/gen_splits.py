@@ -790,9 +790,9 @@ def analyze_messages(msgs: dict) -> dict | None:
         if isinstance(prod, str):
             device = prod
     chart = build_chart(recs)
-    # Wrist-sensor temperature is not outdoor air temp. Keep it on the chart
-    # only when we have no weather so the UI can label it as watch temp.
-    if chart and summary.get("temperature_source") == "weather":
+    # Wrist-sensor temperature is not outdoor air. Never publish it as a
+    # temperature series; the UI only shows a temp section for FIT weather.
+    if chart:
         chart.pop("temp", None)
     return {
         "version": SCHEMA_VERSION,

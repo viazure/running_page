@@ -361,10 +361,17 @@ def test_published_run_pace_zones_sum_to_timer_not_point_count():
     assert 34 * 60 - 5 <= total <= 34 * 60 + 20
     assert total != 101
     # Bounds are s/km that format as pace strings, not raw 300/360 labels.
-    labels = [_pace_fmt(b) for b in bounds]
-    assert all("'" in x for x in labels)
-    assert "300" not in "".join(labels)
+    labels = [f"{_pace_fmt(b)} /km" for b in bounds]
+    assert all("'" in x and "/km" in x for x in labels)
+    # Must not look like the live-site raw bounds (`300 /km`, `300–360 /km`).
+    assert not any(re.search(r"(^|[^\d'])300", x) for x in labels)
     assert ltp is not None and 4 * 60 < ltp < 5 * 60  # ~4'34"
+
+
+def test_pace_bound_strings_look_like_garmin():
+    assert _pace_fmt(300) == "5'00\""
+    assert _pace_fmt(360) == "6'00\""
+    assert f"{_pace_fmt(300)}–{_pace_fmt(360)} /km" == "5'00\"–6'00\" /km"
 
 
 def test_weather_temp_not_watch_sensor():
@@ -392,15 +399,15 @@ def test_weather_temp_not_watch_sensor():
     assert _weather(m)["temperature"] == 10
 
 
-def test_device_temp_marked_when_no_weather():
+def test_device_temp_omitted_from_chart_when_no_weather():
     m = _messages()
     for r in m["record_mesgs"]:
         r["temperature"] = 22
     m["session_mesgs"][0]["avg_temperature"] = 22
     out = analyze_messages(m)
-    assert out["summary"]["temperature"] == 22
     assert out["summary"]["temperature_source"] == "device"
-    assert "temp" in out["chart"]
+    # Watch sensor must not become a temperature chart (hide, do not relabel).
+    assert "temp" not in (out["chart"] or {})
 
 
 def test_running_cadence_spike_filtered_from_max():

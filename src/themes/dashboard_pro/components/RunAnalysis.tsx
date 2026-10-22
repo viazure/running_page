@@ -118,6 +118,11 @@ function hrZoneIndex(
 }
 
 /** stride (m) from pace (s/km) and cadence (spm). */
+function seriesMax(series?: (number | null)[]): number | null {
+  const vals = (series ?? []).filter((v): v is number => has(v));
+  return vals.length ? Math.max(...vals) : null;
+}
+
 /** Prefer the chart series max when summary cadence_max is a sensor spike. */
 function cadenceChipMax(summaryMax: N, series?: (number | null)[]): N {
   const vals = (series ?? []).filter((v): v is number => has(v));
@@ -206,6 +211,7 @@ function MetricCell({
 
 function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   const s = data.summary;
+  const altPeak = seriesMax(data.chart?.alt);
   const cells: {
     key: string;
     label: string;
@@ -241,9 +247,17 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('累计爬升', 'Ascent'),
       value: fmt(s.elev_gain),
       unit: 'm',
-      sub: has(s.elev_loss)
-        ? `${tr('下降', 'Descent')} ${fmt(s.elev_loss)} m`
-        : undefined,
+      sub:
+        [
+          has(s.elev_loss)
+            ? `${tr('下降', 'Descent')} ${fmt(s.elev_loss)} m`
+            : null,
+          has(altPeak)
+            ? `${tr('最高海拔', 'Max elev.')} ${fmt(altPeak)} m`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined,
       show: has(s.elev_gain) || has(s.elev_loss),
     },
     {
@@ -464,13 +478,18 @@ function ZoneTable({
         {rows.map((r) => (
           <div
             key={r.i}
-            className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 text-[11px]"
+            className={`grid items-center gap-2 text-[11px] ${
+              unit === '/km'
+                ? 'grid-cols-[7.25rem_1fr_auto]'
+                : 'grid-cols-[4.5rem_1fr_auto]'
+            }`}
           >
             <div className="min-w-0">
               <p className="font-medium text-[var(--color-text)]">{r.name}</p>
               {r.range ? (
                 <p className="truncate text-[10px] text-[var(--color-muted)]">
-                  {unit === '/km' ? r.range : `${r.range} ${unit}`}
+                  {r.range}
+                  {unit === '/km' ? '' : ` ${unit}`}
                 </p>
               ) : null}
             </div>
@@ -515,8 +534,10 @@ interface TrendDef {
   format: (v: number) => string;
   avg?: N;
   max?: N;
+  extra?: N;
   avgLabel?: string;
   maxLabel?: string;
+  extraLabel?: string;
   series: (number | null)[];
 }
 
@@ -688,6 +709,14 @@ function MetricCard({
                 {def.format(def.max)}
                 <span className="ml-1 text-[10px]">
                   {def.unit} · {def.maxLabel ?? 'Max'}
+                </span>
+              </p>
+            ) : null}
+            {has(def.extra) ? (
+              <p className="metric text-[13px] text-[var(--color-muted)]">
+                {def.format(def.extra)}
+                <span className="ml-1 text-[10px]">
+                  {def.unit} · {def.extraLabel ?? ''}
                 </span>
               </p>
             ) : null}
@@ -872,8 +901,10 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
       format: (v) => v.toFixed(0),
       avg: s.elev_gain,
       max: s.elev_loss,
+      extra: seriesMax(chart.alt),
       avgLabel: tr('爬升', 'Gain'),
       maxLabel: tr('下降', 'Loss'),
+      extraLabel: tr('最高海拔', 'Max elev.'),
       series: chart.alt ?? [],
     },
     {
@@ -945,20 +976,6 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
       avg: s.ground_contact_time,
       avgLabel: tr('平均', 'Avg'),
       series: chart.gct ?? [],
-    },
-    {
-      key: 'temp',
-      title:
-        s.temperature_source === 'weather'
-          ? tr('温度', 'Temperature')
-          : tr('表温', 'Watch temp'),
-      unit: '°C',
-      color: '#64748b',
-      kind: 'area',
-      format: (v) => v.toFixed(0),
-      avg: s.temperature,
-      avgLabel: tr('平均', 'Avg'),
-      series: s.temperature_source === 'weather' ? [] : (chart.temp ?? []),
     },
   ];
   const shown = defs.filter((d) => d.series.some((v) => has(v)));
