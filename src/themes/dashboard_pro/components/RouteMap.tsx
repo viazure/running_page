@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './RouteMap.css';
@@ -19,10 +19,15 @@ import { useLocale } from '@/hooks/useLocale';
 import type { Coordinate } from '@/utils/routeAnimation';
 import {
   CHASE_LAYER_IDS,
-  createChaseControlButton,
+  clearMapTerrain,
   createMapChaseController,
+  createMapModeControl,
+  createMapOrbitController,
+  isMapFullscreen,
   removeChaseHighlight,
   updateChaseControlButton,
+  update3dToggleButton,
+  type MapModeControlHandles,
 } from '@/utils/mapChase3d';
 import {
   fitMapToRouteOverview,
@@ -97,12 +102,20 @@ export function RouteMap({
   const selectedRef = useRef(selectedActivity);
   const displayRef = useRef(displayActivity);
   const chaseRef = useRef(createMapChaseController());
+  const orbitRef = useRef(createMapOrbitController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  const [view3d, setView3d] = useState(false);
+  const view3dRef = useRef(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const selectedId = selectedActivity ? String(selectedActivity.run_id) : null;
   const chasing = chaseRunId != null && chaseRunId === selectedId;
-  const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeHandlesRef = useRef<MapModeControlHandles>({
+    d3Button: null,
+    chaseButton: null,
+  });
   const toggle3dRef = useRef<() => void>(() => {});
+  const toggleChaseRef = useRef<() => void>(() => {});
   const styleIdleRef = useRef(false);
   const refitViewRef = useRef<() => void>(() => {});
   const [needsRecenter, setNeedsRecenter] = useState(false);
@@ -110,8 +123,14 @@ export function RouteMap({
     initialBasemapProvider
   );
   const useBlank = lightsOff;
-  // Flat chase works on CARTO; Mapbox DEM/buildings are best-effort in injectMapTerrain.
+  // Orbit / DEM / buildings are best-effort in injectMapTerrain (no-op on CARTO).
   const can3d = !lightsOff;
+  const hasOwnGps = Boolean(
+    selectedActivity &&
+    displayActivity &&
+    displayActivity.run_id === selectedActivity.run_id
+  );
+  const canOffer3d = can3d && hasOwnGps;
   const bg = dark !== false ? '#0b0d10' : '#f4f5f7';
   const style = useBlank
     ? blankMapStyle(bg)
@@ -121,6 +140,27 @@ export function RouteMap({
     chaseRef.current.stop({ silent: true });
   };
 
+  const flattenView = (map: mapboxgl.Map) => {
+    orbitRef.current.stop();
+    if (!chaseRef.current.isAnimating()) {
+      clearMapTerrain(map);
+      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+    }
+  };
+
+  const startOrbitIfNeeded = (map: mapboxgl.Map, coords: Coordinate[]) => {
+    if (!view3dRef.current || !can3d || coords.length < 2) {
+      flattenView(map);
+      return;
+    }
+    if (chaseRef.current.isAnimating()) return;
+    orbitRef.current.start({
+      map,
+      coords,
+      isDark: dark !== false,
+    });
+  };
+
   useEffect(() => {
     lightsOffRef.current = lightsOff;
     activitiesRef.current = activities;
@@ -128,127 +168,139 @@ export function RouteMap({
     displayRef.current = displayActivity;
   });
 
-  const updateRoutesRef = useRef(() => {
-    const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+  const updateRoutesRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    updateRoutesRef.current = () => {
+      const map = mapRef.current;
+      if (!map || !map.isStyleLoaded()) return;
 
-    stopChase();
-    if (map.getLayer('routes')) map.removeLayer('routes');
-    if (map.getSource('routes')) map.removeSource('routes');
-    if (map.getLayer('selected')) map.removeLayer('selected');
-    if (map.getSource('selected')) map.removeSource('selected');
-    removeChaseHighlight(map);
+      stopChase();
+      orbitRef.current.stop();
+      setChaseRunId(null);
+      if (map.getLayer('routes')) map.removeLayer('routes');
+      if (map.getSource('routes')) map.removeSource('routes');
+      if (map.getLayer('selected')) map.removeLayer('selected');
+      if (map.getSource('selected')) map.removeSource('selected');
+      removeChaseHighlight(map);
 
-    const selected = selectedRef.current;
-    const display = displayRef.current;
-    const acts = activitiesRef.current;
-    const showingFallback = Boolean(
-      selected && display && display.run_id !== selected.run_id
-    );
+      const selected = selectedRef.current;
+      const display = displayRef.current;
+      const acts = activitiesRef.current;
+      const showingFallback = Boolean(
+        selected && display && display.run_id !== selected.run_id
+      );
 
-    if (selected && display?.summary_polyline) {
-      const coords = polyline
-        .decode(display.summary_polyline)
-        .map(([lat, lng]) => [lng, lat] as Coordinate);
-      selectedCoordsRef.current = coords;
-      const color = routeColor(display);
+      if (selected && display?.summary_polyline) {
+        const coords = polyline
+          .decode(display.summary_polyline)
+          .map(([lat, lng]) => [lng, lat] as Coordinate);
+        selectedCoordsRef.current = coords;
+        const color = routeColor(display);
 
-      map.addSource('selected', {
+        map.addSource('selected', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: coords },
+          },
+        });
+
+        map.addLayer({
+          id: 'selected',
+          type: 'line',
+          source: 'selected',
+          paint: {
+            'line-color': color,
+            'line-width': 3,
+            'line-opacity': showingFallback ? 0.75 : 0.9,
+            ...(showingFallback ? { 'line-dasharray': [2, 2] } : {}),
+          },
+        });
+
+        if (view3dRef.current && !showingFallback && can3d) {
+          startOrbitIfNeeded(map, coords);
+        } else {
+          flattenView(map);
+          fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+        }
+        applyLightsOff(map, lightsOffRef.current);
+        return;
+      }
+
+      if (selected) {
+        selectedCoordsRef.current = null;
+        flattenView(map);
+        applyLightsOff(map, lightsOffRef.current);
+        return;
+      }
+
+      selectedCoordsRef.current = null;
+      flattenView(map);
+
+      const features = acts
+        .filter((a) => a.summary_polyline)
+        .map((a) => {
+          const coords = polyline
+            .decode(a.summary_polyline!)
+            .map(([lat, lng]) => [lng, lat]);
+          return {
+            type: 'Feature' as const,
+            properties: { type: a.type },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: coords,
+            },
+          };
+        });
+
+      if (features.length === 0) {
+        applyLightsOff(map, lightsOffRef.current);
+        return;
+      }
+
+      map.addSource('routes', {
         type: 'geojson',
         data: {
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'LineString', coordinates: coords },
+          type: 'FeatureCollection',
+          features,
         },
       });
 
       map.addLayer({
-        id: 'selected',
+        id: 'routes',
         type: 'line',
-        source: 'selected',
+        source: 'routes',
         paint: {
-          'line-color': color,
-          'line-width': 3,
-          'line-opacity': showingFallback ? 0.75 : 0.9,
-          ...(showingFallback ? { 'line-dasharray': [2, 2] } : {}),
+          'line-color': [
+            'match',
+            ['get', 'type'],
+            'Run',
+            '#e8663d',
+            'Ride',
+            '#4f7ce0',
+            '#7b61d9',
+          ],
+          'line-width': lightsOffRef.current ? 2 : 1.5,
+          'line-opacity': lightsOffRef.current ? 0.85 : 0.6,
         },
       });
 
-      fitMapToSelectedRoute(map, coords, lightsOffRef.current);
-      applyLightsOff(map, lightsOffRef.current);
-      return;
-    }
-
-    if (selected) {
-      selectedCoordsRef.current = null;
-      applyLightsOff(map, lightsOffRef.current);
-      return;
-    }
-
-    selectedCoordsRef.current = null;
-
-    const features = acts
-      .filter((a) => a.summary_polyline)
-      .map((a) => {
-        const coords = polyline
-          .decode(a.summary_polyline!)
-          .map(([lat, lng]) => [lng, lat]);
-        return {
-          type: 'Feature' as const,
-          properties: { type: a.type },
-          geometry: {
-            type: 'LineString' as const,
-            coordinates: coords,
-          },
-        };
-      });
-
-    if (features.length === 0) {
-      applyLightsOff(map, lightsOffRef.current);
-      return;
-    }
-
-    map.addSource('routes', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features,
-      },
-    });
-
-    map.addLayer({
-      id: 'routes',
-      type: 'line',
-      source: 'routes',
-      paint: {
-        'line-color': [
-          'match',
-          ['get', 'type'],
-          'Run',
-          '#e8663d',
-          'Ride',
-          '#4f7ce0',
-          '#7b61d9',
-        ],
-        'line-width': lightsOffRef.current ? 2 : 1.5,
-        'line-opacity': lightsOffRef.current ? 0.85 : 0.6,
-      },
-    });
-
-    const allCoords: [number, number][] = [];
-    for (const f of features) {
-      if (f.geometry.coordinates.length > 0) {
-        allCoords.push(f.geometry.coordinates[0] as [number, number]);
+      const allCoords: [number, number][] = [];
+      for (const f of features) {
+        if (f.geometry.coordinates.length > 0) {
+          allCoords.push(f.geometry.coordinates[0] as [number, number]);
+        }
       }
-    }
 
-    if (allCoords.length === 0) {
+      if (allCoords.length === 0) {
+        applyLightsOff(map, lightsOffRef.current);
+        return;
+      }
+
+      fitMapToRouteOverview(map, acts, lightsOffRef.current);
       applyLightsOff(map, lightsOffRef.current);
-      return;
-    }
-
-    fitMapToRouteOverview(map, acts, lightsOffRef.current);
-    applyLightsOff(map, lightsOffRef.current);
+    };
   });
 
   useEffect(() => {
@@ -258,34 +310,64 @@ export function RouteMap({
       const selected = selectedRef.current;
       const coords = selectedCoordsRef.current;
       if (selected && coords && coords.length > 0) {
-        fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+        if (view3dRef.current && can3d) {
+          startOrbitIfNeeded(map, coords);
+        } else {
+          fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+        }
       } else {
+        flattenView(map);
         fitMapToRouteOverview(map, activitiesRef.current, lightsOffRef.current);
       }
       setNeedsRecenter(false);
     };
   });
 
+  const restoreSelectedLine = (map: mapboxgl.Map) => {
+    if (map.getLayer('selected')) {
+      map.setPaintProperty('selected', 'line-opacity', 0.9);
+    }
+    removeChaseHighlight(map);
+  };
+
   const handleToggle3d = () => {
+    const map = mapRef.current;
+    const coords = selectedCoordsRef.current;
+    if (!map || !coords || !canOffer3d) return;
+    const next = !view3dRef.current;
+    view3dRef.current = next;
+    setView3d(next);
+    if (next) {
+      startOrbitIfNeeded(map, coords);
+      return;
+    }
+    if (chaseRef.current.isAnimating()) {
+      return;
+    }
+    flattenView(map);
+    fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+  };
+
+  const handleToggleChase = () => {
     const map = mapRef.current;
     const selected = selectedRef.current;
     const coords = selectedCoordsRef.current;
-    if (!map || !selected || !coords || !can3d) return;
+    if (!map || !selected || !coords || !canOffer3d) return;
 
     if (chaseRef.current.isAnimating()) {
       stopChase();
       setChaseRunId(null);
-      if (map.getLayer('selected')) {
-        map.setPaintProperty('selected', 'line-opacity', 0.9);
+      restoreSelectedLine(map);
+      if (view3dRef.current) {
+        startOrbitIfNeeded(map, coords);
+      } else {
+        flattenView(map);
+        fitMapToSelectedRoute(map, coords, lightsOffRef.current);
       }
-      const bounds = new mapboxgl.LngLatBounds();
-      coords.forEach((c) => bounds.extend(c));
-      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
-      map.fitBounds(bounds, { padding: 50, maxZoom: 14, duration: 800 });
-      removeChaseHighlight(map);
       return;
     }
 
+    orbitRef.current.stop();
     if (map.getLayer('selected')) {
       map.setPaintProperty('selected', 'line-opacity', 0);
     }
@@ -300,13 +382,17 @@ export function RouteMap({
         runId,
         isDark: dark !== false,
         overviewLayerId: map.getLayer('routes') ? 'routes' : undefined,
+        getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
       },
       {
         onStart: () => setChaseRunId(runId),
         onEnd: () => {
           setChaseRunId(null);
-          if (map.getLayer('selected')) {
-            map.setPaintProperty('selected', 'line-opacity', 0.9);
+          restoreSelectedLine(map);
+          if (view3dRef.current && selectedCoordsRef.current) {
+            startOrbitIfNeeded(map, selectedCoordsRef.current);
+          } else {
+            clearMapTerrain(map);
           }
         },
       }
@@ -315,21 +401,26 @@ export function RouteMap({
 
   useEffect(() => {
     toggle3dRef.current = handleToggle3d;
+    toggleChaseRef.current = handleToggleChase;
   });
 
   useEffect(() => {
-    const btn = chaseButtonRef.current;
-    if (!btn) return;
-    updateChaseControlButton(btn, {
-      visible: Boolean(
-        selectedActivity &&
-        displayActivity?.run_id === selectedActivity.run_id &&
-        can3d
-      ),
-      chasing,
-      title: chasing ? t('stopChase') : t('startChase'),
-    });
-  }, [chasing, selectedActivity, displayActivity, can3d, t]);
+    const { d3Button, chaseButton } = modeHandlesRef.current;
+    if (d3Button) {
+      update3dToggleButton(d3Button, {
+        visible: canOffer3d,
+        active: view3d && canOffer3d,
+        title: view3d ? t('disable3d') : t('enable3d'),
+      });
+    }
+    if (chaseButton) {
+      updateChaseControlButton(chaseButton, {
+        visible: canOffer3d && isFullscreen,
+        chasing,
+        title: chasing ? t('stopChase') : t('startChase'),
+      });
+    }
+  }, [chasing, view3d, isFullscreen, canOffer3d, t]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -411,7 +502,8 @@ export function RouteMap({
     const onUserCameraChange = (event: { originalEvent?: Event }) => {
       // Programmatic fitBounds/easeTo have no originalEvent; ignore those.
       if (!event.originalEvent) return;
-      if (chaseRef.current.isAnimating()) return;
+      if (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
+        return;
       const map = mapRef.current;
       if (!map) return;
       try {
@@ -438,36 +530,56 @@ export function RouteMap({
     mapRef.current.on('pitchend', onUserCameraChange);
     if (mapRef.current.isStyleLoaded()) ensureRoutes();
 
-    mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-    // Custom "3D chase" button as a real Mapbox control (no overlay).
-    const chaseControl: mapboxgl.IControl = {
-      onAdd: () => {
-        const root = document.createElement('div');
-        root.className = 'route-map-3d-ctrl mapboxgl-ctrl mapboxgl-ctrl-group';
-
-        const btn = createChaseControlButton();
-        chaseButtonRef.current = btn;
-        btn.onclick = () => toggle3dRef.current();
-        updateChaseControlButton(btn, {
-          visible: Boolean(selectedActivity && can3d),
-          chasing: false,
-          title: t('startChase'),
-        });
-
-        root.appendChild(btn);
-        return root;
-      },
-      onRemove: () => {
-        chaseButtonRef.current = null;
-      },
-    };
-
-    mapRef.current.addControl(chaseControl, 'top-right');
     if (!useBlank) {
-      // Add fullscreen after chase so chase appears above it.
+      const modeControl = createMapModeControl(
+        {
+          onToggle3d: () => toggle3dRef.current(),
+          onToggleChase: () => toggleChaseRef.current(),
+        },
+        modeHandlesRef.current
+      );
+      mapRef.current.addControl(modeControl, 'top-right');
+      {
+        const { d3Button, chaseButton } = modeHandlesRef.current;
+        if (d3Button) {
+          update3dToggleButton(d3Button, {
+            visible: canOffer3d,
+            active: view3dRef.current && canOffer3d,
+            title: view3dRef.current ? t('disable3d') : t('enable3d'),
+          });
+        }
+        if (chaseButton) {
+          updateChaseControlButton(chaseButton, {
+            visible: false,
+            chasing: false,
+            title: t('startChase'),
+          });
+        }
+      }
       mapRef.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
     }
+    mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    const syncFullscreen = () => {
+      const map = mapRef.current;
+      const next = isMapFullscreen(map);
+      setIsFullscreen(next);
+      if (!next && chaseRef.current.isAnimating()) {
+        chaseRef.current.stop({ silent: true });
+        setChaseRunId(null);
+        if (map) {
+          restoreSelectedLine(map);
+          const coords = selectedCoordsRef.current;
+          if (view3dRef.current && coords) startOrbitIfNeeded(map, coords);
+          else if (map) flattenView(map);
+        }
+      }
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener(
+      'webkitfullscreenchange' as 'fullscreenchange',
+      syncFullscreen
+    );
 
     const resizeMap = () => {
       mapRef.current?.resize();
@@ -479,10 +591,17 @@ export function RouteMap({
     ro.observe(container);
 
     const chase = chaseRef.current;
+    const orbit = orbitRef.current;
     return () => {
       ro.disconnect();
       window.clearTimeout(timer);
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      document.removeEventListener(
+        'webkitfullscreenchange' as 'fullscreenchange',
+        syncFullscreen
+      );
       chase.stop({ silent: true });
+      orbit.dispose();
       styleIdleRef.current = false;
       mapRef.current?.off('error', onError);
       mapRef.current?.off('dragend', onUserCameraChange);
@@ -530,6 +649,7 @@ export function RouteMap({
             type="button"
             onClick={() => {
               stopChase();
+              orbitRef.current.stop();
               setChaseRunId(null);
               onClearSelection();
             }}

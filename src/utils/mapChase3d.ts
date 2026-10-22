@@ -30,6 +30,8 @@ export function injectMapTerrain(
         tileSize: 512,
         maxzoom: 14,
       });
+    }
+    if (!m.getTerrain()) {
       m.setTerrain({ source: 'mapbox-dem', exaggeration: 1 });
     }
     if (!m.getLayer('3d-buildings') && m.getSource('composite')) {
@@ -68,6 +70,178 @@ export function clearMapTerrain(m: mapboxgl.Map): void {
       /* ignore */
     }
   }
+}
+
+/** In-place orbit around a fitted track (koobai / upstairs pattern). */
+export const ORBIT_PITCH = 65;
+export const ORBIT_PITCH_WOBBLE = 2;
+export const ORBIT_ZOOM_WOBBLE = 0.12;
+export const ORBIT_DURATION_MS = 36000;
+
+function coordsExtent(
+  coords: Coordinate[]
+): [[number, number], [number, number]] | null {
+  if (coords.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of coords) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ];
+}
+
+type OrbitStartArgs = {
+  map: mapboxgl.Map;
+  coords: Coordinate[];
+  isDark: boolean;
+};
+
+/**
+ * Fits the track, pitches to ~65°, then slowly spins in place.
+ * Pointer / wheel / drag cancels the spin and leaves the pitched camera.
+ */
+export function createMapOrbitController() {
+  let animToken = 0;
+  let raf: number | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let running = false;
+  let map: mapboxgl.Map | null = null;
+
+  const handleUserInput = (event: { originalEvent?: Event }) => {
+    if (!running || !event.originalEvent) return;
+    stop();
+  };
+
+  const detach = () => {
+    if (!map) return;
+    map.off('mousedown', handleUserInput);
+    map.off('touchstart', handleUserInput);
+    map.off('wheel', handleUserInput);
+    map.off('dragstart', handleUserInput);
+  };
+
+  const attach = (next: mapboxgl.Map) => {
+    if (map === next) return;
+    detach();
+    map = next;
+    next.on('mousedown', handleUserInput);
+    next.on('touchstart', handleUserInput);
+    next.on('wheel', handleUserInput);
+    next.on('dragstart', handleUserInput);
+  };
+
+  const stop = () => {
+    animToken += 1;
+    if (raf != null) {
+      cancelAnimationFrame(raf);
+      raf = null;
+    }
+    if (timeout != null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    if (running) map?.stop();
+    running = false;
+  };
+
+  const start = ({ map: m, coords, isDark }: OrbitStartArgs) => {
+    stop();
+    const extent = coordsExtent(coords);
+    if (!extent) return;
+
+    attach(m);
+    injectMapTerrain(m, isDark, true);
+    animToken += 1;
+    const token = animToken;
+    running = true;
+
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cam = m.cameraForBounds(extent, {
+      padding: 50,
+      maxZoom: 14,
+      pitch: ORBIT_PITCH,
+    });
+    const center = cam?.center ?? [
+      (extent[0][0] + extent[1][0]) / 2,
+      (extent[0][1] + extent[1][1]) / 2,
+    ];
+    const zoom = cam?.zoom ?? m.getZoom();
+    let spinStarted = false;
+
+    const beginSpin = () => {
+      if (spinStarted || animToken !== token) return;
+      spinStarted = true;
+      if (timeout != null) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      if (reduce) {
+        running = false;
+        return;
+      }
+      const spinCenter = m.getCenter();
+      const baseZoom = m.getZoom();
+      const baseBearing = m.getBearing();
+      const startTs = performance.now();
+      const tick = (ts: number) => {
+        if (animToken !== token) return;
+        const turn = ((ts - startTs) / ORBIT_DURATION_MS) % 1;
+        m.jumpTo({
+          center: spinCenter,
+          bearing: (baseBearing + turn * 360) % 360,
+          pitch:
+            ORBIT_PITCH + ORBIT_PITCH_WOBBLE * Math.sin(turn * Math.PI * 2),
+          zoom: baseZoom + ORBIT_ZOOM_WOBBLE * Math.sin(turn * Math.PI * 4),
+        });
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+
+    m.easeTo({
+      center,
+      zoom,
+      pitch: ORBIT_PITCH,
+      duration: reduce ? 200 : 1200,
+      essential: true,
+    });
+    m.once('moveend', beginSpin);
+    timeout = setTimeout(beginSpin, reduce ? 280 : 1600);
+  };
+
+  const dispose = () => {
+    stop();
+    detach();
+    map = null;
+  };
+
+  return {
+    start,
+    stop,
+    dispose,
+    isAnimating: () => running,
+  };
+}
+
+export type MapOrbitController = ReturnType<typeof createMapOrbitController>;
+
+export function isMapFullscreen(map: mapboxgl.Map | null): boolean {
+  if (!map || typeof document === 'undefined') return false;
+  const doc = document as Document & { webkitFullscreenElement?: Element };
+  const fs = document.fullscreenElement ?? doc.webkitFullscreenElement;
+  if (!fs) return false;
+  const root = map.getContainer();
+  return fs === root || root.contains(fs) || fs.contains(root);
 }
 
 const HIGHLIGHT_SOURCE = 'chase-highlight';
@@ -125,6 +299,11 @@ type ChaseStartArgs = {
   /** Dim overview layer while chasing (e.g. all-routes / routes). */
   overviewLayerId?: string;
   overviewDimOpacity?: number;
+  /**
+   * Camera after the chase finishes. Read at end time so a 3D toggle during
+   * playback can return to orbit (`keep`) instead of flattening.
+   */
+  getEndView?: () => 'flat' | 'keep';
 };
 
 /**
@@ -167,6 +346,7 @@ export function createMapChaseController() {
       isDark,
       overviewLayerId,
       overviewDimOpacity = 0.15,
+      getEndView,
     } = args;
 
     stop({ silent: true });
@@ -266,21 +446,15 @@ export function createMapChaseController() {
         chaseTimeout = setTimeout(() => {
           if (animToken !== token) return;
           if (activeRunId !== runId) return;
-          const endCam = m.cameraForBounds(
-            [
-              [
-                Math.min(...coords.map((p) => p[0])),
-                Math.min(...coords.map((p) => p[1])),
-              ],
-              [
-                Math.max(...coords.map((p) => p[0])),
-                Math.max(...coords.map((p) => p[1])),
-              ],
-            ],
-            { padding: 60 }
-          );
-          if (endCam) {
-            m.easeTo({ ...endCam, pitch: 0, bearing: 0, duration: 1800 });
+          const endView = getEndView?.() ?? 'flat';
+          if (endView === 'flat') {
+            const extent = coordsExtent(coords);
+            const endCam = extent
+              ? m.cameraForBounds(extent, { padding: 60 })
+              : null;
+            if (endCam) {
+              m.easeTo({ ...endCam, pitch: 0, bearing: 0, duration: 1800 });
+            }
           }
           chaseRaf = null;
           chaseTimeout = null;
@@ -352,13 +526,17 @@ export function createPlaneTakeoffSvgEl(size = 20): SVGElement {
 export function createChaseControlButton(): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'route-map-3d-btn';
+  btn.className = 'route-map-cruise-btn';
 
   const iconWrap = document.createElement('span');
   iconWrap.className = 'mapboxgl-ctrl-icon';
   iconWrap.setAttribute('aria-hidden', 'true');
-  iconWrap.appendChild(createPlaneTakeoffSvgEl(20));
+  iconWrap.appendChild(createPlaneTakeoffSvgEl(16));
   btn.appendChild(iconWrap);
+
+  const label = document.createElement('span');
+  label.className = 'route-map-mode-label';
+  btn.appendChild(label);
 
   return btn;
 }
@@ -371,4 +549,66 @@ export function updateChaseControlButton(
   btn.classList.toggle('is-chasing', state.chasing);
   btn.title = state.title;
   btn.setAttribute('aria-label', state.title);
+  const label = btn.querySelector('.route-map-mode-label');
+  if (label) label.textContent = state.title;
+}
+
+export function create3dToggleButton(): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'route-map-3d-pill';
+  btn.textContent = '3D';
+  return btn;
+}
+
+export function update3dToggleButton(
+  btn: HTMLButtonElement,
+  state: { visible: boolean; active: boolean; title: string }
+): void {
+  btn.classList.toggle('is-hidden', !state.visible);
+  btn.classList.toggle('is-active', state.active);
+  btn.setAttribute('aria-pressed', state.active ? 'true' : 'false');
+  btn.title = state.title;
+  btn.setAttribute('aria-label', state.title);
+}
+
+export type MapModeControlHandles = {
+  d3Button: HTMLButtonElement | null;
+  chaseButton: HTMLButtonElement | null;
+};
+
+export function createMapModeControl(
+  opts: {
+    onToggle3d: () => void;
+    onToggleChase: () => void;
+  },
+  handles: MapModeControlHandles
+): mapboxgl.IControl {
+  return {
+    onAdd: () => {
+      const root = document.createElement('div');
+      root.className = 'mapboxgl-ctrl route-map-mode-ctrl';
+
+      const d3 = create3dToggleButton();
+      d3.onclick = (event) => {
+        event.preventDefault();
+        opts.onToggle3d();
+      };
+
+      const chase = createChaseControlButton();
+      chase.onclick = (event) => {
+        event.preventDefault();
+        opts.onToggleChase();
+      };
+
+      handles.d3Button = d3;
+      handles.chaseButton = chase;
+      root.append(d3, chase);
+      return root;
+    },
+    onRemove: () => {
+      handles.d3Button = null;
+      handles.chaseButton = null;
+    },
+  };
 }
