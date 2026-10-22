@@ -228,7 +228,10 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('累计爬升', 'Ascent'),
       value: fmt(s.elev_gain),
       unit: 'm',
-      show: has(s.elev_gain),
+      sub: has(s.elev_loss)
+        ? `${tr('下降', 'Descent')} ${fmt(s.elev_loss)} m`
+        : undefined,
+      show: has(s.elev_gain) || has(s.elev_loss),
     },
     {
       key: 'te',
@@ -273,6 +276,17 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('训练负荷', 'Training load'),
       value: fmt(s.training_load),
       show: has(s.training_load),
+    },
+    {
+      key: 'temp',
+      label: tr('气温', 'Air temp'),
+      value: fmt(s.temperature),
+      unit: '°C',
+      sub:
+        has(s.temperature_min) || has(s.temperature_max)
+          ? `${fmt(s.temperature_min)}–${fmt(s.temperature_max)}`
+          : undefined,
+      show: s.temperature_source === 'weather' && has(s.temperature),
     },
   ];
   const shown = cells.filter((c) => c.show);
@@ -344,6 +358,29 @@ function TeScale({
 }
 
 // ---------------------------------------------------------------- zones
+/** HR/power: higher number = higher zone. Pace (s/km): lower number = faster = higher zone. */
+function formatZoneRange(
+  unit: string,
+  lo: number | null | undefined,
+  hi: number | null | undefined,
+  i: number
+): string {
+  if (unit === '/km') {
+    const loP = has(lo) ? formatPaceSeconds(lo) : null;
+    const hiP = has(hi) ? formatPaceSeconds(hi) : null;
+    if (i === 0) return hiP ? `> ${hiP}` : '';
+    if (hiP && loP) return `${hiP}–${loP}`;
+    if (loP) return `< ${loP}`;
+    return '';
+  }
+  if (i === 0) return has(hi) ? `< ${Math.round(hi)}` : '';
+  if (!has(lo)) return '';
+  if (has(hi) && hi < 4000) {
+    return `${Math.round(Number(lo) + (unit === 'bpm' ? 1 : 0))}–${Math.round(hi)}`;
+  }
+  return `≥ ${Math.round(lo)}`;
+}
+
 function ZoneTable({
   title,
   zone,
@@ -369,16 +406,7 @@ function ZoneTable({
     .map((sec, i) => {
       const lo = i === 0 ? null : hb[i - 1];
       const hi = hb[i];
-      const range =
-        i === 0
-          ? has(hi)
-            ? `< ${Math.round(hi)}`
-            : ''
-          : has(lo)
-            ? has(hi) && hi < 4000
-              ? `${Math.round(Number(lo) + (unit === 'bpm' ? 1 : 0))}–${Math.round(hi)}`
-              : `≥ ${Math.round(lo)}`
-            : '';
+      const range = formatZoneRange(unit, lo, hi, i);
       const name = labels?.[i] ?? (i === 0 ? '<Z1' : `Z${i}`);
       return {
         i,
@@ -418,6 +446,10 @@ function ZoneTable({
           <p className="text-[10px] text-[var(--color-muted)]">
             FTP {zone.ftp} W
           </p>
+        ) : has(zone.threshold_pace) ? (
+          <p className="text-[10px] text-[var(--color-muted)]">
+            LTP {formatPaceSeconds(zone.threshold_pace)}
+          </p>
         ) : null}
       </div>
       <div className="space-y-2">
@@ -456,31 +488,59 @@ function ZoneTable({
   );
 }
 
-/** Derive simple pace-zone distribution from chart when FIT has no pace zones. */
+/** Garmin-like 5 zones from threshold pace (s/km). Faster → higher zone. */
+const PACE_LTP_FACTORS = [1.29, 1.14, 1.06, 0.99];
+const PACE_FIXED_BOUNDS = [540, 480, 420, 360];
+
+function thresholdPaceFromVo2max(vo2: N): number | null {
+  if (!has(vo2) || vo2 < 20 || vo2 > 95) return null;
+  const vMMin = (vo2 - 3.5) / 0.2;
+  if (vMMin <= 0) return null;
+  const vLtp = (vMMin / 60) * 0.88;
+  if (vLtp <= 0) return null;
+  return 1000 / vLtp;
+}
+
+/** Time-weighted pace zones from the chart when FIT JSON has none. */
 function paceZonesFromChart(
-  pace: (number | null)[] | undefined
+  pace: (number | null)[] | undefined,
+  t?: number[],
+  thresholdPace?: number | null
 ): ZoneInfo | null {
-  if (!pace) return null;
-  const bounds = [300, 360, 420, 480, 540];
-  const secs = [0, 0, 0, 0, 0, 0];
-  for (const p of pace) {
-    if (!has(p)) continue;
+  if (!pace || !t || t.length !== pace.length || pace.length < 2) return null;
+  const ltp = has(thresholdPace) && thresholdPace > 0 ? thresholdPace : null;
+  const bounds = ltp ? PACE_LTP_FACTORS.map((f) => ltp * f) : PACE_FIXED_BOUNDS;
+  const secs = Array.from({ length: bounds.length + 1 }, () => 0);
+  for (let i = 0; i < pace.length; i++) {
+    const p = pace[i];
+    if (!has(p) || p <= 0) continue;
+    const dt = i + 1 < t.length ? t[i + 1] - t[i] : i > 0 ? t[i] - t[i - 1] : 0;
+    if (dt <= 0 || dt > 120) continue;
     let z = bounds.length;
-    for (let i = 0; i < bounds.length; i++) {
-      if (p < bounds[i]) {
-        z = i;
+    for (let b = 0; b < bounds.length; b++) {
+      if (p > bounds[b]) {
+        z = b;
         break;
       }
     }
-    secs[z] += 1;
+    secs[z] += dt;
   }
   const total = secs.reduce((a, b) => a + b, 0);
-  if (total < 10) return null;
+  if (total < 30) return null;
   return {
-    seconds: secs,
+    seconds: secs.map((s) => Math.round(s)),
     high_boundary: [...bounds, null],
-    calc_type: 'derived_from_chart',
+    calc_type: ltp
+      ? 'percent_threshold_pace_estimated'
+      : 'fixed_pace_estimated',
+    threshold_pace: ltp,
   };
+}
+
+function paceZoneLabels(zone: ZoneInfo): string[] | undefined {
+  const n = zone.seconds.length;
+  if (n <= 5) return zone.seconds.map((_, i) => `Z${i + 1}`);
+  return undefined;
 }
 
 // ---------------------------------------------------------------- trend chart (佳速度-style cards)
@@ -638,7 +698,12 @@ function MetricCard({
   }
 
   const hv = hover != null ? ys[hover] : null;
-  const avgY = has(avgVal) ? geom.py(avgVal) : null;
+  // Gain/loss chips on the climb card are not altitude samples; skip a
+  // guide line that would sit off the waveform domain.
+  const avgY =
+    has(avgVal) && avgVal >= geom.lo && avgVal <= geom.hi
+      ? geom.py(avgVal)
+      : null;
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-[var(--shadow-card)]">
@@ -841,7 +906,7 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
     },
     {
       key: 'alt',
-      title: tr('海拔', 'Elevation'),
+      title: tr('爬升', 'Ascent'),
       unit: 'm',
       color: '#22c55e',
       kind: 'area',
@@ -924,18 +989,23 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
     },
     {
       key: 'temp',
-      title: tr('温度', 'Temperature'),
+      title:
+        s.temperature_source === 'weather'
+          ? tr('温度', 'Temperature')
+          : tr('表温', 'Watch temp'),
       unit: '°C',
       color: '#64748b',
       kind: 'area',
       format: (v) => v.toFixed(0),
       avg: s.temperature,
       avgLabel: tr('平均', 'Avg'),
-      series: chart.temp ?? [],
+      series: s.temperature_source === 'weather' ? [] : (chart.temp ?? []),
     },
   ];
   const shown = defs.filter((d) => d.series.some((v) => has(v)));
-  const derivedPaceZones = paceZonesFromChart(chart.pace);
+  const paceZones =
+    data.zones?.pace ??
+    paceZonesFromChart(chart.pace, chart.t, thresholdPaceFromVo2max(s.vo2max));
 
   return (
     <div className="space-y-3">
@@ -977,13 +1047,14 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
             d.kind === 'hr-area' ? data.zones?.hr?.high_boundary : null
           }
           footer={
-            d.key === 'pace' && derivedPaceZones ? (
+            d.key === 'pace' && paceZones ? (
               <ZoneTable
                 title={tr('配速区间', 'Pace zones')}
-                zone={derivedPaceZones}
+                zone={paceZones}
                 colors={ZONE_COLORS}
                 unit="/km"
                 tr={tr}
+                labels={paceZoneLabels(paceZones)}
               />
             ) : d.key === 'hr' && data.zones?.hr ? (
               <ZoneTable

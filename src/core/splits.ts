@@ -47,6 +47,7 @@ export interface RunSummary extends Omit<SplitRow, 'index'> {
   vo2max: N;
   temperature_min: N;
   temperature_max: N;
+  temperature_source?: 'weather' | 'device' | null;
   steps: N;
   rpe: N;
   feel: N;
@@ -59,6 +60,7 @@ export interface ZoneInfo {
   max_hr?: N;
   resting_hr?: N;
   threshold_hr?: N;
+  threshold_pace?: N; // s/km
   ftp?: N;
 }
 
@@ -83,7 +85,7 @@ export interface RunSplits {
   sub_sport: string | null;
   device: string | null;
   summary: RunSummary;
-  zones: { hr?: ZoneInfo; power?: ZoneInfo } | null;
+  zones: { hr?: ZoneInfo; power?: ZoneInfo; pace?: ZoneInfo } | null;
   splits: SplitRow[];
   laps: SplitRow[];
   chart: RunChart | null;
