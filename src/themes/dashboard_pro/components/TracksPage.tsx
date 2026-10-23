@@ -25,13 +25,17 @@ import {
 import type { Coordinate } from '@/utils/routeAnimation';
 import {
   CHASE_LAYER_IDS,
+  attachMapModeButtons,
   clearMapTerrain,
-  createChaseControlButton,
   createMapChaseController,
-  injectMapTerrain,
+  createMapOrbitController,
+  isMapFullscreen,
   removeChaseHighlight,
   setChaseHighlightLine,
   updateChaseControlButton,
+  updateFullscreenButton,
+  update3dToggleButton,
+  type MapModeControlHandles,
 } from '@/utils/mapChase3d';
 import {
   fitMapToSelectedRoute,
@@ -143,6 +147,7 @@ function TrackMap({
   const activitiesRef = useRef(activities);
   const lightsOffRef = useRef(lightsOff);
   const chaseRef = useRef(createMapChaseController());
+  const orbitRef = useRef(createMapOrbitController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
   const styleIdleRef = useRef(false);
   const refitViewRef = useRef<() => void>(() => {});
@@ -150,18 +155,30 @@ function TrackMap({
   const animKeyRef = useRef<string | null>(null);
   /** Non-null while a chase for this run_id should show as active in the UI. */
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  const [view3d, setView3d] = useState(false);
+  const view3dRef = useRef(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const chasing =
     chaseRunId != null &&
     activity != null &&
     String(activity.run_id) === chaseRunId;
-  const chaseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const modeHandlesRef = useRef<MapModeControlHandles>({
+    d3Button: null,
+    fullscreenButton: null,
+    chaseButton: null,
+  });
   const toggle3dRef = useRef<() => void>(() => {});
+  const toggleChaseRef = useRef<() => void>(() => {});
   const [provider, setProvider] = useState<BasemapProvider>(
     initialBasemapProvider
   );
   const useBlank = lightsOff;
-  // Flat chase works on CARTO; Mapbox DEM/buildings are best-effort in injectMapTerrain.
+  // Orbit / DEM / buildings are best-effort in injectMapTerrain (no-op on CARTO).
   const can3d = !lightsOff;
+  const hasOwnGps = Boolean(
+    activity?.summary_polyline && activity.summary_polyline.length > 20
+  );
+  const canOffer3d = can3d && hasOwnGps;
   const bg = dark !== false ? '#0b0d10' : '#f4f5f7';
   const style = useBlank
     ? blankMapStyle(bg)
@@ -176,6 +193,28 @@ function TrackMap({
 
   const stopAnimations = () => {
     chaseRef.current.stop({ silent: true });
+    orbitRef.current.stop();
+  };
+
+  const flattenView = (m: mapboxgl.Map) => {
+    orbitRef.current.stop();
+    if (!chaseRef.current.isAnimating()) {
+      clearMapTerrain(m);
+      m.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+    }
+  };
+
+  const startOrbitIfNeeded = (m: mapboxgl.Map, coords: Coordinate[]) => {
+    if (!view3dRef.current || !can3d || coords.length < 2) {
+      flattenView(m);
+      return;
+    }
+    if (chaseRef.current.isAnimating()) return;
+    orbitRef.current.start({
+      map: m,
+      coords,
+      isDark: dark !== false,
+    });
   };
 
   const removeRouteLayers = (m: mapboxgl.Map) => {
@@ -203,16 +242,6 @@ function TrackMap({
     }
   };
 
-  const showSelected2d = (
-    m: mapboxgl.Map,
-    coords: Coordinate[],
-    color: string,
-    privacy: boolean
-  ) => {
-    setChaseHighlightLine(m, coords, color);
-    fitMapToSelectedRoute(m, coords, privacy);
-  };
-
   useEffect(() => {
     activityRef.current = activity;
     activitiesRef.current = activities;
@@ -231,8 +260,11 @@ function TrackMap({
       if (act?.summary_polyline && act.summary_polyline.length > 20) {
         const runId = String(act.run_id);
         const animKey = `${runId}|${privacy ? 1 : 0}|${useBlank ? 1 : 0}`;
-        // Keep camera/layers if same selection and chase already running
-        if (animKeyRef.current === animKey && chaseRef.current.isAnimating()) {
+        // Keep camera/layers if same selection and chase/orbit already running
+        if (
+          animKeyRef.current === animKey &&
+          (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
+        ) {
           return;
         }
 
@@ -275,8 +307,13 @@ function TrackMap({
           });
         }
 
-        // Manual 3D: selection always starts as 2D overview
-        showSelected2d(m, coords, color, privacy);
+        setChaseHighlightLine(m, coords, color);
+        if (view3dRef.current && !privacy) {
+          startOrbitIfNeeded(m, coords);
+        } else {
+          flattenView(m);
+          fitMapToSelectedRoute(m, coords, privacy);
+        }
         applyLightsOff(m, privacy);
         return;
       }
@@ -285,7 +322,7 @@ function TrackMap({
       selectedCoordsRef.current = null;
       stopAnimations();
       removeRouteLayers(m);
-      clearMapTerrain(m);
+      flattenView(m);
 
       const features = acts
         .filter((a) => a.summary_polyline)
@@ -337,34 +374,66 @@ function TrackMap({
       const coords = selectedCoordsRef.current;
       const privacy = lightsOffRef.current;
       if (act && coords && coords.length > 0) {
-        showSelected2d(m, coords, getColor(act), privacy);
+        setChaseHighlightLine(m, coords, getColor(act));
+        if (view3dRef.current && !privacy) {
+          startOrbitIfNeeded(m, coords);
+        } else {
+          fitMapToSelectedRoute(m, coords, privacy);
+        }
       } else {
+        flattenView(m);
         fitTrackMapOverview(m, activitiesRef.current, privacy);
       }
       setNeedsRecenter(false);
     };
   });
 
+  const restoreOverviewLine = (m: mapboxgl.Map) => {
+    if (m.getLayer('all-routes')) {
+      m.setPaintProperty(
+        'all-routes',
+        'line-opacity',
+        lightsOffRef.current ? 0.35 : 0.2
+      );
+    }
+  };
+
   const handleToggle3d = () => {
+    const m = map.current;
+    const coords = selectedCoordsRef.current;
+    if (!m || !coords || !canOffer3d) return;
+    const next = !view3dRef.current;
+    view3dRef.current = next;
+    setView3d(next);
+    if (next) {
+      startOrbitIfNeeded(m, coords);
+      return;
+    }
+    if (chaseRef.current.isAnimating()) return;
+    flattenView(m);
+    fitMapToSelectedRoute(m, coords, lightsOffRef.current);
+  };
+
+  const handleToggleChase = () => {
     const m = map.current;
     const act = activityRef.current;
     const coords = selectedCoordsRef.current;
-    if (!m || !act || !coords || !can3d) return;
+    if (!m || !act || !coords || !canOffer3d) return;
 
     if (chaseRef.current.isAnimating()) {
       chaseRef.current.stop({ silent: true });
       setChaseRunId(null);
-      showSelected2d(m, coords, getColor(act), lightsOffRef.current);
-      if (m.getLayer('all-routes')) {
-        m.setPaintProperty(
-          'all-routes',
-          'line-opacity',
-          lightsOffRef.current ? 0.35 : 0.2
-        );
+      restoreOverviewLine(m);
+      if (view3dRef.current) {
+        startOrbitIfNeeded(m, coords);
+      } else {
+        flattenView(m);
+        fitMapToSelectedRoute(m, coords, lightsOffRef.current);
       }
       return;
     }
 
+    orbitRef.current.stop();
     const runId = String(act.run_id);
     chaseRef.current.start(
       {
@@ -375,27 +444,52 @@ function TrackMap({
         runId,
         isDark: dark !== false,
         overviewLayerId: 'all-routes',
+        getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
       },
       {
         onStart: () => setChaseRunId(runId),
-        onEnd: () => setChaseRunId(null),
+        onEnd: () => {
+          setChaseRunId(null);
+          restoreOverviewLine(m);
+          if (view3dRef.current && selectedCoordsRef.current) {
+            startOrbitIfNeeded(m, selectedCoordsRef.current);
+          } else {
+            clearMapTerrain(m);
+          }
+        },
       }
     );
   };
 
   useEffect(() => {
     toggle3dRef.current = handleToggle3d;
+    toggleChaseRef.current = handleToggleChase;
   });
 
   useEffect(() => {
-    const btn = chaseButtonRef.current;
-    if (!btn) return;
-    updateChaseControlButton(btn, {
-      visible: Boolean(activity && can3d),
-      chasing,
-      title: chasing ? t('stopChase') : t('startChase'),
-    });
-  }, [chasing, activity, can3d, t]);
+    const { d3Button, fullscreenButton, chaseButton } = modeHandlesRef.current;
+    if (d3Button) {
+      update3dToggleButton(d3Button, {
+        visible: canOffer3d,
+        active: view3d && canOffer3d,
+        title: view3d ? t('disable3d') : t('enable3d'),
+      });
+    }
+    if (fullscreenButton) {
+      updateFullscreenButton(fullscreenButton, {
+        visible: canOffer3d,
+        active: isFullscreen,
+        title: isFullscreen ? t('exitFullscreen') : t('enterFullscreen'),
+      });
+    }
+    if (chaseButton) {
+      updateChaseControlButton(chaseButton, {
+        visible: canOffer3d && isFullscreen,
+        chasing,
+        title: chasing ? t('stopChase') : t('startChase'),
+      });
+    }
+  }, [chasing, view3d, isFullscreen, canOffer3d, t]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -427,34 +521,62 @@ function TrackMap({
 
     mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    // Custom "3D chase" button as a real Mapbox control (no overlay).
-    const chaseControl: mapboxgl.IControl = {
-      onAdd: () => {
-        const root = document.createElement('div');
-        root.className = 'route-map-3d-ctrl mapboxgl-ctrl mapboxgl-ctrl-group';
-
-        const btn = createChaseControlButton();
-        chaseButtonRef.current = btn;
-        btn.onclick = () => toggle3dRef.current();
-        updateChaseControlButton(btn, {
-          visible: Boolean(activity && can3d),
-          chasing: false,
-          title: t('startChase'),
-        });
-
-        root.appendChild(btn);
-        return root;
-      },
-      onRemove: () => {
-        chaseButtonRef.current = null;
-      },
-    };
-    mapInstance.addControl(chaseControl, 'top-right');
-
+    let detachModeButtons: (() => void) | undefined;
     if (!useBlank) {
-      // Add after chase so chase appears above fullscreen.
-      mapInstance.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+      detachModeButtons = attachMapModeButtons(
+        mapInstance,
+        {
+          onToggle3d: () => toggle3dRef.current(),
+          onToggleChase: () => toggleChaseRef.current(),
+        },
+        modeHandlesRef.current
+      );
+      {
+        const { d3Button, fullscreenButton, chaseButton } =
+          modeHandlesRef.current;
+        if (d3Button) {
+          update3dToggleButton(d3Button, {
+            visible: canOffer3d,
+            active: view3dRef.current && canOffer3d,
+            title: view3dRef.current ? t('disable3d') : t('enable3d'),
+          });
+        }
+        if (fullscreenButton) {
+          updateFullscreenButton(fullscreenButton, {
+            visible: canOffer3d,
+            active: false,
+            title: t('enterFullscreen'),
+          });
+        }
+        if (chaseButton) {
+          updateChaseControlButton(chaseButton, {
+            visible: false,
+            chasing: false,
+            title: t('startChase'),
+          });
+        }
+      }
     }
+
+    const syncFullscreen = () => {
+      const next = isMapFullscreen(mapInstance);
+      setIsFullscreen(next);
+      requestAnimationFrame(() => mapInstance.resize());
+      if (!next && chaseRef.current.isAnimating()) {
+        chaseRef.current.stop({ silent: true });
+        setChaseRunId(null);
+        restoreOverviewLine(mapInstance);
+        const coords = selectedCoordsRef.current;
+        if (view3dRef.current && coords)
+          startOrbitIfNeeded(mapInstance, coords);
+        else flattenView(mapInstance);
+      }
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    document.addEventListener(
+      'webkitfullscreenchange' as 'fullscreenchange',
+      syncFullscreen
+    );
 
     let settled = false;
     let timedOut = false;
@@ -499,7 +621,8 @@ function TrackMap({
 
     const onUserCameraChange = (event: { originalEvent?: Event }) => {
       if (!event.originalEvent) return;
-      if (chaseRef.current.isAnimating()) return;
+      if (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
+        return;
       if (map.current !== mapInstance) return;
       try {
         if (
@@ -525,7 +648,6 @@ function TrackMap({
       mapInstance.once('idle', () => {
         if (map.current !== mapInstance) return;
         styleIdleRef.current = true;
-        injectMapTerrain(mapInstance, dark !== false, can3d);
         updateRoutesRef.current();
       });
     });
@@ -535,10 +657,17 @@ function TrackMap({
     mapInstance.on('pitchend', onUserCameraChange);
 
     const chase = chaseRef.current;
+    const orbit = orbitRef.current;
     return () => {
       window.clearTimeout(timer);
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      document.removeEventListener(
+        'webkitfullscreenchange' as 'fullscreenchange',
+        syncFullscreen
+      );
+      detachModeButtons?.();
       chase.stop({ silent: true });
-      chaseButtonRef.current = null;
+      orbit.dispose();
       mapInstance.off('error', onError);
       mapInstance.off('dragend', onUserCameraChange);
       mapInstance.off('zoomend', onUserCameraChange);

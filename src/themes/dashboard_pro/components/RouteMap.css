@@ -1,48 +1,59 @@
-/* Mapbox zoom / compass / fullscreen: hidden until pointer is over the map.
-   Fullscreen puts the map in a top layer, so parent :hover stops working —
-   always show controls while any descendant is :fullscreen. */
-@media (hover: hover) and (pointer: fine) {
-  .route-map-hover-ctrls .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls .route-map-3d-ctrl {
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .route-map-hover-ctrls:hover .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls:hover .route-map-3d-ctrl,
-  .route-map-hover-ctrls:has(:fullscreen) .mapboxgl-ctrl-top-right,
-  .route-map-hover-ctrls:has(:fullscreen) .route-map-3d-ctrl {
-    opacity: 1;
-  }
-}
-
-/* 3D chase toggle — match native Mapbox control sizing and center the SVG icon */
-.route-map-3d-ctrl button.route-map-3d-btn {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  /* Match native Mapbox controls: dark icon on white button background */
+/* Mode buttons (3D / fullscreen / cruise) live in the NavigationControl
+   `.mapboxgl-ctrl-group`, so keep that stack always visible — 3D + fullscreen
+   must not be hover-gated. */
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-3d-btn {
   color: #333;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
-.route-map-3d-ctrl button.route-map-3d-btn.is-hidden {
-  display: none !important;
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-3d-btn.is-active {
+  background-color: #e8663d;
+  color: #fff;
 }
 
-.route-map-3d-ctrl button.route-map-3d-btn .mapboxgl-ctrl-icon {
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-3d-btn.is-active:hover {
+  background-color: #d4552f;
+  color: #fff;
+}
+
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-cruise-btn.is-chasing {
+  background-color: #e8663d;
+  color: #fff;
+}
+
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-cruise-btn.is-chasing:hover {
+  background-color: #d4552f;
+  color: #fff;
+}
+
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-cruise-btn .mapboxgl-ctrl-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  background: none;
+  background-image: none;
 }
 
-.route-map-3d-ctrl button.route-map-3d-btn.is-chasing {
-  background-color: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #ffffff;
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-3d-btn.is-hidden,
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-fullscreen-btn.is-hidden,
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-cruise-btn.is-hidden {
+  display: none !important;
+}
+
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-3d-btn:focus-visible,
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-fullscreen-btn:focus-visible,
+.mapboxgl-ctrl-group.route-map-mode-ctrl .route-map-cruise-btn:focus-visible {
+  outline: 2px solid #e8663d;
+  outline-offset: -2px;
+}
+
+/* Dark theme: keep 3D label readable; Mapbox icons already invert via filter elsewhere. */
+:is(.dark, [data-theme='dark'])
+  .mapboxgl-ctrl-group.route-map-mode-ctrl
+  .route-map-3d-btn:not(.is-active) {
+  color: #eee;
 }
 
 /* Icon-only recenter — sits beside Overview after user pans/zooms */
