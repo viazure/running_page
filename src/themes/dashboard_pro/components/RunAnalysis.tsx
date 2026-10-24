@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
+import { resolveActivityTitle } from '@/core/privacyTitles';
 import {
   formatClock,
   formatPaceSeconds,
@@ -1458,18 +1459,24 @@ function Pulse({ className }: { className: string }) {
 }
 
 function AnalysisSkeleton({
+  activity,
   className,
   onClose,
 }: {
+  activity: Activity;
   className?: string;
   onClose?: () => void;
 }) {
   const tr = useTr();
+  const { locale } = useLocale();
+  const title = resolveActivityTitle(activity, locale);
   return (
     <div className={`card p-4 ${className ?? ''}`}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-2">
-          <Pulse className="h-4 w-24" />
+          <h2 className="truncate text-base font-bold" title={title}>
+            {title}
+          </h2>
           <Pulse className="h-3 w-36" />
         </div>
         {onClose ? (
@@ -1511,19 +1518,23 @@ function AnalysisSkeleton({
 }
 
 function Header({
+  activity,
   data,
   onClose,
   tr,
 }: {
+  activity: Activity;
   data: RunSplits;
   onClose?: () => void;
   tr: Tr;
 }) {
+  const { locale } = useLocale();
+  const title = resolveActivityTitle(activity, locale);
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-base font-bold">
-          {tr('运动分析', 'Run analysis')}
+        <h2 className="truncate text-base font-bold" title={title}>
+          {title}
         </h2>
         <p className="truncate text-[11px] text-[var(--color-muted)]">
           {[
@@ -1545,10 +1556,12 @@ function Header({
 }
 
 function Loaded({
+  activity,
   promise,
   className,
   onClose,
 }: {
+  activity: Activity;
   promise: Promise<RunSplits | null>;
   className?: string;
   onClose?: () => void;
@@ -1558,7 +1571,7 @@ function Loaded({
   if (!data) return null;
   return (
     <div className={`card p-4 ${className ?? ''}`}>
-      <Header data={data} onClose={onClose} tr={tr} />
+      <Header activity={activity} data={data} onClose={onClose} tr={tr} />
       <AnalysisBody data={data} />
     </div>
   );
@@ -1576,10 +1589,17 @@ export function RunAnalysis({
   const promise = loadSplits(activity.run_id);
   return (
     <Suspense
-      fallback={<AnalysisSkeleton className={className} onClose={onClose} />}
+      fallback={
+        <AnalysisSkeleton
+          activity={activity}
+          className={className}
+          onClose={onClose}
+        />
+      }
     >
       <Loaded
         key={activity.run_id}
+        activity={activity}
         promise={promise}
         className={className}
         onClose={onClose}
