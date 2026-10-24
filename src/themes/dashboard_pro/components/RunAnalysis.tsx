@@ -72,7 +72,7 @@ function useCoarsePointer(): boolean {
     () =>
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
-      window.matchMedia('(pointer: coarse)').matches,
+      window.matchMedia('(pointer: coarse)').matches
   );
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
