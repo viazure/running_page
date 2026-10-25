@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
+import type { Locale } from '@/core/i18n';
 import { resolveActivityTitle } from '@/core/privacyTitles';
 import {
   formatClock,
@@ -25,6 +26,7 @@ import {
   type SplitRow,
   type ZoneInfo,
 } from '@/core/splits';
+import { captureCard, exportCard } from '@/utils/exportCard';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -205,13 +207,11 @@ function MetricChip({
   label,
   value,
   unit,
-  sub,
   secondary = false,
 }: {
   label: string;
   value: string;
   unit?: string;
-  sub?: string;
   secondary?: boolean;
 }) {
   return (
@@ -237,27 +237,37 @@ function MetricChip({
           </span>
         ) : null}
       </p>
-      {sub ? (
-        <p className="metric mt-1 text-[10px] leading-tight text-[var(--color-muted)]">
-          {sub}
-        </p>
-      ) : null}
     </div>
+  );
+}
+
+function hasMetricGrid(data: RunSplits): boolean {
+  const s = data.summary;
+  return (
+    has(s.calories) ||
+    has(s.hr_avg) ||
+    has(s.cadence_avg) ||
+    has(s.elev_gain) ||
+    has(s.power_avg) ||
+    has(s.stride_length) ||
+    has(s.vertical_oscillation) ||
+    has(s.ground_contact_time) ||
+    has(s.training_load) ||
+    (s.temperature_source === 'weather' && has(s.temperature))
   );
 }
 
 function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   const s = data.summary;
-  const altPeak = seriesMax(data.chart?.alt);
   type Cell = {
     key: string;
     label: string;
     value: string;
     unit?: string;
-    sub?: string;
     show: boolean;
   };
   // TE lives in TeScale bars below — omit duplicate Aerobic TE chip.
+  // Overview keeps main values only; max / descent live in charts below.
   const primary: Cell[] = [
     {
       key: 'cal',
@@ -271,7 +281,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('平均心率', 'Avg HR'),
       value: fmt(s.hr_avg),
       unit: 'bpm',
-      sub: has(s.hr_max) ? `${tr('最大', 'Max')} ${s.hr_max}` : undefined,
       show: has(s.hr_avg),
     },
     {
@@ -286,18 +295,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('累计爬升', 'Ascent'),
       value: fmt(s.elev_gain),
       unit: 'm',
-      sub:
-        [
-          has(s.elev_loss)
-            ? `${tr('下降', 'Descent')} ${fmt(s.elev_loss)} m`
-            : null,
-          has(altPeak)
-            ? `${tr('最高海拔', 'Max elev.')} ${fmt(altPeak)} m`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' · ') || undefined,
-      show: has(s.elev_gain) || has(s.elev_loss),
+      show: has(s.elev_gain),
     },
   ];
   const secondary: Cell[] = [
@@ -306,7 +304,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('平均功率', 'Avg power'),
       value: fmt(s.power_avg),
       unit: 'W',
-      sub: has(s.power_max) ? `${tr('最大', 'Max')} ${s.power_max}` : undefined,
       show: has(s.power_avg),
     },
     {
@@ -341,10 +338,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       label: tr('气温', 'Air temp'),
       value: fmt(s.temperature),
       unit: '°C',
-      sub:
-        has(s.temperature_min) || has(s.temperature_max)
-          ? `${fmt(s.temperature_min)}–${fmt(s.temperature_max)}`
-          : undefined,
       show: s.temperature_source === 'weather' && has(s.temperature),
     },
   ];
@@ -361,7 +354,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
               label={c.label}
               value={c.value}
               unit={c.unit}
-              sub={c.sub}
             />
           ))}
         </div>
@@ -374,7 +366,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
               label={c.label}
               value={c.value}
               unit={c.unit}
-              sub={c.sub}
               secondary
             />
           ))}
@@ -1008,7 +999,16 @@ function MetricCard({
   );
 }
 
-function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
+function ChartStack({
+  data,
+  tr,
+  staticExport = false,
+}: {
+  data: RunSplits;
+  tr: Tr;
+  /** Hide interactive toggles for share image capture. */
+  staticExport?: boolean;
+}) {
   const base = data.chart;
   // liveHover: while pointer is over a chart (fine scrub / coarse tap).
   // pinned: fine click; leave restores this, outside click clears.
@@ -1163,28 +1163,30 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-semibold">{tr('图表', 'Charts')}</p>
-        <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
-          {(
-            [
-              ['distance', tr('距离', 'Distance')],
-              ['time', tr('时间', 'Time')],
-            ] as const
-          ).map(([m, label]) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={axis === m}
-              onClick={() => setAxis(m)}
-              className={`cursor-pointer rounded-full px-3 py-0.5 transition-colors ${
-                axis === m
-                  ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {!staticExport ? (
+          <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
+            {(
+              [
+                ['distance', tr('距离', 'Distance')],
+                ['time', tr('时间', 'Time')],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={axis === m}
+                onClick={() => setAxis(m)}
+                className={`cursor-pointer rounded-full px-3 py-0.5 transition-colors ${
+                  axis === m
+                    ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
+                    : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {shown.map((d) => (
@@ -1250,7 +1252,15 @@ function Delta({ cur, prev, invert }: { cur: N; prev: N; invert?: boolean }) {
   );
 }
 
-function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
+function SplitsBlock({
+  data,
+  tr,
+  staticExport = false,
+}: {
+  data: RunSplits;
+  tr: Tr;
+  staticExport?: boolean;
+}) {
   const hasLaps = data.laps.length > 1;
   const [mode, setMode] = useState<'km' | 'laps'>(
     data.splits.length ? 'km' : 'laps'
@@ -1270,7 +1280,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
         <p className="text-[13px] font-semibold">
           {mode === 'km' ? tr('分段', 'Splits') : tr('设备圈', 'Laps')}
         </p>
-        {hasLaps && data.splits.length ? (
+        {!staticExport && hasLaps && data.splits.length ? (
           <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
             {(['km', 'laps'] as const).map((m) => (
               <button
@@ -1394,39 +1404,48 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
 }
 
 // ---------------------------------------------------------------- stack
+function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
+  const s = data.summary;
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <div>
+        <p className="text-[11px] leading-none text-[var(--color-muted)]">
+          {tr('距离', 'Distance')}
+        </p>
+        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
+          {has(s.distance) ? (s.distance / 1000).toFixed(2) : '--'}
+          <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
+            km
+          </span>
+        </p>
+      </div>
+      <div>
+        <p className="text-[11px] leading-none text-[var(--color-muted)]">
+          {tr('用时', 'Time')}
+        </p>
+        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
+          {formatClock(s.time)}
+        </p>
+      </div>
+      <div>
+        <p className="text-[11px] leading-none text-[var(--color-muted)]">
+          {tr('平均配速', 'Avg pace')}
+        </p>
+        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
+          {formatPaceSeconds(s.pace)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AnalysisBody({ data }: { data: RunSplits }) {
   const tr = useTr();
   const s = data.summary;
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3 border-b border-[var(--color-border)] pb-3">
-        <div>
-          <p className="text-[11px] leading-none text-[var(--color-muted)]">
-            {tr('距离', 'Distance')}
-          </p>
-          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-            {has(s.distance) ? (s.distance / 1000).toFixed(2) : '--'}
-            <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
-              km
-            </span>
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] leading-none text-[var(--color-muted)]">
-            {tr('用时', 'Time')}
-          </p>
-          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-            {formatClock(s.time)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] leading-none text-[var(--color-muted)]">
-            {tr('平均配速', 'Avg pace')}
-          </p>
-          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-            {formatPaceSeconds(s.pace)}
-          </p>
-        </div>
+      <div className="border-b border-[var(--color-border)] pb-3">
+        <PrimaryStats data={data} tr={tr} />
       </div>
 
       <MetricGrid data={data} tr={tr} />
@@ -1555,13 +1574,303 @@ function AnalysisSkeleton({
   );
 }
 
+type ShareSectionKey = 'header' | 'metrics' | 'te' | 'splits' | 'charts';
+
+type ShareSectionState = Record<ShareSectionKey, boolean>;
+
+function activityDateLabel(activity: Activity, locale: Locale): string {
+  const raw = activity.start_date_local || activity.start_date || '';
+  const d = raw.slice(0, 10);
+  if (!d) return '';
+  try {
+    return new Date(`${d}T00:00:00`).toLocaleDateString(
+      locale === 'zh' ? 'zh-CN' : 'en-US',
+      { year: 'numeric', month: 'short', day: 'numeric' }
+    );
+  } catch {
+    return d;
+  }
+}
+
+function availableShareSections(data: RunSplits): ShareSectionKey[] {
+  const s = data.summary;
+  const keys: ShareSectionKey[] = ['header'];
+  if (hasMetricGrid(data)) keys.push('metrics');
+  if (has(s.aerobic_te) || has(s.anaerobic_te)) keys.push('te');
+  if (data.splits.length || data.laps.length) keys.push('splits');
+  if (data.chart && data.chart.d.length >= 2) keys.push('charts');
+  return keys;
+}
+
+function defaultShareSections(available: ShareSectionKey[]): ShareSectionState {
+  return {
+    header: available.includes('header'),
+    metrics: available.includes('metrics'),
+    te: available.includes('te'),
+    splits: false,
+    charts: false,
+  };
+}
+
+function SharePoster({
+  activity,
+  data,
+  sections,
+  tr,
+  locale,
+}: {
+  activity: Activity;
+  data: RunSplits;
+  sections: ShareSectionState;
+  tr: Tr;
+  locale: Locale;
+}) {
+  const title = resolveActivityTitle(activity, locale);
+  const date = activityDateLabel(activity, locale);
+  const s = data.summary;
+  return (
+    <div className="w-[390px] bg-[var(--color-card)] p-5 text-[var(--color-text)]">
+      <div className="space-y-4">
+        {sections.header ? (
+          <div className="space-y-3 border-b border-[var(--color-border)] pb-4">
+            <div className="min-w-0">
+              <h2 className="text-lg leading-snug font-bold break-words">
+                {title}
+              </h2>
+              {date ? (
+                <p className="mt-1 text-[12px] text-[var(--color-muted)]">
+                  {date}
+                </p>
+              ) : null}
+            </div>
+            <PrimaryStats data={data} tr={tr} />
+          </div>
+        ) : null}
+
+        {sections.metrics ? <MetricGrid data={data} tr={tr} /> : null}
+
+        {sections.te && (has(s.aerobic_te) || has(s.anaerobic_te)) ? (
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <TeScale
+              aerobic={s.aerobic_te}
+              anaerobic={s.anaerobic_te}
+              tr={tr}
+            />
+          </div>
+        ) : null}
+
+        {sections.splits ? (
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <SplitsBlock data={data} tr={tr} staticExport />
+          </div>
+        ) : null}
+
+        {sections.charts && data.chart ? (
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <ChartStack data={data} tr={tr} staticExport />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SharePanel({
+  activity,
+  data,
+  onClose,
+}: {
+  activity: Activity;
+  data: RunSplits;
+  onClose: () => void;
+}) {
+  const tr = useTr();
+  const { locale } = useLocale();
+  const available = useMemo(() => availableShareSections(data), [data]);
+  const [sections, setSections] = useState<ShareSectionState>(() =>
+    defaultShareSections(available)
+  );
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [canNativeShare] = useState(
+    () =>
+      typeof navigator !== 'undefined' &&
+      typeof navigator.canShare === 'function'
+  );
+  const posterRef = useRef<HTMLDivElement>(null);
+
+  const labels: Record<ShareSectionKey, string> = {
+    header: tr('标题与总览', 'Title & overview'),
+    metrics: tr('运动指标', 'Metrics'),
+    te: tr('训练效果', 'Training effect'),
+    splits: tr('分段', 'Splits'),
+    charts: tr('图表', 'Charts'),
+  };
+
+  const selectedCount = available.filter((k) => sections[k]).length;
+
+  const toggle = (key: ShareSectionKey) => {
+    setSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const buildFilename = () => {
+    const stamp = (activity.start_date_local || activity.start_date || '')
+      .slice(0, 10)
+      .split('-')
+      .join('');
+    return `run-${stamp || activity.run_id}-share.png`;
+  };
+
+  const renderPoster = async () => {
+    if (!posterRef.current || selectedCount === 0) return null;
+    await document.fonts.ready;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    await new Promise((r) => setTimeout(r, 80));
+    const dataUrl = await captureCard(posterRef.current);
+    return { dataUrl, filename: buildFilename() };
+  };
+
+  const onDownload = async () => {
+    if (!posterRef.current || busy || selectedCount === 0) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await document.fonts.ready;
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await new Promise((r) => setTimeout(r, 80));
+      await exportCard(posterRef.current, buildFilename());
+      setMessage(tr('长图已下载', 'Image downloaded'));
+    } catch (err) {
+      console.error('Share export failed:', err);
+      setMessage(tr('导出失败，请重试', 'Export failed. Please retry.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onNativeShare = async () => {
+    if (busy || selectedCount === 0) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await renderPoster();
+      if (!result) return;
+      const blob = await (await fetch(result.dataUrl)).blob();
+      const file = new File([blob], result.filename, { type: 'image/png' });
+      if (!navigator.canShare?.({ files: [file] })) {
+        setMessage(tr('当前浏览器不支持系统分享', 'System share unavailable'));
+        return;
+      }
+      await navigator.share({
+        files: [file],
+        title: resolveActivityTitle(activity, locale),
+      });
+      setMessage(tr('已打开系统分享', 'Shared'));
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error('Native share failed:', err);
+      setMessage(tr('分享取消或失败', 'Share cancelled or failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="absolute inset-0 z-10 flex flex-col rounded-[inherit] bg-[var(--color-card)]/95 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={tr('分享长图', 'Share image')}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+        <h3 className="text-sm font-semibold">
+          {tr('分享长图', 'Share image')}
+        </h3>
+        <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        <p className="mb-3 text-[12px] text-[var(--color-muted)]">
+          {tr('选择要包含的内容', 'Choose sections to include')}
+        </p>
+        <ul className="space-y-2">
+          {available.map((key) => (
+            <li key={key}>
+              <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={sections[key]}
+                  onChange={() => toggle(key)}
+                  className="h-4 w-4 accent-[var(--color-run)]"
+                />
+                <span>{labels[key]}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {message ? (
+          <p className="mt-3 text-[12px] text-[var(--color-muted)]">
+            {message}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2 border-t border-[var(--color-border)] px-4 py-3">
+        <button
+          type="button"
+          disabled={busy || selectedCount === 0}
+          onClick={onDownload}
+          className="cursor-pointer rounded-full bg-[var(--color-run)] px-4 py-1.5 text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy
+            ? tr('生成中…', 'Generating…')
+            : tr('下载长图', 'Download image')}
+        </button>
+        {canNativeShare ? (
+          <button
+            type="button"
+            disabled={busy || selectedCount === 0}
+            onClick={onNativeShare}
+            className="cursor-pointer rounded-full border border-[var(--color-border)] px-4 py-1.5 text-[13px] font-medium text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {tr('系统分享', 'System share')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          className="cursor-pointer rounded-full px-3 py-1.5 text-[13px] text-[var(--color-muted)] hover:text-[var(--color-text)]"
+        >
+          {tr('取消', 'Cancel')}
+        </button>
+      </div>
+
+      {/* Off-screen poster for html-to-image; keep in DOM for layout. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed top-0 left-[-10000px] z-[-1]"
+      >
+        <div ref={posterRef}>
+          <SharePoster
+            activity={activity}
+            data={data}
+            sections={sections}
+            tr={tr}
+            locale={locale}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Header({
   activity,
   onClose,
+  onShare,
   tr,
 }: {
   activity: Activity;
   onClose?: () => void;
+  onShare?: () => void;
   tr: Tr;
 }) {
   const { locale } = useLocale();
@@ -1573,9 +1882,34 @@ function Header({
           {title}
         </h2>
       </div>
-      {onClose ? (
-        <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {onShare ? (
+          <button
+            type="button"
+            onClick={onShare}
+            aria-label={tr('分享', 'Share')}
+            title={tr('分享长图', 'Share image')}
+            className="cursor-pointer text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"
+              />
+            </svg>
+          </button>
+        ) : null}
+        {onClose ? (
+          <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1593,11 +1927,24 @@ function Loaded({
 }) {
   const data = use(promise);
   const tr = useTr();
+  const [shareOpen, setShareOpen] = useState(false);
   if (!data) return null;
   return (
-    <div className={`card p-4 ${className ?? ''}`}>
-      <Header activity={activity} onClose={onClose} tr={tr} />
+    <div className={`card relative p-4 ${className ?? ''}`}>
+      <Header
+        activity={activity}
+        onClose={onClose}
+        onShare={() => setShareOpen(true)}
+        tr={tr}
+      />
       <AnalysisBody data={data} />
+      {shareOpen ? (
+        <SharePanel
+          activity={activity}
+          data={data}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
