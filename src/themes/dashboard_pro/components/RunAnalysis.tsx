@@ -12,6 +12,7 @@ import {
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
 import { resolveActivityTitle } from '@/core/privacyTitles';
+import { resolveAnalysisSourceLabel } from '@/core/activitySource';
 import {
   formatClock,
   formatPaceSeconds,
@@ -1530,6 +1531,12 @@ function Header({
 }) {
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale);
+  const sourceLabel = resolveAnalysisSourceLabel(
+    activity.source,
+    data.source,
+    data.device,
+    locale
+  );
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="min-w-0">
@@ -1538,11 +1545,11 @@ function Header({
         </h2>
         <p className="truncate text-[11px] text-[var(--color-muted)]">
           {[
+            sourceLabel ?? tr('数据来自 FIT', 'From FIT file'),
             data.device?.toUpperCase(),
             data.sub_sport && data.sub_sport !== 'generic'
               ? data.sub_sport
               : null,
-            tr('数据来自 FIT', 'From FIT file'),
           ]
             .filter(Boolean)
             .join(' · ')}
