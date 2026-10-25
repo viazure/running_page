@@ -1,10 +1,10 @@
 import type { Locale } from './i18n';
 
-/** Known sync / file sources → [zh, en] display labels. */
+/** Brand / sync / file-kind labels → [zh, en]. */
 const SOURCE_LABELS: Record<string, [string, string]> = {
   garmin: ['Garmin 佳明', 'Garmin'],
   strava: ['Strava', 'Strava'],
-  codoon: ['咕咚', 'Codoon'],
+  codoon: ['咕哮', 'Codoon'],
   komoot: ['Komoot', 'Komoot'],
   nike: ['Nike Run Club', 'Nike Run Club'],
   keep: ['Keep', 'Keep'],
@@ -18,14 +18,6 @@ const SOURCE_LABELS: Record<string, [string, string]> = {
   fit: ['FIT', 'FIT'],
 };
 
-/**
- * FIT `garmin_product` / product_name tokens as written by the SDK
- * (e.g. fr255, fenix7x). Used only to infer brand — never expanded to a
- * marketing name.
- */
-const GARMIN_DEVICE_RE =
-  /^(fr\d|fenix|epix|venu|vivo|instinct|enduro|approach|edge|tactix|marq|quatix|descent|lily|swim|forerunner|garmin)/i;
-
 function pick(locale: Locale, zh: string, en: string): string {
   return locale === 'zh' ? zh : en;
 }
@@ -37,7 +29,7 @@ function normalizeKey(raw: string): string {
     .replace(/[_\s]+/g, ' ');
 }
 
-/** Map a raw activity/sync source string to a locale-aware label. */
+/** Map a raw brand / sync / file-kind string to a locale-aware label. */
 export function formatActivitySourceLabel(
   raw: string,
   locale: Locale = 'zh'
@@ -50,41 +42,42 @@ export function formatActivitySourceLabel(
       return pick(locale, zh, en);
     }
   }
-  // Unknown sync label: keep as provided (e.g. Oppo deviceName).
   return raw.trim();
 }
 
-export function looksLikeGarminDevice(
-  device: string | null | undefined
-): boolean {
-  if (!device) return false;
-  const d = device.trim();
-  if (!d || d === 'preview-fabricated' || d === 'sample') return false;
-  return GARMIN_DEVICE_RE.test(d);
+/** FIT file_id.manufacturer → display label, or null if absent. */
+export function formatManufacturerLabel(
+  manufacturer: string | null | undefined,
+  locale: Locale = 'zh'
+): string | null {
+  const raw = manufacturer?.trim();
+  if (!raw) return null;
+  return formatActivitySourceLabel(raw, locale);
 }
 
 /**
- * Resolve analysis-header source label.
- * Prefer activity.source when present; else splits.source; else infer Garmin
- * from FIT device tokens. Returns null when nothing better than a generic
- * FIT filler is known.
+ * Brand / source line for the analysis header.
+ *
+ * Prefer FIT `manufacturer` from splits (hardware brand written in the file).
+ * Else `activity.source` when the sync pipeline recorded one.
+ * Else file-kind from `splits.source` (gpx/tcx/fit) — a file type, not a brand.
+ *
+ * Never infer brand from device tokens alone (fr255 ≠ Garmin sync source).
  */
-export function resolveAnalysisSourceLabel(
+export function resolveAnalysisBrandLabel(
+  manufacturer: string | null | undefined,
   activitySource: string | null | undefined,
   splitsSource: string | null | undefined,
-  device: string | null | undefined,
   locale: Locale = 'zh'
 ): string | null {
+  const fromMfr = formatManufacturerLabel(manufacturer, locale);
+  if (fromMfr) return fromMfr;
+
   const fromActivity = activitySource?.trim();
   if (fromActivity) return formatActivitySourceLabel(fromActivity, locale);
 
   const fromSplits = splitsSource?.trim();
-  if (fromSplits && fromSplits.toLowerCase() !== 'fit') {
-    return formatActivitySourceLabel(fromSplits, locale);
-  }
+  if (fromSplits) return formatActivitySourceLabel(fromSplits, locale);
 
-  if (looksLikeGarminDevice(device)) {
-    return pick(locale, 'Garmin 佳明', 'Garmin');
-  }
   return null;
 }
