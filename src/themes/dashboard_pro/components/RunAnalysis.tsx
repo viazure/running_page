@@ -9,6 +9,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
 import type { Locale } from '@/core/i18n';
@@ -26,7 +27,6 @@ import {
   type SplitRow,
   type ZoneInfo,
 } from '@/core/splits';
-import { captureCard, exportCard } from '@/utils/exportCard';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -59,8 +59,8 @@ const TE_GRADIENT =
 const SHEET_MS = 200;
 
 const CHART_W = 720;
-const CHART_H = 112;
-const PAD = { t: 6, r: 6, b: 16, l: 34 };
+const CHART_H = 160;
+const PAD = { t: 8, r: 4, b: 8, l: 4 };
 
 const has = (v: N): v is number => v != null && Number.isFinite(v);
 const fmt = (v: N, d = 0) => (has(v) ? v.toFixed(d) : '--');
@@ -81,7 +81,6 @@ function useCoarsePointer(): boolean {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const mq = window.matchMedia('(pointer: coarse)');
     const update = () => setCoarse(mq.matches);
-    update();
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
   }, []);
@@ -116,6 +115,55 @@ function domain(values: number[], robust = true): [number, number] {
   }
   const pad = (hi - lo) * 0.12;
   return [lo - pad, hi + pad];
+}
+
+/** Dynamics charts: ignore spikes so the band of real values fills the plot. */
+function scatterDomain(values: number[], avg: N): [number, number] {
+  const sorted = [...values].sort((a, b) => a - b);
+  const q = (p: number) =>
+    sorted[
+      Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.round(p * (sorted.length - 1)))
+      )
+    ];
+  let lo = q(0.06);
+  let hi = q(0.94);
+  if (has(avg)) {
+    lo = Math.min(lo, avg);
+    hi = Math.max(hi, avg);
+  }
+  if (hi - lo < 1e-6) {
+    lo -= 1;
+    hi += 1;
+  }
+  const pad = (hi - lo) * 0.16;
+  return [lo - pad, hi + pad];
+}
+
+function tickValues(lo: number, hi: number, n: number): number[] {
+  if (n <= 1) return [lo];
+  return Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
+}
+
+function movingMean(
+  values: (number | null)[],
+  radius: number
+): (number | null)[] {
+  return values.map((v, i) => {
+    if (!has(v)) return null;
+    let sum = 0;
+    let n = 0;
+    const a = Math.max(0, i - radius);
+    const b = Math.min(values.length, i + radius + 1);
+    for (let j = a; j < b; j++) {
+      const x = values[j];
+      if (!has(x)) continue;
+      sum += x;
+      n += 1;
+    }
+    return n ? sum / n : null;
+  });
 }
 
 /** Colour index for an HR sample. Without FIT zone boundaries, falls back to
@@ -202,34 +250,56 @@ function formatAxis(v: number, mode: 'distance' | 'time'): string {
     : `${m}:${r}`;
 }
 
-// ---------------------------------------------------------------- metric chips (primary + secondary)
+/** Start, a few even steps, and the end — not only 0 / mid / finish. */
+function axisMarks(
+  x0: number,
+  x1: number,
+  mode: 'distance' | 'time'
+): number[] {
+  const span = x1 - x0;
+  if (!(span > 0)) return [x0];
+  const steps =
+    mode === 'distance'
+      ? [0.2, 0.5, 1, 2, 5, 10]
+      : [30, 60, 120, 300, 600, 900, 1200, 1800];
+  let step = steps[steps.length - 1];
+  for (const s of steps) {
+    if (span / s <= 6) {
+      step = s;
+      break;
+    }
+  }
+  const marks = [x0];
+  let x = Math.ceil((x0 + step * 0.25) / step) * step;
+  while (x < x1 - step * 0.7) {
+    marks.push(x);
+    x += step;
+  }
+  marks.push(x1);
+  const kept: number[] = [];
+  let prev = '';
+  for (const m of marks) {
+    const label = formatAxis(m, mode);
+    if (label === prev) kept.pop();
+    kept.push(m);
+    prev = label;
+  }
+  return kept;
+}
+
+// ---------------------------------------------------------------- detail metric grid (value above label)
 function MetricChip({
   label,
   value,
   unit,
-  secondary = false,
 }: {
   label: string;
   value: string;
   unit?: string;
-  secondary?: boolean;
 }) {
   return (
-    <div className="min-w-0">
-      <p
-        className={`text-[11px] leading-none ${
-          secondary
-            ? 'text-[var(--color-muted)]/75'
-            : 'text-[var(--color-muted)]'
-        }`}
-      >
-        {label}
-      </p>
-      <p
-        className={`metric mt-1 leading-none font-semibold tracking-tight ${
-          secondary ? 'text-[15px] text-[var(--color-text)]/90' : 'text-[17px]'
-        }`}
-      >
+    <div className="min-w-0 py-1 text-center">
+      <p className="metric text-[17px] leading-none font-semibold @min-[40rem]:text-[19px]">
         {value}
         {unit ? (
           <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">
@@ -237,28 +307,17 @@ function MetricChip({
           </span>
         ) : null}
       </p>
+      <p className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)]">
+        {label}
+      </p>
     </div>
-  );
-}
-
-function hasMetricGrid(data: RunSplits): boolean {
-  const s = data.summary;
-  return (
-    has(s.calories) ||
-    has(s.hr_avg) ||
-    has(s.cadence_avg) ||
-    has(s.elev_gain) ||
-    has(s.power_avg) ||
-    has(s.stride_length) ||
-    has(s.vertical_oscillation) ||
-    has(s.ground_contact_time) ||
-    has(s.training_load) ||
-    (s.temperature_source === 'weather' && has(s.temperature))
   );
 }
 
 function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   const s = data.summary;
+  // Same order on phone and desktop. TE is a separate block — no TE chip here.
+  // Max / descent stay on climb charts, not in this overview.
   type Cell = {
     key: string;
     label: string;
@@ -266,9 +325,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
     unit?: string;
     show: boolean;
   };
-  // TE lives in TeScale bars below — omit duplicate Aerobic TE chip.
-  // Overview keeps main values only; max / descent live in charts below.
-  const primary: Cell[] = [
+  const cells: Cell[] = [
     {
       key: 'cal',
       label: tr('卡路里', 'Calories'),
@@ -297,8 +354,6 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       unit: 'm',
       show: has(s.elev_gain),
     },
-  ];
-  const secondary: Cell[] = [
     {
       key: 'power',
       label: tr('平均功率', 'Avg power'),
@@ -340,37 +395,18 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       unit: '°C',
       show: s.temperature_source === 'weather' && has(s.temperature),
     },
-  ];
-  const primaryShown = primary.filter((c) => c.show);
-  const secondaryShown = secondary.filter((c) => c.show);
-  if (!primaryShown.length && !secondaryShown.length) return null;
+  ].filter((c) => c.show);
+  if (!cells.length) return null;
   return (
-    <div className="space-y-3">
-      {primaryShown.length ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          {primaryShown.map((c) => (
-            <MetricChip
-              key={c.key}
-              label={c.label}
-              value={c.value}
-              unit={c.unit}
-            />
-          ))}
-        </div>
-      ) : null}
-      {secondaryShown.length ? (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--color-border)]/70 pt-3 sm:grid-cols-3">
-          {secondaryShown.map((c) => (
-            <MetricChip
-              key={c.key}
-              label={c.label}
-              value={c.value}
-              unit={c.unit}
-              secondary
-            />
-          ))}
-        </div>
-      ) : null}
+    <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 @min-[40rem]:gap-x-8 @min-[40rem]:gap-y-4">
+      {cells.map((c) => (
+        <MetricChip
+          key={c.key}
+          label={c.label}
+          value={c.value}
+          unit={c.unit}
+        />
+      ))}
     </div>
   );
 }
@@ -379,7 +415,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
 function TeScaleRow({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, (value / 5) * 100));
   return (
-    <div className="mb-2 last:mb-0">
+    <div>
       <div className="mb-1 flex items-baseline justify-between text-[12px]">
         <span className="text-[var(--color-muted)]">{label}</span>
         <span className="metric font-semibold">{value.toFixed(1)}</span>
@@ -417,12 +453,14 @@ function TeScale({
       <p className="mb-1.5 text-[13px] font-semibold">
         {tr('训练效果', 'Training effect')}
       </p>
-      {has(aerobic) ? (
-        <TeScaleRow label={tr('有氧', 'Aerobic')} value={aerobic} />
-      ) : null}
-      {has(anaerobic) ? (
-        <TeScaleRow label={tr('无氧', 'Anaerobic')} value={anaerobic} />
-      ) : null}
+      <div className="grid gap-3 @min-[40rem]:grid-cols-2 @min-[40rem]:gap-8">
+        {has(aerobic) ? (
+          <TeScaleRow label={tr('有氧', 'Aerobic')} value={aerobic} />
+        ) : null}
+        {has(anaerobic) ? (
+          <TeScaleRow label={tr('无氧', 'Anaerobic')} value={anaerobic} />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -594,6 +632,7 @@ function MetricCard({
   coarse,
   zoneBounds,
   footer,
+  prominent = false,
 }: {
   def: TrendDef;
   xs: number[];
@@ -608,6 +647,8 @@ function MetricCard({
   coarse: boolean;
   zoneBounds?: (number | null)[] | null;
   footer?: ReactNode;
+  /** Pace / heart rate: taller plot, full width of the sheet. */
+  prominent?: boolean;
 }) {
   const tapRef = useRef<{
     x: number;
@@ -630,7 +671,10 @@ function MetricCard({
 
   const geom = useMemo(() => {
     if (valid.length < 2 || xs.length < 2) return null;
-    const [lo, hi] = domain(valid, def.kind !== 'area');
+    const [lo, hi] =
+      def.kind === 'scatter'
+        ? scatterDomain(valid, def.avg ?? null)
+        : domain(valid, def.kind !== 'area');
     const x0 = xs[0];
     const x1 = xs[xs.length - 1] || 1;
     const iw = CHART_W - PAD.l - PAD.r;
@@ -641,14 +685,17 @@ function MetricCard({
       const t = (c - lo) / (hi - lo);
       return def.invert ? PAD.t + t * ih : PAD.t + (1 - t) * ih;
     };
-    const ticks = [lo, (lo + hi) / 2, hi].map((v) => ({
-      y: py(v),
-      label: def.format(v),
+    const yCount = def.kind === 'scatter' ? 4 : 3;
+    const ticks: { y: number; label: string }[] = [];
+    for (const v of tickValues(lo, hi, yCount)) {
+      const label = def.format(v);
+      if (ticks.some((t) => t.label === label)) continue;
+      ticks.push({ y: py(v), label });
+    }
+    const xTicks = axisMarks(x0, x1, mode).map((x) => ({
+      x: px(x),
+      label: formatAxis(x, mode),
     }));
-    const xTicks = [0, 0.5, 1].map((frac) => {
-      const x = x0 + frac * (x1 - x0);
-      return { x: px(x), label: formatAxis(x, mode) };
-    });
     return { px, py, lo, hi, ticks, xTicks, x0, x1, iw, ih };
   }, [xs, valid, def, mode]);
 
@@ -746,21 +793,67 @@ function MetricCard({
 
   let linePath = '';
   let areaPath = '';
+  let bandPath = '';
   const hrSegs: { d: string; color: string }[] = [];
-  const dots: { x: number; y: number; color: string }[] = [];
+  const dots: { x: number; y: number }[] = [];
 
   if (def.kind === 'scatter') {
-    ys.forEach((v, i) => {
-      if (!has(v)) return;
-      // Color outliers vs avg
-      let color = def.color;
-      if (has(avgVal)) {
-        const rel = Math.abs(v - avgVal) / Math.max(1, Math.abs(avgVal));
-        if (rel > 0.18) color = '#f97316';
-        if (rel > 0.35) color = '#ef4444';
+    const radius = Math.max(8, Math.round(def.series.length / 28));
+    const band = movingMean(def.series, radius);
+    let pen = false;
+    let d = '';
+    let firstX = 0;
+    let lastX = 0;
+    let started = false;
+    band.forEach((v, i) => {
+      if (!has(v)) {
+        pen = false;
+        return;
       }
-      dots.push({ x: geom.px(xs[i]), y: geom.py(v), color });
+      const x = geom.px(xs[i]);
+      if (!started) firstX = x;
+      lastX = x;
+      started = true;
+      d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${geom.py(v).toFixed(1)}`;
+      pen = true;
     });
+    if (d) {
+      const base = (PAD.t + geom.ih).toFixed(1);
+      bandPath = `${d}L${lastX.toFixed(1)},${base}L${firstX.toFixed(1)},${base}Z`;
+    }
+    const validIdx: number[] = [];
+    ys.forEach((v, i) => {
+      if (has(v)) validIdx.push(i);
+    });
+    // Dense enough to read as a continuous band; HTML dots stay round when
+    // the stretched SVG would squash <circle> into ellipses.
+    const maxDots = 90;
+    if (validIdx.length <= maxDots) {
+      for (const i of validIdx) {
+        dots.push({ x: geom.px(xs[i]), y: geom.py(ys[i] as number) });
+      }
+    } else {
+      const buckets: number[][] = Array.from({ length: maxDots }, () => []);
+      const x0 = xs[validIdx[0]];
+      const x1 = xs[validIdx[validIdx.length - 1]];
+      const span = x1 - x0 || 1;
+      for (const i of validIdx) {
+        let b = Math.floor(((xs[i] - x0) / span) * maxDots);
+        if (b < 0) b = 0;
+        if (b >= maxDots) b = maxDots - 1;
+        buckets[b].push(i);
+      }
+      for (const group of buckets) {
+        if (!group.length) continue;
+        const mid = group[Math.floor(group.length / 2)];
+        const samples = group
+          .map((i) => ys[i])
+          .filter((v): v is number => has(v))
+          .sort((a, b) => a - b);
+        const y = samples[Math.floor(samples.length / 2)];
+        dots.push({ x: geom.px(xs[mid]), y: geom.py(y) });
+      }
+    }
   } else if (def.kind === 'hr-area') {
     let cur = '';
     let color = ZONE_COLORS[1];
@@ -822,33 +915,51 @@ function MetricCard({
       ? geom.py(avgVal)
       : null;
 
+  const plotH = prominent
+    ? 'h-44 @min-[40rem]:h-56'
+    : def.kind === 'scatter'
+      ? 'h-28 @min-[40rem]:h-32'
+      : 'h-32 @min-[40rem]:h-36';
+
   return (
-    <div
-      data-run-metric-card=""
-      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-[var(--shadow-card)]"
-    >
-      <div className="mb-1 flex items-end justify-between gap-3">
+    <div data-run-metric-card="" className="min-w-0">
+      <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold" style={{ color: def.color }}>
+          <p className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <span
+              className="inline-block size-2 shrink-0 rounded-full"
+              style={{ background: def.color }}
+            />
             {def.title}
+            {def.kind === 'scatter' ? (
+              <span className="text-[11px] font-normal text-[var(--color-muted)]">
+                {def.unit}
+              </span>
+            ) : null}
           </p>
-          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-4">
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-4">
             {has(def.avg) || has(avgVal) ? (
-              <p className="metric text-[20px] leading-none font-semibold tracking-tight">
+              <p className="metric text-lg leading-none font-semibold @min-[40rem]:text-xl">
                 {def.format((def.avg ?? avgVal) as number)}
                 <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">
-                  {def.unit}
+                  {def.kind === 'scatter'
+                    ? (def.avgLabel ?? 'Avg')
+                    : def.unit}
                 </span>
-                <span className="ml-1.5 text-[10px] font-normal text-[var(--color-muted)]">
-                  {def.avgLabel ?? 'Avg'}
-                </span>
+                {def.kind !== 'scatter' ? (
+                  <span className="ml-1.5 text-[10px] font-normal text-[var(--color-muted)]">
+                    {def.avgLabel ?? 'Avg'}
+                  </span>
+                ) : null}
               </p>
             ) : null}
             {has(def.max) ? (
               <p className="metric text-[13px] text-[var(--color-muted)]">
                 {def.format(def.max)}
                 <span className="ml-1 text-[10px]">
-                  {def.unit} · {def.maxLabel ?? 'Max'}
+                  {def.kind === 'scatter'
+                    ? (def.maxLabel ?? 'Max')
+                    : `${def.unit} · ${def.maxLabel ?? 'Max'}`}
                 </span>
               </p>
             ) : null}
@@ -862,36 +973,55 @@ function MetricCard({
             ) : null}
           </div>
         </div>
-        {hover != null ? (
-          <p className="metric shrink-0 text-right text-[12px] text-[var(--color-muted)]">
-            <span className="font-semibold text-[var(--color-text)]">
-              {has(hv) ? def.format(hv) : '--'}
-            </span>{' '}
-            {def.unit}
-            <span className="mt-0.5 block text-[10px]">
-              {formatAxis(xs[hover], mode)}
-              {mode === 'distance' ? ' km' : ''}
-            </span>
-          </p>
-        ) : null}
+        {/* Fixed two-line slot so scrubbing never grows the header. */}
+        <p
+          className={`metric h-[2.125rem] shrink-0 text-right text-[12px] text-[var(--color-muted)] ${
+            hover == null ? 'invisible' : ''
+          }`}
+          aria-hidden={hover == null}
+        >
+          <span className="text-base font-semibold text-[var(--color-text)]">
+            {has(hv) ? def.format(hv) : '--'}
+          </span>{' '}
+          {def.unit}
+          <span className="mt-0.5 block text-[10px]">
+            {hover != null
+              ? `${formatAxis(xs[hover], mode)}${mode === 'distance' ? ' km' : ''}`
+              : '\u00a0'}
+          </span>
+        </p>
       </div>
       <div
-        className="relative select-none"
-        style={coarse ? { touchAction: 'pan-y' } : undefined}
-        onPointerDown={coarse ? onCoarsePointerDown : onFinePointerDown}
-        onPointerMove={coarse ? onCoarsePointerMove : onFinePointerMove}
-        onPointerUp={coarse ? onCoarsePointerUp : undefined}
-        onPointerCancel={coarse ? onCoarsePointerCancel : undefined}
-        onPointerLeave={coarse ? undefined : onFinePointerLeave}
+        className={`grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-1.5 ${plotH}`}
       >
-        <svg
-          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-          preserveAspectRatio="none"
-          className="h-[100px] w-full overflow-visible sm:h-[120px]"
-        >
+        <div className="relative">
           {geom.ticks.map((tick) => (
-            <g key={`y-${tick.label}`}>
+            <span
+              key={`y-${tick.label}`}
+              className="metric absolute right-0 -translate-y-1/2 text-[10px] leading-none text-[var(--color-muted)]"
+              style={{ top: `${(tick.y / CHART_H) * 100}%` }}
+            >
+              {tick.label}
+            </span>
+          ))}
+        </div>
+        <div
+          className="relative min-w-0 select-none"
+          style={coarse ? { touchAction: 'pan-y' } : undefined}
+          onPointerDown={coarse ? onCoarsePointerDown : onFinePointerDown}
+          onPointerMove={coarse ? onCoarsePointerMove : onFinePointerMove}
+          onPointerUp={coarse ? onCoarsePointerUp : undefined}
+          onPointerCancel={coarse ? onCoarsePointerCancel : undefined}
+          onPointerLeave={coarse ? undefined : onFinePointerLeave}
+        >
+          <svg
+            viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+            preserveAspectRatio="none"
+            className="h-full w-full overflow-visible"
+          >
+            {geom.ticks.map((tick) => (
               <line
+                key={`grid-${tick.label}`}
                 x1={PAD.l}
                 x2={CHART_W - PAD.r}
                 y1={tick.y}
@@ -900,95 +1030,114 @@ function MetricCard({
                 strokeWidth={1}
                 vectorEffect="non-scaling-stroke"
               />
-              <text
-                x={PAD.l - 4}
-                y={tick.y + 3}
-                textAnchor="end"
-                fill="var(--color-muted)"
-                fontSize="9"
-              >
-                {tick.label}
-              </text>
-            </g>
-          ))}
-          {geom.xTicks.map((tick) => (
-            <text
-              key={`x-${tick.label}`}
-              x={tick.x}
-              y={CHART_H - 1}
-              textAnchor="middle"
-              fill="var(--color-muted)"
-              fontSize="9"
-            >
-              {tick.label}
-            </text>
-          ))}
-          {areaPath ? (
-            <path d={areaPath} fill={def.color} opacity={0.18} />
-          ) : null}
-          {avgY != null ? (
-            <line
-              x1={PAD.l}
-              x2={CHART_W - PAD.r}
-              y1={avgY}
-              y2={avgY}
-              stroke="var(--color-text)"
-              strokeOpacity={0.55}
-              strokeWidth={1.25}
-              strokeDasharray="4 3"
-              vectorEffect="non-scaling-stroke"
-            />
-          ) : null}
-          {def.kind === 'hr-area'
-            ? hrSegs.map((s) => (
-                <path
-                  key={`${s.color}-${s.d.slice(0, 24)}`}
-                  d={s.d}
-                  fill="none"
-                  stroke={s.color}
-                  strokeWidth={2}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))
-            : null}
-          {def.kind === 'area' && linePath ? (
-            <path
-              d={linePath}
-              fill="none"
-              stroke={def.color}
-              strokeWidth={2}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          ) : null}
+            ))}
+            {bandPath ? (
+              <path d={bandPath} fill="var(--color-muted)" opacity={0.18} />
+            ) : null}
+            {areaPath ? (
+              <path d={areaPath} fill={def.color} opacity={0.16} />
+            ) : null}
+            {avgY != null ? (
+              <line
+                x1={PAD.l}
+                x2={CHART_W - PAD.r}
+                y1={avgY}
+                y2={avgY}
+                stroke="var(--color-text)"
+                strokeOpacity={0.45}
+                strokeWidth={1.25}
+                strokeDasharray="4 3"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+            {def.kind === 'hr-area'
+              ? hrSegs.map((s) => (
+                  <path
+                    key={`${s.color}-${s.d.slice(0, 24)}`}
+                    d={s.d}
+                    fill="none"
+                    stroke={s.color}
+                    strokeWidth={2.25}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))
+              : null}
+            {def.kind === 'area' && linePath ? (
+              <path
+                d={linePath}
+                fill="none"
+                stroke={def.color}
+                strokeWidth={2.25}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+            {hover != null ? (
+              <line
+                x1={geom.px(xs[hover])}
+                x2={geom.px(xs[hover])}
+                y1={PAD.t}
+                y2={PAD.t + geom.ih}
+                stroke="var(--color-text)"
+                strokeOpacity={0.35}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+          </svg>
           {def.kind === 'scatter'
             ? dots.map((d) => (
-                <circle
-                  key={`${d.x}-${d.y}`}
-                  cx={d.x}
-                  cy={d.y}
-                  r={2.1}
-                  fill={d.color}
-                  opacity={0.85}
+                <span
+                  key={`dot-${d.x}-${d.y}`}
+                  className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: `${(d.x / CHART_W) * 100}%`,
+                    top: `${(d.y / CHART_H) * 100}%`,
+                    background: def.color,
+                    opacity: 0.92,
+                  }}
                 />
               ))
             : null}
-          {hover != null ? (
-            <line
-              x1={geom.px(xs[hover])}
-              x2={geom.px(xs[hover])}
-              y1={PAD.t}
-              y2={PAD.t + geom.ih}
-              stroke="var(--color-text)"
-              strokeOpacity={0.3}
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
+          {hover != null && has(hv) ? (
+            <span
+              className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+              style={{
+                left: `${(geom.px(xs[hover]) / CHART_W) * 100}%`,
+                top: `${(geom.py(hv) / CHART_H) * 100}%`,
+                background: def.color,
+              }}
             />
           ) : null}
-        </svg>
+        </div>
+      </div>
+      <div className="mt-1 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-1.5">
+        <div />
+        <div className="relative mt-1 h-3.5">
+          {geom.xTicks.map((tick) => {
+            const frac = tick.x / CHART_W;
+            const edge =
+              frac < 0.06 ? 'start' : frac > 0.94 ? 'end' : 'mid';
+            return (
+              <span
+                key={`x-${tick.x}`}
+                className={`metric absolute top-0 text-[10px] leading-none whitespace-nowrap text-[var(--color-muted)] ${
+                  edge === 'end'
+                    ? '-translate-x-full'
+                    : edge === 'mid'
+                      ? '-translate-x-1/2'
+                      : ''
+                }`}
+                style={{ left: `${frac * 100}%` }}
+              >
+                {tick.label}
+              </span>
+            );
+          })}
+        </div>
       </div>
       {footer ? (
         <div className="mt-3 border-t border-[var(--color-border)]/70 pt-3">
@@ -999,16 +1148,7 @@ function MetricCard({
   );
 }
 
-function ChartStack({
-  data,
-  tr,
-  staticExport = false,
-}: {
-  data: RunSplits;
-  tr: Tr;
-  /** Hide interactive toggles for share image capture. */
-  staticExport?: boolean;
-}) {
+function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
   const base = data.chart;
   // liveHover: while pointer is over a chart (fine scrub / coarse tap).
   // pinned: fine click; leave restores this, outside click clears.
@@ -1163,8 +1303,7 @@ function ChartStack({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-semibold">{tr('图表', 'Charts')}</p>
-        {!staticExport ? (
-          <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
+        <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
             {(
               [
                 ['distance', tr('距离', 'Distance')],
@@ -1176,7 +1315,7 @@ function ChartStack({
                 type="button"
                 aria-pressed={axis === m}
                 onClick={() => setAxis(m)}
-                className={`cursor-pointer rounded-full px-3 py-0.5 transition-colors ${
+                className={`min-h-11 cursor-pointer rounded-full px-3.5 py-2 transition-colors md:min-h-0 md:px-3 md:py-1 ${
                   axis === m
                     ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
                     : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -1185,53 +1324,63 @@ function ChartStack({
                 {label}
               </button>
             ))}
-          </div>
-        ) : null}
+        </div>
       </div>
 
-      {shown.map((d) => (
-        <MetricCard
-          key={d.key}
-          def={d}
-          xs={xs}
-          mode={axis}
-          hover={hover}
-          onHover={setLiveHover}
-          onPin={setPinned}
-          coarse={coarse}
-          zoneBounds={
-            d.kind === 'hr-area' ? data.zones?.hr?.high_boundary : null
-          }
-          footer={
-            d.key === 'pace' && paceZones ? (
-              <ZoneTable
-                title={tr('配速区间', 'Pace zones')}
-                zone={paceZones}
-                colors={ZONE_COLORS}
-                unit="/km"
-                tr={tr}
-                labels={paceZoneLabels(paceZones)}
-              />
-            ) : d.key === 'hr' && data.zones?.hr ? (
-              <ZoneTable
-                title={tr('心率区间', 'HR zones')}
-                zone={data.zones.hr}
-                colors={ZONE_COLORS}
-                unit="bpm"
-                tr={tr}
-              />
-            ) : d.key === 'power' && data.zones?.power ? (
-              <ZoneTable
-                title={tr('功率区间', 'Power zones')}
-                zone={data.zones.power}
-                colors={ZONE_COLORS}
-                unit="W"
-                tr={tr}
-              />
-            ) : null
-          }
-        />
-      ))}
+      <div className="grid gap-x-8 gap-y-6 @min-[48rem]:grid-cols-2">
+        {shown.map((d) => (
+          <div
+            key={d.key}
+            className={
+              d.key === 'pace' || d.key === 'hr'
+                ? 'border-t border-[var(--color-border)] pt-4 @min-[48rem]:col-span-2'
+                : 'border-t border-[var(--color-border)] pt-4'
+            }
+          >
+            <MetricCard
+              def={d}
+              xs={xs}
+              mode={axis}
+              hover={hover}
+              onHover={setLiveHover}
+              onPin={setPinned}
+              coarse={coarse}
+              prominent={d.key === 'pace' || d.key === 'hr'}
+              zoneBounds={
+                d.kind === 'hr-area' ? data.zones?.hr?.high_boundary : null
+              }
+              footer={
+                d.key === 'pace' && paceZones ? (
+                  <ZoneTable
+                    title={tr('配速区间', 'Pace zones')}
+                    zone={paceZones}
+                    colors={ZONE_COLORS}
+                    unit="/km"
+                    tr={tr}
+                    labels={paceZoneLabels(paceZones)}
+                  />
+                ) : d.key === 'hr' && data.zones?.hr ? (
+                  <ZoneTable
+                    title={tr('心率区间', 'HR zones')}
+                    zone={data.zones.hr}
+                    colors={ZONE_COLORS}
+                    unit="bpm"
+                    tr={tr}
+                  />
+                ) : d.key === 'power' && data.zones?.power ? (
+                  <ZoneTable
+                    title={tr('功率区间', 'Power zones')}
+                    zone={data.zones.power}
+                    colors={ZONE_COLORS}
+                    unit="W"
+                    tr={tr}
+                  />
+                ) : null
+              }
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1252,15 +1401,7 @@ function Delta({ cur, prev, invert }: { cur: N; prev: N; invert?: boolean }) {
   );
 }
 
-function SplitsBlock({
-  data,
-  tr,
-  staticExport = false,
-}: {
-  data: RunSplits;
-  tr: Tr;
-  staticExport?: boolean;
-}) {
+function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
   const hasLaps = data.laps.length > 1;
   const [mode, setMode] = useState<'km' | 'laps'>(
     data.splits.length ? 'km' : 'laps'
@@ -1280,7 +1421,7 @@ function SplitsBlock({
         <p className="text-[13px] font-semibold">
           {mode === 'km' ? tr('分段', 'Splits') : tr('设备圈', 'Laps')}
         </p>
-        {!staticExport && hasLaps && data.splits.length ? (
+        {hasLaps && data.splits.length ? (
           <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
             {(['km', 'laps'] as const).map((m) => (
               <button
@@ -1288,7 +1429,7 @@ function SplitsBlock({
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={`cursor-pointer rounded-full px-2.5 py-0.5 transition-colors ${
+                className={`min-h-11 cursor-pointer rounded-full px-3.5 py-2 transition-colors md:min-h-0 md:px-3 md:py-1 ${
                   mode === m
                     ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
                     : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
@@ -1303,8 +1444,9 @@ function SplitsBlock({
         ) : null}
       </div>
 
-      {/* Garmin-style horizontal pace bars */}
-      <div className="mb-3 space-y-1">
+      {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
+      <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
+        <div className="mb-3 space-y-1 @min-[48rem]:mb-0">
         {rows
           .filter((r) => (r.distance ?? 0) >= 50)
           .map((r) => {
@@ -1318,12 +1460,12 @@ function SplitsBlock({
             return (
               <div
                 key={`bar-${mode}-${r.index}`}
-                className={`flex items-center gap-2 text-[11px] ${tiny ? 'opacity-50' : ''}`}
+                className={`flex items-center gap-2 text-[12px] ${tiny ? 'opacity-50' : ''}`}
               >
                 <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
                   {r.index}
                 </span>
-                <div className="h-3.5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                <div className="h-5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
                   <div
                     className="h-full rounded-sm"
                     style={{
@@ -1344,7 +1486,7 @@ function SplitsBlock({
       </div>
 
       <div className="-mx-0.5 overflow-x-auto">
-        <table className="w-full min-w-[400px] text-[12px]">
+        <table className="w-full min-w-[400px] text-[12px] @min-[48rem]:min-w-0">
           <thead>
             <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
               <th className="py-2 pr-2 font-medium">#</th>
@@ -1399,6 +1541,7 @@ function SplitsBlock({
           </tbody>
         </table>
       </div>
+      </div>
     </div>
   );
 }
@@ -1406,35 +1549,41 @@ function SplitsBlock({
 // ---------------------------------------------------------------- stack
 function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
   const s = data.summary;
+  const cells = [
+    {
+      key: 'dist',
+      label: tr('距离', 'Distance'),
+      value: has(s.distance) ? (s.distance / 1000).toFixed(2) : '--',
+      unit: 'km',
+    },
+    {
+      key: 'time',
+      label: tr('用时', 'Time'),
+      value: formatClock(s.time),
+    },
+    {
+      key: 'pace',
+      label: tr('平均配速', 'Avg pace'),
+      value: formatPaceSeconds(s.pace),
+    },
+  ];
   return (
-    <div className="grid grid-cols-3 gap-3">
-      <div>
-        <p className="text-[11px] leading-none text-[var(--color-muted)]">
-          {tr('距离', 'Distance')}
-        </p>
-        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-          {has(s.distance) ? (s.distance / 1000).toFixed(2) : '--'}
-          <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
-            km
-          </span>
-        </p>
-      </div>
-      <div>
-        <p className="text-[11px] leading-none text-[var(--color-muted)]">
-          {tr('用时', 'Time')}
-        </p>
-        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-          {formatClock(s.time)}
-        </p>
-      </div>
-      <div>
-        <p className="text-[11px] leading-none text-[var(--color-muted)]">
-          {tr('平均配速', 'Avg pace')}
-        </p>
-        <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
-          {formatPaceSeconds(s.pace)}
-        </p>
-      </div>
+    <div className="grid grid-cols-3 gap-3 @min-[40rem]:gap-6">
+      {cells.map((c) => (
+        <div key={c.key} className="min-w-0 text-center">
+          <p className="metric text-[1.65rem] leading-none font-semibold @min-[40rem]:text-[2rem]">
+            {c.value}
+            {c.unit ? (
+              <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
+                {c.unit}
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)]">
+            {c.label}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1443,25 +1592,25 @@ function AnalysisBody({ data }: { data: RunSplits }) {
   const tr = useTr();
   const s = data.summary;
   return (
-    <div className="space-y-3">
-      <div className="border-b border-[var(--color-border)] pb-3">
+    <div className="space-y-4">
+      <div className="border-b border-[var(--color-border)] pb-4">
         <PrimaryStats data={data} tr={tr} />
       </div>
 
       <MetricGrid data={data} tr={tr} />
 
       {(has(s.aerobic_te) || has(s.anaerobic_te)) && (
-        <div className="border-t border-[var(--color-border)] pt-3">
+        <div className="pt-1">
           <TeScale aerobic={s.aerobic_te} anaerobic={s.anaerobic_te} tr={tr} />
         </div>
       )}
 
-      <div className="border-t border-[var(--color-border)] pt-3">
+      <div className="border-t border-[var(--color-border)] pt-4">
         <SplitsBlock data={data} tr={tr} />
       </div>
 
       {data.chart ? (
-        <div className="border-t border-[var(--color-border)] pt-3">
+        <div className="border-t border-[var(--color-border)] pt-4">
           <ChartStack data={data} tr={tr} />
         </div>
       ) : null}
@@ -1481,10 +1630,10 @@ function CloseButton({
       type="button"
       onClick={onClose}
       aria-label={label}
-      className="cursor-pointer text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+      className="grid size-11 cursor-pointer place-items-center text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)] md:size-8"
     >
       <svg
-        className="h-4 w-4"
+        className="size-5 md:size-4"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -1520,63 +1669,54 @@ function AnalysisSkeleton({
   const tr = useTr();
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale);
+  const date = activityDateLabel(activity, locale);
   return (
-    <div className={`card p-4 ${className ?? ''}`}>
-      <div className="mb-2.5 flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <h2 className="truncate text-base font-bold" title={title}>
+    <div
+      className={`card flex min-h-0 max-h-full flex-auto flex-col overflow-hidden ${className ?? ''}`}
+    >
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-2 md:px-6">
+        <div className="min-w-0 py-1.5">
+          <h2 className="truncate text-base font-bold md:text-lg" title={title}>
             {title}
           </h2>
-          <Pulse className="h-3 w-36" />
+          {date ? (
+            <p className="mt-1 text-pretty text-[12px] text-[var(--color-muted)]">
+              {date}
+            </p>
+          ) : (
+            <Pulse className="mt-1 h-3 w-36" />
+          )}
         </div>
         {onClose ? (
           <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
         ) : null}
       </div>
-      <div className="grid grid-cols-3 gap-3 border-b border-[var(--color-border)] pb-3">
-        <div className="space-y-2">
-          <Pulse className="h-3 w-10" />
-          <Pulse className="h-6 w-16" />
-        </div>
-        <div className="space-y-2">
-          <Pulse className="h-3 w-10" />
-          <Pulse className="h-6 w-14" />
-        </div>
-        <div className="space-y-2">
-          <Pulse className="h-3 w-14" />
-          <Pulse className="h-6 w-16" />
-        </div>
-      </div>
-      <div className="mt-3 space-y-3">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div key={i} className="min-w-0 space-y-2">
-              <Pulse className="h-3 w-12" />
-              <Pulse className="h-5 w-16" />
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--color-border)]/70 pt-3 sm:grid-cols-3">
+      <div className="min-h-0 flex-auto px-4 py-3 md:px-6 md:py-4">
+        <div className="grid grid-cols-3 gap-3 border-b border-[var(--color-border)] pb-4">
           {Array.from({ length: 3 }, (_, i) => (
             <div key={i} className="min-w-0 space-y-2">
+              <Pulse className="h-7 w-16" />
               <Pulse className="h-3 w-10" />
-              <Pulse className="h-4 w-12" />
             </div>
           ))}
         </div>
-      </div>
-      <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
-        <Pulse className="h-3 w-16" />
-        <Pulse className="h-2 w-full rounded-full" />
-        <Pulse className="h-2 w-full rounded-full" />
+        <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="min-w-0 space-y-2">
+              <Pulse className="h-5 w-14" />
+              <Pulse className="h-3 w-12" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          <Pulse className="h-3 w-16" />
+          <Pulse className="h-2 w-full rounded-full" />
+          <Pulse className="h-2 w-full rounded-full" />
+        </div>
       </div>
     </div>
   );
 }
-
-type ShareSectionKey = 'header' | 'metrics' | 'te' | 'splits' | 'charts';
-
-type ShareSectionState = Record<ShareSectionKey, boolean>;
 
 function activityDateLabel(activity: Activity, locale: Locale): string {
   const raw = activity.start_date_local || activity.start_date || '';
@@ -1592,324 +1732,33 @@ function activityDateLabel(activity: Activity, locale: Locale): string {
   }
 }
 
-function availableShareSections(data: RunSplits): ShareSectionKey[] {
-  const s = data.summary;
-  const keys: ShareSectionKey[] = ['header'];
-  if (hasMetricGrid(data)) keys.push('metrics');
-  if (has(s.aerobic_te) || has(s.anaerobic_te)) keys.push('te');
-  if (data.splits.length || data.laps.length) keys.push('splits');
-  if (data.chart && data.chart.d.length >= 2) keys.push('charts');
-  return keys;
-}
-
-function defaultShareSections(available: ShareSectionKey[]): ShareSectionState {
-  return {
-    header: available.includes('header'),
-    metrics: available.includes('metrics'),
-    te: available.includes('te'),
-    splits: false,
-    charts: false,
-  };
-}
-
-function SharePoster({
-  activity,
-  data,
-  sections,
-  tr,
-  locale,
-}: {
-  activity: Activity;
-  data: RunSplits;
-  sections: ShareSectionState;
-  tr: Tr;
-  locale: Locale;
-}) {
-  const title = resolveActivityTitle(activity, locale);
-  const date = activityDateLabel(activity, locale);
-  const s = data.summary;
-  return (
-    <div className="w-[390px] bg-[var(--color-card)] p-5 text-[var(--color-text)]">
-      <div className="space-y-4">
-        {sections.header ? (
-          <div className="space-y-3 border-b border-[var(--color-border)] pb-4">
-            <div className="min-w-0">
-              <h2 className="text-lg leading-snug font-bold break-words">
-                {title}
-              </h2>
-              {date ? (
-                <p className="mt-1 text-[12px] text-[var(--color-muted)]">
-                  {date}
-                </p>
-              ) : null}
-            </div>
-            <PrimaryStats data={data} tr={tr} />
-          </div>
-        ) : null}
-
-        {sections.metrics ? <MetricGrid data={data} tr={tr} /> : null}
-
-        {sections.te && (has(s.aerobic_te) || has(s.anaerobic_te)) ? (
-          <div className="border-t border-[var(--color-border)] pt-4">
-            <TeScale
-              aerobic={s.aerobic_te}
-              anaerobic={s.anaerobic_te}
-              tr={tr}
-            />
-          </div>
-        ) : null}
-
-        {sections.splits ? (
-          <div className="border-t border-[var(--color-border)] pt-4">
-            <SplitsBlock data={data} tr={tr} staticExport />
-          </div>
-        ) : null}
-
-        {sections.charts && data.chart ? (
-          <div className="border-t border-[var(--color-border)] pt-4">
-            <ChartStack data={data} tr={tr} staticExport />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function SharePanel({
-  activity,
-  data,
-  onClose,
-}: {
-  activity: Activity;
-  data: RunSplits;
-  onClose: () => void;
-}) {
-  const tr = useTr();
-  const { locale } = useLocale();
-  const available = useMemo(() => availableShareSections(data), [data]);
-  const [sections, setSections] = useState<ShareSectionState>(() =>
-    defaultShareSections(available)
-  );
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [canNativeShare] = useState(
-    () =>
-      typeof navigator !== 'undefined' &&
-      typeof navigator.canShare === 'function'
-  );
-  const posterRef = useRef<HTMLDivElement>(null);
-
-  const labels: Record<ShareSectionKey, string> = {
-    header: tr('标题与总览', 'Title & overview'),
-    metrics: tr('运动指标', 'Metrics'),
-    te: tr('训练效果', 'Training effect'),
-    splits: tr('分段', 'Splits'),
-    charts: tr('图表', 'Charts'),
-  };
-
-  const selectedCount = available.filter((k) => sections[k]).length;
-
-  const toggle = (key: ShareSectionKey) => {
-    setSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const buildFilename = () => {
-    const stamp = (activity.start_date_local || activity.start_date || '')
-      .slice(0, 10)
-      .split('-')
-      .join('');
-    return `run-${stamp || activity.run_id}-share.png`;
-  };
-
-  const renderPoster = async () => {
-    if (!posterRef.current || selectedCount === 0) return null;
-    await document.fonts.ready;
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-    await new Promise((r) => setTimeout(r, 80));
-    const dataUrl = await captureCard(posterRef.current);
-    return { dataUrl, filename: buildFilename() };
-  };
-
-  const onDownload = async () => {
-    if (!posterRef.current || busy || selectedCount === 0) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      await document.fonts.ready;
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      await new Promise((r) => setTimeout(r, 80));
-      await exportCard(posterRef.current, buildFilename());
-      setMessage(tr('长图已下载', 'Image downloaded'));
-    } catch (err) {
-      console.error('Share export failed:', err);
-      setMessage(tr('导出失败，请重试', 'Export failed. Please retry.'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onNativeShare = async () => {
-    if (busy || selectedCount === 0) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      const result = await renderPoster();
-      if (!result) return;
-      const blob = await (await fetch(result.dataUrl)).blob();
-      const file = new File([blob], result.filename, { type: 'image/png' });
-      if (!navigator.canShare?.({ files: [file] })) {
-        setMessage(tr('当前浏览器不支持系统分享', 'System share unavailable'));
-        return;
-      }
-      await navigator.share({
-        files: [file],
-        title: resolveActivityTitle(activity, locale),
-      });
-      setMessage(tr('已打开系统分享', 'Shared'));
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      console.error('Native share failed:', err);
-      setMessage(tr('分享取消或失败', 'Share cancelled or failed'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div
-      className="absolute inset-0 z-10 flex flex-col rounded-[inherit] bg-[var(--color-card)]/95 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={tr('分享长图', 'Share image')}
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
-        <h3 className="text-sm font-semibold">
-          {tr('分享长图', 'Share image')}
-        </h3>
-        <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 py-3">
-        <p className="mb-3 text-[12px] text-[var(--color-muted)]">
-          {tr('选择要包含的内容', 'Choose sections to include')}
-        </p>
-        <ul className="space-y-2">
-          {available.map((key) => (
-            <li key={key}>
-              <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={sections[key]}
-                  onChange={() => toggle(key)}
-                  className="h-4 w-4 accent-[var(--color-run)]"
-                />
-                <span>{labels[key]}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        {message ? (
-          <p className="mt-3 text-[12px] text-[var(--color-muted)]">
-            {message}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2 border-t border-[var(--color-border)] px-4 py-3">
-        <button
-          type="button"
-          disabled={busy || selectedCount === 0}
-          onClick={onDownload}
-          className="cursor-pointer rounded-full bg-[var(--color-run)] px-4 py-1.5 text-[13px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy
-            ? tr('生成中…', 'Generating…')
-            : tr('下载长图', 'Download image')}
-        </button>
-        {canNativeShare ? (
-          <button
-            type="button"
-            disabled={busy || selectedCount === 0}
-            onClick={onNativeShare}
-            className="cursor-pointer rounded-full border border-[var(--color-border)] px-4 py-1.5 text-[13px] font-medium text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {tr('系统分享', 'System share')}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          className="cursor-pointer rounded-full px-3 py-1.5 text-[13px] text-[var(--color-muted)] hover:text-[var(--color-text)]"
-        >
-          {tr('取消', 'Cancel')}
-        </button>
-      </div>
-
-      {/* Off-screen poster for html-to-image; keep in DOM for layout. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed top-0 left-[-10000px] z-[-1]"
-      >
-        <div ref={posterRef}>
-          <SharePoster
-            activity={activity}
-            data={data}
-            sections={sections}
-            tr={tr}
-            locale={locale}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Header({
   activity,
   onClose,
-  onShare,
   tr,
 }: {
   activity: Activity;
   onClose?: () => void;
-  onShare?: () => void;
   tr: Tr;
 }) {
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale);
+  const date = activityDateLabel(activity, locale);
   return (
-    <div className="mb-2.5 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 className="truncate text-base font-bold" title={title}>
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-2 md:px-6">
+      <div className="min-w-0 py-1.5">
+        <h2 className="truncate text-base font-bold md:text-lg" title={title}>
           {title}
         </h2>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {onShare ? (
-          <button
-            type="button"
-            onClick={onShare}
-            aria-label={tr('分享', 'Share')}
-            title={tr('分享长图', 'Share image')}
-            className="cursor-pointer text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v13"
-              />
-            </svg>
-          </button>
-        ) : null}
-        {onClose ? (
-          <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+        {date ? (
+          <p className="mt-1 text-pretty text-[12px] text-[var(--color-muted)]">
+            {date}
+          </p>
         ) : null}
       </div>
+      {onClose ? (
+        <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+      ) : null}
     </div>
   );
 }
@@ -1927,24 +1776,17 @@ function Loaded({
 }) {
   const data = use(promise);
   const tr = useTr();
-  const [shareOpen, setShareOpen] = useState(false);
   if (!data) return null;
   return (
-    <div className={`card relative p-4 ${className ?? ''}`}>
-      <Header
-        activity={activity}
-        onClose={onClose}
-        onShare={() => setShareOpen(true)}
-        tr={tr}
-      />
-      <AnalysisBody data={data} />
-      {shareOpen ? (
-        <SharePanel
-          activity={activity}
-          data={data}
-          onClose={() => setShareOpen(false)}
-        />
-      ) : null}
+    <div
+      className={`card flex min-h-0 max-h-full flex-auto flex-col overflow-hidden ${className ?? ''}`}
+    >
+      <Header activity={activity} onClose={onClose} tr={tr} />
+      <div className="run-analysis-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 md:py-4">
+        <div className="@container">
+          <AnalysisBody data={data} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1992,15 +1834,17 @@ function LauncherButton({
   const ids = use(index);
   const tr = useTr();
   if (!ids.has(activity.run_id)) return null;
-  return (
+  // Portal past sticky map / overflow ancestors so the FAB stays visible on
+  // mobile (fixed + z-50 inside the page stack was easy to bury).
+  return createPortal(
     <button
       type="button"
       onClick={onOpen}
       style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
-      className="fixed right-4 z-50 flex cursor-pointer items-center gap-2 rounded-full bg-[var(--color-run)] px-4 py-2 text-sm font-medium text-white shadow-lg transition-transform hover:scale-[1.03] sm:right-auto sm:left-1/2 sm:-translate-x-1/2"
+      className="fixed left-1/2 z-[70] flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-[var(--color-run)] px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-transform hover:scale-[1.03]"
     >
       <svg
-        className="h-4 w-4"
+        className="size-4"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -2013,7 +1857,8 @@ function LauncherButton({
         />
       </svg>
       {tr('分段分析', 'Splits')} · {(activity.distance / 1000).toFixed(1)} km
-    </button>
+    </button>,
+    document.body
   );
 }
 
@@ -2072,7 +1917,7 @@ function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`h-auto max-h-[85vh] w-full origin-bottom overflow-y-auto overscroll-contain rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[70vh] md:w-[min(100%,600px)] md:max-w-[600px] md:origin-center md:rounded-[0.4rem] ${
+        className={`flex max-h-[92vh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[90vh] md:w-[min(1080px,calc(100vw-3rem))] md:origin-center md:rounded-[0.4rem] ${
           visible
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-6 scale-[0.98] opacity-0 md:translate-y-2'
