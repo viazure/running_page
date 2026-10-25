@@ -400,12 +400,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   return (
     <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 @min-[40rem]:gap-x-8 @min-[40rem]:gap-y-4">
       {cells.map((c) => (
-        <MetricChip
-          key={c.key}
-          label={c.label}
-          value={c.value}
-          unit={c.unit}
-        />
+        <MetricChip key={c.key} label={c.label} value={c.value} unit={c.unit} />
       ))}
     </div>
   );
@@ -942,9 +937,7 @@ function MetricCard({
               <p className="metric text-lg leading-none font-semibold @min-[40rem]:text-xl">
                 {def.format((def.avg ?? avgVal) as number)}
                 <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">
-                  {def.kind === 'scatter'
-                    ? (def.avgLabel ?? 'Avg')
-                    : def.unit}
+                  {def.kind === 'scatter' ? (def.avgLabel ?? 'Avg') : def.unit}
                 </span>
                 {def.kind !== 'scatter' ? (
                   <span className="ml-1.5 text-[10px] font-normal text-[var(--color-muted)]">
@@ -1119,8 +1112,7 @@ function MetricCard({
         <div className="relative mt-1 h-3.5">
           {geom.xTicks.map((tick) => {
             const frac = tick.x / CHART_W;
-            const edge =
-              frac < 0.06 ? 'start' : frac > 0.94 ? 'end' : 'mid';
+            const edge = frac < 0.06 ? 'start' : frac > 0.94 ? 'end' : 'mid';
             return (
               <span
                 key={`x-${tick.x}`}
@@ -1304,26 +1296,26 @@ function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] font-semibold">{tr('图表', 'Charts')}</p>
         <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
-            {(
-              [
-                ['distance', tr('距离', 'Distance')],
-                ['time', tr('时间', 'Time')],
-              ] as const
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={axis === m}
-                onClick={() => setAxis(m)}
-                className={`min-h-11 cursor-pointer rounded-full px-3.5 py-2 transition-colors md:min-h-0 md:px-3 md:py-1 ${
-                  axis === m
-                    ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
-                    : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {(
+            [
+              ['distance', tr('距离', 'Distance')],
+              ['time', tr('时间', 'Time')],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={axis === m}
+              onClick={() => setAxis(m)}
+              className={`min-h-11 cursor-pointer rounded-full px-3.5 py-2 transition-colors md:min-h-0 md:px-3 md:py-1 ${
+                axis === m
+                  ? 'bg-[var(--color-card)] font-medium text-[var(--color-text)] shadow-sm'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -1447,100 +1439,100 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
       {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
       <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
         <div className="mb-3 space-y-1 @min-[48rem]:mb-0">
-        {rows
-          .filter((r) => (r.distance ?? 0) >= 50)
-          .map((r) => {
-            const p = r.pace ?? 0;
-            const tiny = (r.distance ?? 0) < 200;
-            const ratio =
-              slow > fast && has(r.pace)
-                ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
-                : 0.5;
-            const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
-            return (
-              <div
-                key={`bar-${mode}-${r.index}`}
-                className={`flex items-center gap-2 text-[12px] ${tiny ? 'opacity-50' : ''}`}
-              >
-                <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
-                  {r.index}
-                </span>
-                <div className="h-5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
-                  <div
-                    className="h-full rounded-sm"
-                    style={{
-                      width: `${25 + ratio * 75}%`,
-                      backgroundColor: C.pace,
-                      opacity: 0.35 + ratio * 0.55,
-                    }}
-                  />
-                </div>
-                <span
-                  className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
-                >
-                  {formatPaceSeconds(r.pace)}
-                </span>
-              </div>
-            );
-          })}
-      </div>
-
-      <div className="-mx-0.5 overflow-x-auto">
-        <table className="w-full min-w-[400px] text-[12px] @min-[48rem]:min-w-0">
-          <thead>
-            <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-              <th className="py-2 pr-2 font-medium">#</th>
-              <th className="py-2 pr-2 font-medium whitespace-nowrap">
-                {tr('距离', 'Dist')}
-              </th>
-              <th className="py-2 pr-2 font-medium whitespace-nowrap">
-                {tr('时间', 'Time')}
-              </th>
-              <th className="py-2 pr-2 font-medium whitespace-nowrap">
-                {tr('配速', 'Pace')}
-              </th>
-              <th className="py-2 pr-2 font-medium whitespace-nowrap">
-                {tr('心率', 'HR')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, idx) => {
-              const prev: SplitRow | undefined =
-                idx > 0 ? rows[idx - 1] : undefined;
+          {rows
+            .filter((r) => (r.distance ?? 0) >= 50)
+            .map((r) => {
+              const p = r.pace ?? 0;
               const tiny = (r.distance ?? 0) < 200;
-              const isFast =
-                has(r.pace) && r.pace === fast && !r.partial && !tiny;
+              const ratio =
+                slow > fast && has(r.pace)
+                  ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
+                  : 0.5;
+              const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
               return (
-                <tr
-                  key={`${mode}-${r.index}`}
-                  className={`border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+                <div
+                  key={`bar-${mode}-${r.index}`}
+                  className={`flex items-center gap-2 text-[12px] ${tiny ? 'opacity-50' : ''}`}
                 >
-                  <td className="metric py-2 pr-2 text-[var(--color-muted)]">
+                  <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
                     {r.index}
-                  </td>
-                  <td className="metric py-2 pr-2 whitespace-nowrap">
-                    {((r.distance ?? 0) / 1000).toFixed(2)}
-                  </td>
-                  <td className="metric py-2 pr-2 whitespace-nowrap">
-                    {formatClock(r.time)}
-                  </td>
-                  <td
-                    className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                  </span>
+                  <div className="h-5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                    <div
+                      className="h-full rounded-sm"
+                      style={{
+                        width: `${25 + ratio * 75}%`,
+                        backgroundColor: C.pace,
+                        opacity: 0.35 + ratio * 0.55,
+                      }}
+                    />
+                  </div>
+                  <span
+                    className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
                   >
                     {formatPaceSeconds(r.pace)}
-                    <Delta cur={r.pace} prev={prev?.pace} invert />
-                  </td>
-                  <td className="metric py-2 pr-2 whitespace-nowrap">
-                    {fmt(r.hr_avg)}
-                    <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
-                  </td>
-                </tr>
+                  </span>
+                </div>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+        </div>
+
+        <div className="-mx-0.5 overflow-x-auto">
+          <table className="w-full min-w-[400px] text-[12px] @min-[48rem]:min-w-0">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                <th className="py-2 pr-2 font-medium">#</th>
+                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                  {tr('距离', 'Dist')}
+                </th>
+                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                  {tr('时间', 'Time')}
+                </th>
+                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                  {tr('配速', 'Pace')}
+                </th>
+                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                  {tr('心率', 'HR')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => {
+                const prev: SplitRow | undefined =
+                  idx > 0 ? rows[idx - 1] : undefined;
+                const tiny = (r.distance ?? 0) < 200;
+                const isFast =
+                  has(r.pace) && r.pace === fast && !r.partial && !tiny;
+                return (
+                  <tr
+                    key={`${mode}-${r.index}`}
+                    className={`border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+                  >
+                    <td className="metric py-2 pr-2 text-[var(--color-muted)]">
+                      {r.index}
+                    </td>
+                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                      {((r.distance ?? 0) / 1000).toFixed(2)}
+                    </td>
+                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                      {formatClock(r.time)}
+                    </td>
+                    <td
+                      className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                    >
+                      {formatPaceSeconds(r.pace)}
+                      <Delta cur={r.pace} prev={prev?.pace} invert />
+                    </td>
+                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                      {fmt(r.hr_avg)}
+                      <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1672,7 +1664,7 @@ function AnalysisSkeleton({
   const date = activityDateLabel(activity, locale);
   return (
     <div
-      className={`card flex min-h-0 max-h-full flex-auto flex-col overflow-hidden ${className ?? ''}`}
+      className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-2 md:px-6">
         <div className="min-w-0 py-1.5">
@@ -1680,7 +1672,7 @@ function AnalysisSkeleton({
             {title}
           </h2>
           {date ? (
-            <p className="mt-1 text-pretty text-[12px] text-[var(--color-muted)]">
+            <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
               {date}
             </p>
           ) : (
@@ -1751,7 +1743,7 @@ function Header({
           {title}
         </h2>
         {date ? (
-          <p className="mt-1 text-pretty text-[12px] text-[var(--color-muted)]">
+          <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
             {date}
           </p>
         ) : null}
@@ -1779,7 +1771,7 @@ function Loaded({
   if (!data) return null;
   return (
     <div
-      className={`card flex min-h-0 max-h-full flex-auto flex-col overflow-hidden ${className ?? ''}`}
+      className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
       <Header activity={activity} onClose={onClose} tr={tr} />
       <div className="run-analysis-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 md:py-4">
