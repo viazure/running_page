@@ -200,22 +200,34 @@ function formatAxis(v: number, mode: 'distance' | 'time'): string {
     : `${m}:${r}`;
 }
 
-// ---------------------------------------------------------------- metric grid (Garmin 2-col)
-function MetricCell({
+// ---------------------------------------------------------------- metric chips (primary + secondary)
+function MetricChip({
   label,
   value,
   unit,
   sub,
+  secondary = false,
 }: {
   label: string;
   value: string;
   unit?: string;
   sub?: string;
+  secondary?: boolean;
 }) {
   return (
-    <div className="min-w-0 border-b border-[var(--color-border)]/70 py-2.5 pr-3">
+    <div
+      className={`min-w-0 rounded-xl border border-[var(--color-border)] px-3 py-2.5 ${
+        secondary
+          ? 'bg-[var(--color-card)]'
+          : 'bg-[var(--color-sunken)]/55 shadow-[var(--shadow-card)]'
+      }`}
+    >
       <p className="text-[11px] text-[var(--color-muted)]">{label}</p>
-      <p className="metric mt-0.5 text-[17px] leading-tight font-semibold tracking-tight">
+      <p
+        className={`metric mt-0.5 leading-tight font-semibold tracking-tight ${
+          secondary ? 'text-[15px]' : 'text-[16px]'
+        }`}
+      >
         {value}
         {unit ? (
           <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">
@@ -235,14 +247,16 @@ function MetricCell({
 function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   const s = data.summary;
   const altPeak = seriesMax(data.chart?.alt);
-  const cells: {
+  type Cell = {
     key: string;
     label: string;
     value: string;
     unit?: string;
     sub?: string;
     show: boolean;
-  }[] = [
+  };
+  // TE lives in TeScale bars below — omit duplicate Aerobic TE chip.
+  const primary: Cell[] = [
     {
       key: 'cal',
       label: tr('卡路里', 'Calories'),
@@ -283,15 +297,8 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
           .join(' · ') || undefined,
       show: has(s.elev_gain) || has(s.elev_loss),
     },
-    {
-      key: 'te',
-      label: tr('有氧训练效果', 'Aerobic TE'),
-      value: fmt(s.aerobic_te, 1),
-      sub: has(s.anaerobic_te)
-        ? `${tr('无氧', 'Anaerobic')} ${fmt(s.anaerobic_te, 1)}`
-        : undefined,
-      show: has(s.aerobic_te),
-    },
+  ];
+  const secondary: Cell[] = [
     {
       key: 'power',
       label: tr('平均功率', 'Avg power'),
@@ -339,18 +346,38 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
       show: s.temperature_source === 'weather' && has(s.temperature),
     },
   ];
-  const shown = cells.filter((c) => c.show);
+  const primaryShown = primary.filter((c) => c.show);
+  const secondaryShown = secondary.filter((c) => c.show);
+  if (!primaryShown.length && !secondaryShown.length) return null;
   return (
-    <div className="grid grid-cols-2 gap-x-4">
-      {shown.map((c) => (
-        <MetricCell
-          key={c.key}
-          label={c.label}
-          value={c.value}
-          unit={c.unit}
-          sub={c.sub}
-        />
-      ))}
+    <div className="space-y-2.5">
+      {primaryShown.length ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {primaryShown.map((c) => (
+            <MetricChip
+              key={c.key}
+              label={c.label}
+              value={c.value}
+              unit={c.unit}
+              sub={c.sub}
+            />
+          ))}
+        </div>
+      ) : null}
+      {secondaryShown.length ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {secondaryShown.map((c) => (
+            <MetricChip
+              key={c.key}
+              label={c.label}
+              value={c.value}
+              unit={c.unit}
+              sub={c.sub}
+              secondary
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1497,16 +1524,29 @@ function AnalysisSkeleton({
           <Pulse className="h-6 w-16" />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-x-4">
-        {Array.from({ length: 6 }, (_, i) => (
-          <div
-            key={i}
-            className="space-y-2 border-b border-[var(--color-border)]/70 py-2.5 pr-3"
-          >
-            <Pulse className="h-3 w-14" />
-            <Pulse className="h-5 w-20" />
-          </div>
-        ))}
+      <div className="mt-3 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div
+              key={i}
+              className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-sunken)]/55 px-3 py-2.5"
+            >
+              <Pulse className="h-3 w-12" />
+              <Pulse className="h-5 w-16" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div
+              key={i}
+              className="space-y-2 rounded-xl border border-[var(--color-border)] px-3 py-2.5"
+            >
+              <Pulse className="h-3 w-12" />
+              <Pulse className="h-4 w-14" />
+            </div>
+          ))}
+        </div>
       </div>
       <div className="mt-4 space-y-3">
         <Pulse className="h-3 w-16" />
@@ -1687,7 +1727,7 @@ function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`flex max-h-[90vh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-w-2xl md:origin-center md:rounded-[0.4rem] ${
+        className={`flex max-h-[85vh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[70vh] md:w-[min(100%,600px)] md:max-w-[600px] md:origin-center md:rounded-[0.4rem] ${
           visible
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-6 scale-[0.98] opacity-0 md:translate-y-2'
