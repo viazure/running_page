@@ -215,17 +215,19 @@ function MetricChip({
   secondary?: boolean;
 }) {
   return (
-    <div
-      className={`min-w-0 rounded-xl border border-[var(--color-border)] px-3 py-2.5 ${
-        secondary
-          ? 'bg-[var(--color-card)]'
-          : 'bg-[var(--color-sunken)]/55 shadow-[var(--shadow-card)]'
-      }`}
-    >
-      <p className="text-[11px] text-[var(--color-muted)]">{label}</p>
+    <div className="min-w-0">
       <p
-        className={`metric mt-0.5 leading-tight font-semibold tracking-tight ${
-          secondary ? 'text-[15px]' : 'text-[16px]'
+        className={`text-[11px] leading-none ${
+          secondary
+            ? 'text-[var(--color-muted)]/75'
+            : 'text-[var(--color-muted)]'
+        }`}
+      >
+        {label}
+      </p>
+      <p
+        className={`metric mt-1 leading-none font-semibold tracking-tight ${
+          secondary ? 'text-[15px] text-[var(--color-text)]/90' : 'text-[17px]'
         }`}
       >
         {value}
@@ -236,7 +238,7 @@ function MetricChip({
         ) : null}
       </p>
       {sub ? (
-        <p className="metric mt-0.5 text-[10px] text-[var(--color-muted)]">
+        <p className="metric mt-1 text-[10px] leading-tight text-[var(--color-muted)]">
           {sub}
         </p>
       ) : null}
@@ -350,9 +352,9 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
   const secondaryShown = secondary.filter((c) => c.show);
   if (!primaryShown.length && !secondaryShown.length) return null;
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {primaryShown.length ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {primaryShown.map((c) => (
             <MetricChip
               key={c.key}
@@ -365,7 +367,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
         </div>
       ) : null}
       {secondaryShown.length ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--color-border)]/70 pt-3 sm:grid-cols-3">
           {secondaryShown.map((c) => (
             <MetricChip
               key={c.key}
@@ -386,7 +388,7 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
 function TeScaleRow({ label, value }: { label: string; value: number }) {
   const pct = Math.max(0, Math.min(100, (value / 5) * 100));
   return (
-    <div className="mb-2.5 last:mb-0">
+    <div className="mb-2 last:mb-0">
       <div className="mb-1 flex items-baseline justify-between text-[12px]">
         <span className="text-[var(--color-muted)]">{label}</span>
         <span className="metric font-semibold">{value.toFixed(1)}</span>
@@ -421,7 +423,7 @@ function TeScale({
   if (!has(aerobic) && !has(anaerobic)) return null;
   return (
     <div>
-      <p className="mb-2 text-[13px] font-semibold">
+      <p className="mb-1.5 text-[13px] font-semibold">
         {tr('训练效果', 'Training effect')}
       </p>
       {has(aerobic) ? (
@@ -1396,13 +1398,13 @@ function AnalysisBody({ data }: { data: RunSplits }) {
   const tr = useTr();
   const s = data.summary;
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3 border-b border-[var(--color-border)] pb-3">
         <div>
-          <p className="text-[11px] text-[var(--color-muted)]">
+          <p className="text-[11px] leading-none text-[var(--color-muted)]">
             {tr('距离', 'Distance')}
           </p>
-          <p className="metric text-xl font-semibold">
+          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
             {has(s.distance) ? (s.distance / 1000).toFixed(2) : '--'}
             <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
               km
@@ -1410,16 +1412,18 @@ function AnalysisBody({ data }: { data: RunSplits }) {
           </p>
         </div>
         <div>
-          <p className="text-[11px] text-[var(--color-muted)]">
+          <p className="text-[11px] leading-none text-[var(--color-muted)]">
             {tr('用时', 'Time')}
           </p>
-          <p className="metric text-xl font-semibold">{formatClock(s.time)}</p>
+          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
+            {formatClock(s.time)}
+          </p>
         </div>
         <div>
-          <p className="text-[11px] text-[var(--color-muted)]">
+          <p className="text-[11px] leading-none text-[var(--color-muted)]">
             {tr('平均配速', 'Avg pace')}
           </p>
-          <p className="metric text-xl font-semibold">
+          <p className="metric mt-1 text-xl leading-none font-semibold tracking-tight">
             {formatPaceSeconds(s.pace)}
           </p>
         </div>
@@ -1428,17 +1432,17 @@ function AnalysisBody({ data }: { data: RunSplits }) {
       <MetricGrid data={data} tr={tr} />
 
       {(has(s.aerobic_te) || has(s.anaerobic_te)) && (
-        <div className="border-t border-[var(--color-border)] pt-4">
+        <div className="border-t border-[var(--color-border)] pt-3">
           <TeScale aerobic={s.aerobic_te} anaerobic={s.anaerobic_te} tr={tr} />
         </div>
       )}
 
-      <div className="border-t border-[var(--color-border)] pt-4">
+      <div className="border-t border-[var(--color-border)] pt-3">
         <SplitsBlock data={data} tr={tr} />
       </div>
 
       {data.chart ? (
-        <div className="border-t border-[var(--color-border)] pt-4">
+        <div className="border-t border-[var(--color-border)] pt-3">
           <ChartStack data={data} tr={tr} />
         </div>
       ) : null}
@@ -1499,7 +1503,7 @@ function AnalysisSkeleton({
   const title = resolveActivityTitle(activity, locale);
   return (
     <div className={`card p-4 ${className ?? ''}`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-2.5 flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-2">
           <h2 className="truncate text-base font-bold" title={title}>
             {title}
@@ -1524,31 +1528,25 @@ function AnalysisSkeleton({
           <Pulse className="h-6 w-16" />
         </div>
       </div>
-      <div className="mt-3 space-y-2.5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-3 space-y-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <div
-              key={i}
-              className="space-y-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-sunken)]/55 px-3 py-2.5"
-            >
+            <div key={i} className="min-w-0 space-y-2">
               <Pulse className="h-3 w-12" />
               <Pulse className="h-5 w-16" />
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--color-border)]/70 pt-3 sm:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <div
-              key={i}
-              className="space-y-2 rounded-xl border border-[var(--color-border)] px-3 py-2.5"
-            >
-              <Pulse className="h-3 w-12" />
-              <Pulse className="h-4 w-14" />
+            <div key={i} className="min-w-0 space-y-2">
+              <Pulse className="h-3 w-10" />
+              <Pulse className="h-4 w-12" />
             </div>
           ))}
         </div>
       </div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2 border-t border-[var(--color-border)] pt-3">
         <Pulse className="h-3 w-16" />
         <Pulse className="h-2 w-full rounded-full" />
         <Pulse className="h-2 w-full rounded-full" />
@@ -1569,7 +1567,7 @@ function Header({
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale);
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-2.5 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="truncate text-base font-bold" title={title}>
           {title}
@@ -1727,7 +1725,7 @@ function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`flex max-h-[85vh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[70vh] md:w-[min(100%,600px)] md:max-w-[600px] md:origin-center md:rounded-[0.4rem] ${
+        className={`h-auto max-h-[85vh] w-full origin-bottom overflow-y-auto overscroll-contain rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[70vh] md:w-[min(100%,600px)] md:max-w-[600px] md:origin-center md:rounded-[0.4rem] ${
           visible
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-6 scale-[0.98] opacity-0 md:translate-y-2'
@@ -1735,13 +1733,11 @@ function Sheet({
         style={{ transitionDuration: `${SHEET_MS}ms` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <RunAnalysis
-            activity={activity}
-            onClose={requestClose}
-            className="[--card-radius:0]"
-          />
-        </div>
+        <RunAnalysis
+          activity={activity}
+          onClose={requestClose}
+          className="[--card-radius:0]"
+        />
       </div>
     </div>
   );
