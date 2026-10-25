@@ -12,7 +12,6 @@ import {
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
 import { resolveActivityTitle } from '@/core/privacyTitles';
-import { resolveAnalysisBrandLabel } from '@/core/activitySource';
 import {
   formatClock,
   formatPaceSeconds,
@@ -1520,39 +1519,21 @@ function AnalysisSkeleton({
 
 function Header({
   activity,
-  data,
   onClose,
   tr,
 }: {
   activity: Activity;
-  data: RunSplits;
   onClose?: () => void;
   tr: Tr;
 }) {
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale);
-  const brandLabel = resolveAnalysisBrandLabel(
-    data.manufacturer,
-    activity.source,
-    data.source,
-    locale
-  );
-  const subtitle = [
-    brandLabel,
-    data.device?.toUpperCase(),
-    data.sub_sport && data.sub_sport !== 'generic' ? data.sub_sport : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="truncate text-base font-bold" title={title}>
           {title}
         </h2>
-        <p className="truncate text-[11px] text-[var(--color-muted)]">
-          {subtitle || tr('数据来自 FIT', 'From FIT file')}
-        </p>
       </div>
       {onClose ? (
         <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
@@ -1577,7 +1558,7 @@ function Loaded({
   if (!data) return null;
   return (
     <div className={`card p-4 ${className ?? ''}`}>
-      <Header activity={activity} data={data} onClose={onClose} tr={tr} />
+      <Header activity={activity} onClose={onClose} tr={tr} />
       <AnalysisBody data={data} />
     </div>
   );
