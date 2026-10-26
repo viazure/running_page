@@ -493,6 +493,8 @@ type ChaseCallbacks = {
   onStart?: () => void;
   onEnd?: () => void;
   onProgress?: (p: PlaybackProgress) => void;
+  /** Fired when compass lock toggles during playback. */
+  onBearingLockChange?: (locked: boolean) => void;
 };
 
 type ChaseStartArgs = {
@@ -517,6 +519,8 @@ type ChaseStartArgs = {
   showEndpoints?: boolean;
   /** Compass button copy while playback is running. */
   compassTitles?: { lock: string; follow: string };
+  /** Start with bearing frozen (from playback prefs). Default false. */
+  lockOrientation?: boolean;
 };
 
 type PlaybackSession = {
@@ -756,6 +760,7 @@ export function createMapChaseController() {
         if (session) applyFrame(session, progress, { instant: true });
       }
       syncCompassLock(titles);
+      callbacks.onBearingLockChange?.(bearingLocked);
     };
     btn.addEventListener('click', onCompassClick, true);
     syncCompassLock(titles);
@@ -1003,6 +1008,17 @@ export function createMapChaseController() {
     }
   };
 
+  const setBearingLocked = (locked: boolean) => {
+    if (!running || bearingLocked === locked) return;
+    bearingLocked = locked;
+    if (bearingLocked && session) {
+      session.map.stop();
+      applyFrame(session, progress, { instant: true });
+    }
+    syncCompassLock();
+    callbacks.onBearingLockChange?.(bearingLocked);
+  };
+
   const seek = (p: number) => {
     if (!session || !running) return;
     progress = Math.min(Math.max(p, 0), 1);
@@ -1062,7 +1078,11 @@ export function createMapChaseController() {
       getEndView,
       endpointTitles = { start: '起点', end: '终点' },
       showEndpoints = true,
-      compassTitles = { lock: '正北已锁定', follow: '跟随路线' },
+      lockOrientation = false,
+      compassTitles = {
+        lock: '朝向已锁定（点击跟随路线）',
+        follow: '锁定朝向',
+      },
     } = args;
 
     if (coords.length < 2) return;
@@ -1127,6 +1147,10 @@ export function createMapChaseController() {
       showStartEndpoint(m, coords, endpointTitles);
     }
     bindCompass(m, compassTitles);
+    if (lockOrientation) {
+      bearingLocked = true;
+      syncCompassLock(compassTitles);
+    }
     callbacks.onProgress?.({
       progress: 0,
       distanceKm: 0,
@@ -1179,6 +1203,7 @@ export function createMapChaseController() {
     setZoomOutExtra,
     setStrokeScale,
     setShowEndpoints,
+    setBearingLocked,
   };
 }
 
