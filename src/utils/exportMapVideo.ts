@@ -2,7 +2,11 @@
  * Client-side map chase video export via MediaRecorder + canvas.
  * Map frames are copied synchronously; stats are drawn with canvas text
  * (no html-to-image) so overlays stay stable and the encode stays smooth.
+ *
+ * Prefer MP4 when the browser supports it (better mobile seek/playback).
+ * WebM fallback gets duration metadata patched so players can scrub.
  */
+import fixWebmDuration from 'fix-webm-duration';
 
 export const MAP_VIDEO_MAX_DURATION_MS = 20_000;
 export const MAP_VIDEO_MAX_WIDTH = 1920;
@@ -95,7 +99,11 @@ const MAP_VIDEO_ATTRIBUTION = '© Mapbox, © OpenStreetMap';
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return '';
+  // MP4 first: iOS/Android players seek reliably; WebM often cannot.
   const candidates = [
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1.4D401F',
+    'video/mp4',
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm',
@@ -104,6 +112,16 @@ function pickMimeType(): string {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return '';
+}
+
+function isMp4Mime(mimeType: string): boolean {
+  return mimeType.startsWith('video/mp4');
+}
+
+function containerMime(mimeType: string): string {
+  return (
+    mimeType.split(';')[0] || (isMp4Mime(mimeType) ? 'video/mp4' : 'video/webm')
+  );
 }
 
 function drawHrSpark(
@@ -453,7 +471,9 @@ export function startMapVideoCapture(
 ): MapVideoCapture {
   const mimeType = pickMimeType();
   if (!mimeType || typeof MediaRecorder === 'undefined') {
-    throw new MapVideoUnsupportedError('MediaRecorder / WebM not supported');
+    throw new MapVideoUnsupportedError(
+      'MediaRecorder / video export not supported'
+    );
   }
 
   const src = opts.mapCanvas;
@@ -535,18 +555,28 @@ export function startMapVideoCapture(
     rejectDone = reject;
     recorder.onerror = () => reject(new Error('MediaRecorder error'));
     recorder.onstop = () => {
-      if (aborted) {
-        reject(new MapVideoAbortedError());
-        return;
-      }
-      const blob = new Blob(chunks, {
-        type: mimeType.split(';')[0] || 'video/webm',
-      });
-      if (blob.size < 64) {
-        reject(new Error('Recording produced an empty file'));
-        return;
-      }
-      resolve(blob);
+      void (async () => {
+        if (aborted) {
+          reject(new MapVideoAbortedError());
+          return;
+        }
+        const container = containerMime(mimeType);
+        let blob = new Blob(chunks, { type: container });
+        if (blob.size < 64) {
+          reject(new Error('Recording produced an empty file'));
+          return;
+        }
+        // MediaRecorder WebM omits duration ? mobile players cannot scrub.
+        if (container === 'video/webm') {
+          const durationMs = Math.max(0, performance.now() - startedAt);
+          try {
+            blob = await fixWebmDuration(blob, durationMs, { logger: false });
+          } catch {
+            // Keep the raw blob if duration patching fails.
+          }
+        }
+        resolve(blob);
+      })();
     };
   });
 
@@ -678,9 +708,12 @@ export function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 4_000);
 }
 
-export function defaultMapVideoFilename(): string {
+export function defaultMapVideoFilename(blobOrMime?: Blob | string): string {
+  const mime =
+    typeof blobOrMime === 'string' ? blobOrMime : blobOrMime?.type || '';
+  const ext = isMp4Mime(mime) || mime === 'mp4' ? 'mp4' : 'webm';
   return `run-playback-${new Date()
     .toISOString()
     .slice(0, 19)
-    .replace(/[:T]/g, '-')}.webm`;
+    .replace(/[:T]/g, '-')}.${ext}`;
 }

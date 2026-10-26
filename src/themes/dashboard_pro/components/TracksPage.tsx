@@ -697,7 +697,7 @@ function TrackMap({
       setExportEnding(false);
       setExportMessage(null);
       const blob = await capture.done;
-      const filename = defaultMapVideoFilename();
+      const filename = defaultMapVideoFilename(blob);
       downloadBlob(blob, filename);
     } catch (err) {
       if (err instanceof MapVideoAbortedError) {
