@@ -718,6 +718,10 @@ export function createMapChaseController() {
       compassBtn.classList.remove('is-bearing-locked');
       if (compassIdleLabel) setCompassTooltip(compassIdleLabel);
     }
+    if (session?.map) {
+      session.map.dragRotate.enable();
+      session.map.touchZoomRotate.enableRotation();
+    }
     compassBtn = null;
     onCompassClick = null;
     compassIdleLabel = '';
@@ -746,8 +750,18 @@ export function createMapChaseController() {
     onCompassClick = (event) => {
       if (!running) return;
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       bearingLocked = !bearingLocked;
+      if (bearingLocked) {
+        currentBearing = 0;
+        map.stop();
+        if (session) applyFrame(session, progress, { instant: true });
+        map.dragRotate.disable();
+        map.touchZoomRotate.disableRotation();
+      } else {
+        map.dragRotate.enable();
+        map.touchZoomRotate.enableRotation();
+      }
       syncCompassLock(titles);
     };
     btn.addEventListener('click', onCompassClick, true);
@@ -780,13 +794,11 @@ export function createMapChaseController() {
     const heading = stableHeading(
       { sample: (meters) => pointAtDistance(s, meters) },
       along,
-      bearingLocked ? 0 : currentBearing
+      currentBearing
     );
     if (bearingLocked) {
-      currentBearing += shortestAngleDelta(currentBearing, 0) * 0.12;
-      if (Math.abs(shortestAngleDelta(currentBearing, 0)) < 0.4) {
-        currentBearing = 0;
-      }
+      // Snap north every frame so chase yaw cannot leak through a slow ease.
+      currentBearing = 0;
     } else {
       const delta = shortestAngleDelta(currentBearing, heading);
       if (Math.abs(delta) > 4) currentBearing += delta * 0.07;
@@ -813,7 +825,7 @@ export function createMapChaseController() {
 
     s.map.jumpTo({
       center: coord,
-      bearing: currentBearing,
+      bearing: bearingLocked ? 0 : currentBearing,
       pitch: currentPitch,
       zoom: currentZoom,
     });
