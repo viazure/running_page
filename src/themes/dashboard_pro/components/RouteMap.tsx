@@ -932,9 +932,11 @@ export function RouteMap({
 
   return (
     <div
-      className={`card route-map-hover-ctrls relative overflow-hidden transition-[height] duration-300 ease-out ${
-        chasing ? 'route-map--playing' : ''
-      } ${className || 'h-[280px] md:h-[380px]'}`}
+      className={`card route-map-hover-ctrls relative overflow-hidden ${
+        className?.includes('transition-none')
+          ? ''
+          : 'transition-[height] duration-300 ease-out'
+      } ${chasing ? 'route-map--playing' : ''} ${className || 'h-[280px] md:h-[380px]'}`}
       style={lightsOff ? { backgroundColor: bg } : undefined}
     >
       {fallbackActivity ? (

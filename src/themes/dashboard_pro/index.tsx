@@ -196,7 +196,7 @@ function DashboardProContent({
             onClearSelection={() => setSelectedActivity(null)}
             className={
               mapDock.pinned
-                ? 'h-full shadow-lg [--card-shadow:var(--shadow-card-hover)]'
+                ? 'h-full shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)]'
                 : 'h-[280px] [--card-shadow:var(--shadow-card-hover)] md:h-[300px] lg:[--card-shadow:var(--shadow-card)]'
             }
           />

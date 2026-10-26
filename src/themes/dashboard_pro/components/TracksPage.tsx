@@ -1444,12 +1444,12 @@ export function TracksPage({
               }
             >
               <div
-                className={`card overflow-hidden transition-[height] duration-300 ease-out [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
+                className={`card overflow-hidden [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
                   mapDock.pinned
-                    ? 'h-full'
+                    ? 'h-full transition-none'
                     : mapPlaying
-                      ? 'h-[min(70vh,520px)] md:h-[min(65vh,560px)]'
-                      : 'h-[280px] md:h-[360px]'
+                      ? 'h-[min(70vh,520px)] transition-[height] duration-300 ease-out md:h-[min(65vh,560px)]'
+                      : 'h-[280px] transition-[height] duration-300 ease-out md:h-[360px]'
                 }`}
               >
                 <TrackMap
