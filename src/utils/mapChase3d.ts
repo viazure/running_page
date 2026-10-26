@@ -718,10 +718,6 @@ export function createMapChaseController() {
       compassBtn.classList.remove('is-bearing-locked');
       if (compassIdleLabel) setCompassTooltip(compassIdleLabel);
     }
-    if (session?.map) {
-      session.map.dragRotate.enable();
-      session.map.touchZoomRotate.enableRotation();
-    }
     compassBtn = null;
     onCompassClick = null;
     compassIdleLabel = '';
@@ -754,13 +750,10 @@ export function createMapChaseController() {
       bearingLocked = !bearingLocked;
       if (bearingLocked) {
         // Freeze whatever bearing the chase currently has — do not snap to north.
+        // Do not disable map dragRotate: idle Ctrl/right-drag orbit must keep working
+        // after playback ends, and jumpTo already holds bearing while chase runs.
         map.stop();
         if (session) applyFrame(session, progress, { instant: true });
-        map.dragRotate.disable();
-        map.touchZoomRotate.disableRotation();
-      } else {
-        map.dragRotate.enable();
-        map.touchZoomRotate.enableRotation();
       }
       syncCompassLock(titles);
     };
@@ -855,6 +848,8 @@ export function createMapChaseController() {
       if (endView === 'flat') {
         s.map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
       }
+      // Unbind before clearing session so compass lock UI does not stick around.
+      unbindCompass();
       running = false;
       session = null;
       finishing = false;
