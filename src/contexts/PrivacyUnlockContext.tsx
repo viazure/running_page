@@ -10,6 +10,7 @@ import {
   CAN_PRIVACY_UNLOCK,
   PRIVACY_UNLOCK_SEQUENCE,
 } from '@/core/privacyUnlock';
+import { celebratePrivacyUnlock } from '@/core/privacyUnlockCelebrate';
 
 const STORAGE_KEY = 'privacy_unlocked';
 
@@ -46,15 +47,29 @@ function normalizeKey(e: KeyboardEvent): string | null {
   return null;
 }
 
+function logUnlockHintOnce() {
+  if (typeof console === 'undefined' || !console.info) return;
+  console.info('↑↑↓↓←→←→BABA');
+}
+
 export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
   const [isUnlocked, setUnlocked] = useState(getStored);
   const bufferRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    if (!CAN_PRIVACY_UNLOCK) return;
+    logUnlockHintOnce();
+  }, []);
+
   const persist = useCallback((value: boolean) => {
+    const wasUnlocked = getStored();
     setUnlocked(value);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
+    }
+    if (value && !wasUnlocked) {
+      celebratePrivacyUnlock();
     }
   }, []);
 
