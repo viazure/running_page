@@ -180,6 +180,8 @@ type OrbitStartArgs = {
   map: mapboxgl.Map;
   coords: Coordinate[];
   isDark: boolean;
+  /** Skip the intro easeTo and jump straight to the fitted 3D camera. */
+  immediate?: boolean;
 };
 
 /**
@@ -192,6 +194,7 @@ export function createMapOrbitController() {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let map: mapboxgl.Map | null = null;
+  let onMoveEnd: (() => void) | null = null;
 
   const stop = (opts?: { keepCameraMotion?: boolean }) => {
     animToken += 1;
@@ -202,6 +205,10 @@ export function createMapOrbitController() {
     if (timeout != null) {
       clearTimeout(timeout);
       timeout = null;
+    }
+    if (map && onMoveEnd) {
+      map.off('moveend', onMoveEnd);
+      onMoveEnd = null;
     }
     // NavigationControl zoomIn/Out starts an easeTo that shares this path via
     // zoomstart+originalEvent; map.stop() would cancel that ease mid-flight.
@@ -245,7 +252,12 @@ export function createMapOrbitController() {
     next.on('zoomstart', handleUserZoom);
   };
 
-  const start = ({ map: m, coords, isDark }: OrbitStartArgs) => {
+  const start = ({
+    map: m,
+    coords,
+    isDark,
+    immediate = false,
+  }: OrbitStartArgs) => {
     stop();
     const extent = coordsExtent(coords);
     if (!extent) return;
@@ -278,6 +290,10 @@ export function createMapOrbitController() {
         clearTimeout(timeout);
         timeout = null;
       }
+      if (map && onMoveEnd) {
+        map.off('moveend', onMoveEnd);
+        onMoveEnd = null;
+      }
       if (reduce) {
         running = false;
         return;
@@ -301,15 +317,24 @@ export function createMapOrbitController() {
       raf = requestAnimationFrame(tick);
     };
 
+    // Activity switches must not linger on the previous city while all-routes
+    // still paints the old track under the pitched camera.
+    if (immediate || reduce) {
+      m.jumpTo({ center, zoom, pitch: ORBIT_PITCH, bearing: m.getBearing() });
+      beginSpin();
+      return;
+    }
+
+    onMoveEnd = beginSpin;
     m.easeTo({
       center,
       zoom,
       pitch: ORBIT_PITCH,
-      duration: reduce ? 200 : 1200,
+      duration: 1200,
       essential: true,
     });
     m.once('moveend', beginSpin);
-    timeout = setTimeout(beginSpin, reduce ? 280 : 1600);
+    timeout = setTimeout(beginSpin, 1600);
   };
 
   const dispose = () => {
@@ -384,6 +409,7 @@ export function setChaseHighlightLine(
   if (m.getSource(HIGHLIGHT_SOURCE)) {
     (m.getSource(HIGHLIGHT_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
     if (m.getLayer(HIGHLIGHT_LAYER)) {
+      m.setPaintProperty(HIGHLIGHT_LAYER, 'line-color', color);
       m.setPaintProperty(HIGHLIGHT_LAYER, 'line-width', lineWidth);
     }
     return;

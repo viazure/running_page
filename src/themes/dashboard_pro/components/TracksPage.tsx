@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -283,7 +284,11 @@ function TrackMap({
     }
   };
 
-  const startOrbitIfNeeded = (m: mapboxgl.Map, coords: Coordinate[]) => {
+  const startOrbitIfNeeded = (
+    m: mapboxgl.Map,
+    coords: Coordinate[],
+    opts?: { immediate?: boolean }
+  ) => {
     if (!view3dRef.current || !can3d || coords.length < 2) {
       flattenView(m);
       return;
@@ -293,6 +298,7 @@ function TrackMap({
       map: m,
       coords,
       isDark: dark !== false,
+      immediate: opts?.immediate,
     });
   };
 
@@ -388,7 +394,9 @@ function TrackMap({
 
         setChaseHighlightLine(m, coords, color);
         if (view3dRef.current && !privacy) {
-          startOrbitIfNeeded(m, coords);
+          // Immediate fit: a 1.2s easeTo leaves the old city on screen while
+          // all-routes still paints the previous track under the pitched camera.
+          startOrbitIfNeeded(m, coords, { immediate: true });
         } else {
           flattenView(m);
           fitMapToSelectedRoute(m, coords, privacy);
@@ -435,7 +443,7 @@ function TrackMap({
       });
       const orbitCoords = overviewOrbitCoords(acts);
       if (view3dRef.current && !privacy && orbitCoords.length > 0) {
-        startOrbitIfNeeded(m, orbitCoords);
+        startOrbitIfNeeded(m, orbitCoords, { immediate: true });
       } else {
         flattenView(m);
         fitTrackMapOverview(m, acts, privacy);
@@ -966,9 +974,11 @@ function TrackMap({
 
   useEffect(() => {
     setNeedsRecenter(false);
-    if (mapReady.current && styleIdleRef.current) {
-      updateRoutesRef.current();
-    }
+    const m = map.current;
+    // Do not wait for map 'idle': 3D orbit jumpTo keeps the map busy forever,
+    // so a styleIdle gate would drop activity switches after 3D is enabled.
+    if (!mapReady.current || !m?.isStyleLoaded()) return;
+    updateRoutesRef.current();
   }, [activity, activities]);
 
   useEffect(() => {
@@ -1135,8 +1145,18 @@ export function TracksPage({
     return true;
   });
 
-  const withPolyline = base.filter(
-    (a) => a.summary_polyline && a.summary_polyline.length > 20
+  const withPolyline = useMemo(
+    () =>
+      activities.filter((a) => {
+        if (
+          selectedYear !== null &&
+          new Date(a.start_date_local).getFullYear() !== selectedYear
+        )
+          return false;
+        if (sportFilter !== null && a.type !== sportFilter) return false;
+        return Boolean(a.summary_polyline && a.summary_polyline.length > 20);
+      }),
+    [activities, selectedYear, sportFilter]
   );
 
   // Stats for left panel

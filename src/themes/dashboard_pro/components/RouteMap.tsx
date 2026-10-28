@@ -242,7 +242,11 @@ export function RouteMap({
     }
   };
 
-  const startOrbitIfNeeded = (map: mapboxgl.Map, coords: Coordinate[]) => {
+  const startOrbitIfNeeded = (
+    map: mapboxgl.Map,
+    coords: Coordinate[],
+    opts?: { immediate?: boolean }
+  ) => {
     if (!view3dRef.current || !can3d || coords.length < 2) {
       flattenView(map);
       return;
@@ -252,6 +256,7 @@ export function RouteMap({
       map,
       coords,
       isDark: dark !== false,
+      immediate: opts?.immediate,
     });
   };
 
@@ -313,7 +318,7 @@ export function RouteMap({
         });
 
         if (view3dRef.current && !showingFallback && can3d) {
-          startOrbitIfNeeded(map, coords);
+          startOrbitIfNeeded(map, coords, { immediate: true });
         } else {
           flattenView(map);
           fitMapToSelectedRoute(map, coords, lightsOffRef.current);
@@ -382,7 +387,7 @@ export function RouteMap({
 
       const orbitCoords = overviewOrbitCoords(acts);
       if (view3dRef.current && can3d && orbitCoords.length > 0) {
-        startOrbitIfNeeded(map, orbitCoords);
+        startOrbitIfNeeded(map, orbitCoords, { immediate: true });
       } else {
         flattenView(map);
         fitMapToRouteOverview(map, acts, lightsOffRef.current);
@@ -908,9 +913,11 @@ export function RouteMap({
 
   useEffect(() => {
     setNeedsRecenter(false);
-    if (styleIdleRef.current) {
-      updateRoutesRef.current();
-    }
+    const map = mapRef.current;
+    // Do not wait for map 'idle': 3D orbit jumpTo keeps the map busy forever,
+    // so a styleIdle gate would drop activity switches after 3D is enabled.
+    if (!map?.isStyleLoaded()) return;
+    updateRoutesRef.current();
   }, [activities, selectedActivity, displayActivity]);
 
   useEffect(() => {
