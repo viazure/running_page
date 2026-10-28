@@ -198,6 +198,7 @@ function TrackMap({
   const [hudHeight, setHudHeight] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [exportEnding, setExportEnding] = useState(false);
+  const [exportConverting, setExportConverting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const fsRootRef = useRef<HTMLDivElement>(null);
   const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
@@ -542,6 +543,7 @@ function TrackMap({
       videoCaptureRef.current = null;
       setExporting(false);
       setExportEnding(false);
+      setExportConverting(false);
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       chaseRef.current.stop({ silent: true });
@@ -637,7 +639,7 @@ function TrackMap({
           caloriesRef.current.kcal = kcal != null && kcal > 0 ? kcal : null;
         });
       }
-      const capture = startMapVideoCapture({
+      const capture = await startMapVideoCapture({
         mapCanvas: m.getCanvas(),
         includeHud: opts.includeHud,
         sizeMode: opts.sizeMode,
@@ -699,6 +701,7 @@ function TrackMap({
         },
         onPhaseChange: (phase) => {
           setExportEnding(phase === 'ending');
+          setExportConverting(phase === 'converting');
         },
         onCoverScale: (scale) => {
           chaseRef.current.setStrokeScale(scale > 1 ? 1.45 / scale : 1);
@@ -707,6 +710,7 @@ function TrackMap({
       videoCaptureRef.current = capture;
       setExporting(true);
       setExportEnding(false);
+      setExportConverting(false);
       setExportMessage(null);
       const blob = await capture.done;
       const filename = defaultMapVideoFilename();
@@ -725,6 +729,7 @@ function TrackMap({
       videoCaptureRef.current = null;
       setExporting(false);
       setExportEnding(false);
+      setExportConverting(false);
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       window.setTimeout(() => setExportMessage(null), 4000);
@@ -1088,6 +1093,7 @@ function TrackMap({
           dark={dark !== false}
           exporting={exporting}
           exportEnding={exportEnding}
+          exportConverting={exportConverting}
           exportMessage={exportMessage}
           onTogglePause={() => {
             if (chaseRef.current.isPaused()) chaseRef.current.resume();

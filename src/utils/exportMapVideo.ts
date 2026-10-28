@@ -1,7 +1,8 @@
 /**
- * Client-side map chase video export via MediaRecorder + canvas.
- * Map frames are copied synchronously; stats are drawn with canvas text
- * (no html-to-image) so overlays stay stable and the encode stays smooth.
+ * Client-side map chase video export → H.264 MP4 for phone-native playback.
+ * Prefers MediaRecorder video/mp4; otherwise encodes canvas frames with
+ * WebCodecs (mediabunny, lazy-loaded); last resort records WebM then converts.
+ * Map frames are copied synchronously; stats use canvas text (no html-to-image).
  */
 
 export const MAP_VIDEO_MAX_DURATION_MS = 20_000;
@@ -93,7 +94,21 @@ export function phoneChaseZoomOutExtra(cssW: number, cssH: number): number {
  */
 const MAP_VIDEO_ATTRIBUTION = '© Mapbox, © OpenStreetMap';
 
-function pickMimeType(): string {
+function pickMp4MimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'video/mp4;codecs=avc1.640028',
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+  ];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
+}
+
+function pickWebmMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return '';
   const candidates = [
     'video/webm;codecs=vp9',
@@ -104,6 +119,18 @@ function pickMimeType(): string {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return '';
+}
+
+function assertMp4Blob(blob: Blob): Blob {
+  const type = (blob.type || '').toLowerCase();
+  if (blob.size < 64) {
+    throw new Error('Recording produced an empty file');
+  }
+  // Some browsers omit a precise codec suffix; accept video/mp4* only.
+  if (!type.startsWith('video/mp4')) {
+    throw new Error(`Expected MP4 blob, got ${type || 'unknown'}`);
+  }
+  return blob.size && type ? blob : new Blob([blob], { type: 'video/mp4' });
 }
 
 function drawHrSpark(
@@ -414,7 +441,7 @@ function evenSize(n: number): number {
   return Math.max(2, Math.round(n / 2) * 2);
 }
 
-export type MapVideoCapturePhase = 'live' | 'ending';
+export type MapVideoCapturePhase = 'live' | 'ending' | 'converting';
 
 export type StartMapVideoCaptureOptions = {
   mapCanvas: HTMLCanvasElement;
@@ -447,15 +474,14 @@ export type MapVideoCapture = {
 
 /**
  * Start capturing the map WebGL canvas (optionally composite canvas-drawn stats).
+ * Product output is always H.264 MP4. Strategy (in order):
+ * 1) MediaRecorder `video/mp4` when supported
+ * 2) WebCodecs + mediabunny CanvasSource (lazy-loaded)
+ * 3) MediaRecorder WebM, then convert to H.264 MP4 (lazy-loaded)
  */
-export function startMapVideoCapture(
+export async function startMapVideoCapture(
   opts: StartMapVideoCaptureOptions
-): MapVideoCapture {
-  const mimeType = pickMimeType();
-  if (!mimeType || typeof MediaRecorder === 'undefined') {
-    throw new MapVideoUnsupportedError('MediaRecorder / WebM not supported');
-  }
-
+): Promise<MapVideoCapture> {
   const src = opts.mapCanvas;
   const maxDurationMs = opts.maxDurationMs ?? MAP_VIDEO_MAX_DURATION_MS;
   const maxWidth = opts.maxWidth ?? MAP_VIDEO_MAX_WIDTH;
@@ -480,8 +506,7 @@ export function startMapVideoCapture(
     mapFit = fitCover(cssW, cssH, outW, outH);
     coverScale = Math.max(outW / cssW, outH / cssH);
   } else {
-    // Keep the WebGL buffer's pixels (retina) up to 1920px wide. Encoding the
-    // CSS size threw away that detail and looked soft.
+    // Keep the WebGL buffer's pixels (retina) up to 1920px wide.
     const bufW = src.width || cssW;
     const limited = Math.min(bufW, maxWidth);
     const scale = limited / cssW;
@@ -504,11 +529,142 @@ export function startMapVideoCapture(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  const stream = composite.captureStream(TARGET_FPS);
   const pixelRate = outW * outH * TARGET_FPS;
   const bits = Math.round(
     Math.min(24_000_000, Math.max(10_000_000, pixelRate * 0.42))
   );
+
+  const shared: CaptureShared = {
+    opts,
+    composite,
+    ctx,
+    src,
+    mapFit,
+    outW,
+    outH,
+    sizeMode,
+    includeStats,
+    maxDurationMs,
+  };
+
+  const mp4Mime = pickMp4MimeType();
+  if (mp4Mime) {
+    return startMediaRecorderCapture({
+      ...shared,
+      mimeType: mp4Mime,
+      bits,
+      convertToMp4: false,
+    });
+  }
+
+  let webcodecsOk = false;
+  try {
+    const { canEncodeAvc } = await import('./encodeMapVideoMp4');
+    webcodecsOk = await canEncodeAvc(outW, outH, bits, TARGET_FPS);
+  } catch (err) {
+    console.warn('WebCodecs AVC probe failed', err);
+  }
+
+  if (webcodecsOk) {
+    return startWebCodecsCapture({ ...shared, bits });
+  }
+
+  const webmMime = pickWebmMimeType();
+  if (webmMime) {
+    return startMediaRecorderCapture({
+      ...shared,
+      mimeType: webmMime,
+      bits,
+      convertToMp4: true,
+    });
+  }
+
+  throw new MapVideoUnsupportedError(
+    'No H.264 MP4 encoder available in this browser'
+  );
+}
+
+type CaptureShared = {
+  opts: StartMapVideoCaptureOptions;
+  composite: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  src: HTMLCanvasElement;
+  mapFit: MapFitRect;
+  outW: number;
+  outH: number;
+  sizeMode: MapVideoSizeMode;
+  includeStats: boolean;
+  maxDurationMs: number;
+};
+
+function makePainters(shared: CaptureShared) {
+  const { ctx, src, mapFit, outW, outH, sizeMode, includeStats, opts } = shared;
+
+  const paintMap = () => {
+    if (sizeMode === 'phone') {
+      ctx.fillStyle = '#0b0d10';
+      ctx.fillRect(0, 0, outW, outH);
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, mapFit.x, mapFit.y, mapFit.w, mapFit.h);
+  };
+
+  const paintLive = () => {
+    paintMap();
+    if (includeStats && opts.getOverlayStats) {
+      const stats = opts.getOverlayStats();
+      if (stats) {
+        drawStatsOverlay(
+          ctx,
+          outW,
+          outH,
+          stats,
+          sizeMode === 'phone' ? 1.32 : 1
+        );
+      }
+    }
+    // Live frames also need credit — DOM logo/ⓘ never enter the WebGL buffer.
+    drawMapAttribution(ctx, outW, outH);
+  };
+
+  let endCard: MapVideoEndCard | null = null;
+  const paintEnd = () => {
+    paintMap();
+    if (endCard) {
+      drawEndCard(
+        ctx,
+        outW,
+        outH,
+        endCard,
+        opts.getMarkerPoints?.() ?? null,
+        mapFit
+      );
+    }
+    drawMapAttribution(ctx, outW, outH);
+  };
+
+  return {
+    paintMap,
+    paintLive,
+    paintEnd,
+    setEndCard: (card: MapVideoEndCard | null) => {
+      endCard = card;
+    },
+  };
+}
+
+function startMediaRecorderCapture(
+  args: CaptureShared & {
+    mimeType: string;
+    bits: number;
+    convertToMp4: boolean;
+  }
+): MapVideoCapture {
+  const { opts, composite, maxDurationMs, mimeType, bits, convertToMp4 } = args;
+  const painters = makePainters(args);
+
+  const stream = composite.captureStream(TARGET_FPS);
   const chunks: Blob[] = [];
   const recorder = new MediaRecorder(stream, {
     mimeType,
@@ -529,24 +685,33 @@ export function startMapVideoCapture(
   const minFrameMs = 1000 / TARGET_FPS;
   let rejectDone: ((err: Error) => void) | null = null;
   let aborted = false;
-  let endCard: MapVideoEndCard | null = null;
 
   const done = new Promise<Blob>((resolve, reject) => {
     rejectDone = reject;
     recorder.onerror = () => reject(new Error('MediaRecorder error'));
     recorder.onstop = () => {
-      if (aborted) {
-        reject(new MapVideoAbortedError());
-        return;
-      }
-      const blob = new Blob(chunks, {
-        type: mimeType.split(';')[0] || 'video/webm',
-      });
-      if (blob.size < 64) {
-        reject(new Error('Recording produced an empty file'));
-        return;
-      }
-      resolve(blob);
+      void (async () => {
+        if (aborted) {
+          reject(new MapVideoAbortedError());
+          return;
+        }
+        try {
+          const rawType = mimeType.split(';')[0] || 'video/webm';
+          let blob = new Blob(chunks, { type: rawType });
+          if (blob.size < 64) {
+            reject(new Error('Recording produced an empty file'));
+            return;
+          }
+          if (convertToMp4) {
+            opts.onPhaseChange?.('converting');
+            const { convertBlobToAvcMp4 } = await import('./encodeMapVideoMp4');
+            blob = await convertBlobToAvcMp4(blob, bits);
+          }
+          resolve(assertMp4Blob(blob));
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
+      })();
     };
   });
 
@@ -560,48 +725,6 @@ export function startMapVideoCapture(
     cancelAnimationFrame(raf);
     if (recorder.state !== 'inactive') recorder.stop();
     teardownTracks();
-  };
-
-  const paintMap = () => {
-    if (sizeMode === 'phone') {
-      ctx.fillStyle = '#0b0d10';
-      ctx.fillRect(0, 0, outW, outH);
-    }
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(src, mapFit.x, mapFit.y, mapFit.w, mapFit.h);
-  };
-
-  const paintLive = () => {
-    paintMap();
-    if (includeStats && opts.getOverlayStats) {
-      const stats = opts.getOverlayStats();
-      if (stats)
-        drawStatsOverlay(
-          ctx,
-          outW,
-          outH,
-          stats,
-          sizeMode === 'phone' ? 1.32 : 1
-        );
-    }
-    // Live frames also need credit — DOM logo/ⓘ never enter the WebGL buffer.
-    drawMapAttribution(ctx, outW, outH);
-  };
-
-  const paintEnd = () => {
-    paintMap();
-    if (endCard) {
-      drawEndCard(
-        ctx,
-        outW,
-        outH,
-        endCard,
-        opts.getMarkerPoints?.() ?? null,
-        mapFit
-      );
-    }
-    drawMapAttribution(ctx, outW, outH);
   };
 
   const beginEndCard = () => {
@@ -621,7 +744,7 @@ export function startMapVideoCapture(
         console.error(err);
       }
       if (!active) return;
-      endCard = opts.getEndCard?.() ?? null;
+      painters.setEndCard(opts.getEndCard?.() ?? null);
       cardStarted = performance.now();
       mode = 'card';
     })();
@@ -638,18 +761,18 @@ export function startMapVideoCapture(
     }
     if (ts - lastPaintAt >= minFrameMs - 0.5) {
       lastPaintAt = ts;
-      if (mode === 'live') paintLive();
-      else if (mode === 'card') paintEnd();
+      if (mode === 'live') painters.paintLive();
+      else if (mode === 'card') painters.paintEnd();
       else {
-        paintMap();
-        drawMapAttribution(ctx, outW, outH);
+        painters.paintMap();
+        drawMapAttribution(args.ctx, args.outW, args.outH);
       }
     }
     raf = requestAnimationFrame(tick);
   };
 
   recorder.start(250);
-  paintLive();
+  painters.paintLive();
   raf = requestAnimationFrame(tick);
 
   return {
@@ -662,6 +785,183 @@ export function startMapVideoCapture(
       if (recorder.state !== 'inactive') recorder.stop();
       else rejectDone?.(new MapVideoAbortedError());
       teardownTracks();
+    },
+  };
+}
+
+function startWebCodecsCapture(
+  args: CaptureShared & { bits: number }
+): MapVideoCapture {
+  const { opts, composite, maxDurationMs, bits } = args;
+  const painters = makePainters(args);
+
+  let raf = 0;
+  let active = true;
+  let mode: 'live' | 'pullback' | 'card' = 'live';
+  let endStarted = false;
+  const startedAt = performance.now();
+  let cardStarted = 0;
+  let lastPaintAt = 0;
+  const minFrameMs = 1000 / TARGET_FPS;
+  let aborted = false;
+  let frameIndex = 0;
+  const frameDuration = 1 / TARGET_FPS;
+  let encodeQueue: Promise<void> = Promise.resolve();
+  let finalizeRequested = false;
+
+  type Enc = Awaited<
+    ReturnType<typeof import('./encodeMapVideoMp4').createCanvasMp4Encoder>
+  >;
+  let encoder: Enc | null = null;
+
+  let pendingStop = false;
+  let beginEndCardRef: () => void = () => {
+    pendingStop = true;
+  };
+  let abortRef: () => void = () => {
+    aborted = true;
+  };
+
+  const done = new Promise<Blob>((resolve, reject) => {
+    void (async () => {
+      try {
+        const { createCanvasMp4Encoder } = await import('./encodeMapVideoMp4');
+        if (aborted) {
+          reject(new MapVideoAbortedError());
+          return;
+        }
+        encoder = await createCanvasMp4Encoder(composite, {
+          bitrate: bits,
+          frameRate: TARGET_FPS,
+        });
+        if (aborted) {
+          await encoder.cancel();
+          reject(new MapVideoAbortedError());
+          return;
+        }
+
+        const pushFrame = async () => {
+          if (!encoder || aborted) return;
+          const ts = frameIndex * frameDuration;
+          frameIndex += 1;
+          encodeQueue = encodeQueue.then(() => {
+            if (!encoder || aborted) return Promise.resolve();
+            return encoder.addFrame(ts, frameDuration);
+          });
+          await encodeQueue;
+        };
+
+        const finishEncode = async () => {
+          if (aborted) {
+            reject(new MapVideoAbortedError());
+            return;
+          }
+          try {
+            await encodeQueue;
+            if (!encoder) {
+              reject(new Error('MP4 encoder missing'));
+              return;
+            }
+            const blob = await encoder.finish();
+            resolve(assertMp4Blob(blob));
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
+        };
+
+        const finalize = () => {
+          if (finalizeRequested || !active) return;
+          finalizeRequested = true;
+          active = false;
+          cancelAnimationFrame(raf);
+          void finishEncode();
+        };
+
+        const beginEndCard = () => {
+          if (endStarted || !active) return;
+          endStarted = true;
+          mode = 'pullback';
+          opts.onPhaseChange?.('ending');
+          void (async () => {
+            try {
+              await Promise.race([
+                opts.prepareEndCard?.() ?? Promise.resolve(),
+                new Promise<void>((r) => {
+                  window.setTimeout(r, 2200);
+                }),
+              ]);
+            } catch (err) {
+              console.error(err);
+            }
+            if (!active) return;
+            painters.setEndCard(opts.getEndCard?.() ?? null);
+            cardStarted = performance.now();
+            mode = 'card';
+          })();
+        };
+        beginEndCardRef = beginEndCard;
+
+        abortRef = () => {
+          if (aborted) return;
+          aborted = true;
+          active = false;
+          cancelAnimationFrame(raf);
+          void (async () => {
+            try {
+              await encodeQueue;
+              await encoder?.cancel();
+            } catch {
+              /* ignore */
+            }
+            reject(new MapVideoAbortedError());
+          })();
+        };
+
+        const tick = (now: number) => {
+          if (!active) return;
+          if (
+            mode === 'live' &&
+            performance.now() - startedAt >= maxDurationMs
+          ) {
+            beginEndCard();
+          }
+          if (
+            mode === 'card' &&
+            performance.now() - cardStarted >= END_CARD_MS
+          ) {
+            finalize();
+            return;
+          }
+          if (now - lastPaintAt >= minFrameMs - 0.5) {
+            lastPaintAt = now;
+            if (mode === 'live') painters.paintLive();
+            else if (mode === 'card') painters.paintEnd();
+            else {
+              painters.paintMap();
+              drawMapAttribution(args.ctx, args.outW, args.outH);
+            }
+            void pushFrame();
+          }
+          raf = requestAnimationFrame(tick);
+        };
+
+        if (pendingStop) beginEndCard();
+
+        painters.paintLive();
+        await pushFrame();
+        raf = requestAnimationFrame(tick);
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    })();
+  });
+
+  return {
+    done,
+    stop: () => beginEndCardRef(),
+    abort: () => {
+      aborted = true;
+      abortRef();
     },
   };
 }
@@ -682,5 +982,5 @@ export function defaultMapVideoFilename(): string {
   return `run-playback-${new Date()
     .toISOString()
     .slice(0, 19)
-    .replace(/[:T]/g, '-')}.webm`;
+    .replace(/[:T]/g, '-')}.mp4`;
 }
