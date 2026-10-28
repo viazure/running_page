@@ -33,6 +33,8 @@ import {
   createMapChaseController,
   createMapOrbitController,
   isMapFullscreen,
+  PLAYBACK_LAYOUT_SETTLE_MS,
+  PLAYBACK_LAYOUT_EXIT_RESIZE_MS,
   removeChaseHighlight,
   updateChaseControlButton,
   updateFullscreenButton,
@@ -146,6 +148,7 @@ export function RouteMap({
   const [hudHeight, setHudHeight] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [exportEnding, setExportEnding] = useState(false);
+  const [exportConverting, setExportConverting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const fsRootRef = useRef<HTMLDivElement>(null);
   const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
@@ -514,6 +517,12 @@ export function RouteMap({
         },
         overviewLayerId: map.getLayer('routes') ? 'routes' : undefined,
         getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
+        // Mobile/tablet card grows on play — wait so start Marker matches canvas.
+        layoutSettleMs:
+          typeof window !== 'undefined' &&
+          window.matchMedia('(max-width: 1023px)').matches
+            ? PLAYBACK_LAYOUT_SETTLE_MS
+            : 0,
       },
       {
         onStart: () => setChaseRunId(runId),
@@ -569,7 +578,7 @@ export function RouteMap({
           caloriesRef.current.kcal = kcal != null && kcal > 0 ? kcal : null;
         });
       }
-      const capture = startMapVideoCapture({
+      const capture = await startMapVideoCapture({
         mapCanvas: map.getCanvas(),
         includeHud: opts.includeHud,
         sizeMode: opts.sizeMode,
@@ -631,6 +640,7 @@ export function RouteMap({
         },
         onPhaseChange: (phase) => {
           setExportEnding(phase === 'ending');
+          setExportConverting(phase === 'converting');
         },
         onCoverScale: (scale) => {
           chaseRef.current.setStrokeScale(scale > 1 ? 1.45 / scale : 1);
@@ -639,6 +649,7 @@ export function RouteMap({
       videoCaptureRef.current = capture;
       setExporting(true);
       setExportEnding(false);
+      setExportConverting(false);
       setExportMessage(null);
       const blob = await capture.done;
       const filename = defaultMapVideoFilename();
@@ -657,6 +668,7 @@ export function RouteMap({
       videoCaptureRef.current = null;
       setExporting(false);
       setExportEnding(false);
+      setExportConverting(false);
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       window.setTimeout(() => setExportMessage(null), 4000);
@@ -680,30 +692,57 @@ export function RouteMap({
     };
   }, []);
 
-  // Card height animates with playback — resize, then re-fit when ending.
+  // Keep play-sized surface for expand AND collapse; outer clips. Drop size then
+  // resize on exit so Mapbox/ResizeObserver do not blank mid-animation.
+  const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  useLayoutEffect(() => {
+    if (chasing) setPlaySurfaceSized(true);
+  }, [chasing]);
   const wasChasingRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const ending = wasChasingRef.current && !chasing;
+    const starting = !wasChasingRef.current && chasing;
     wasChasingRef.current = chasing;
-    const tick = () => map.resize();
-    tick();
-    const t1 = window.setTimeout(tick, 80);
-    const t2 = window.setTimeout(() => {
-      tick();
-      if (!ending) return;
-      const coords = selectedCoordsRef.current;
-      if (!coords || coords.length < 2) return;
-      if (view3dRef.current) {
-        startOrbitIfNeeded(map, coords);
-      } else {
-        fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+    const tick = () => {
+      try {
+        map.resize();
+      } catch {
+        /* map may already be gone */
       }
-    }, 360);
+    };
+    let raf1 = 0;
+    let raf2 = 0;
+    let tExit = 0;
+    if (starting) {
+      raf1 = window.requestAnimationFrame(() => {
+        tick();
+        raf2 = window.requestAnimationFrame(tick);
+      });
+    }
+    const tSettle = window.setTimeout(() => {
+      if (ending) {
+        setPlaySurfaceSized(false);
+        tExit = window.setTimeout(() => {
+          tick();
+          const coords = selectedCoordsRef.current;
+          if (!coords || coords.length < 2) return;
+          if (view3dRef.current) {
+            startOrbitIfNeeded(map, coords);
+          } else {
+            fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+          }
+        }, PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS);
+        return;
+      }
+      tick();
+    }, PLAYBACK_LAYOUT_SETTLE_MS);
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      window.clearTimeout(tSettle);
+      if (tExit) window.clearTimeout(tExit);
     };
   }, [chasing]);
 
@@ -939,7 +978,7 @@ export function RouteMap({
 
   return (
     <div
-      className={`card route-map-hover-ctrls relative overflow-hidden transition-[height] duration-300 ease-out ${
+      className={`card route-map-hover-ctrls route-map-play-spring relative overflow-hidden ${
         chasing ? 'route-map--playing' : ''
       } ${className || 'h-[280px] md:h-[380px]'}`}
       style={lightsOff ? { backgroundColor: bg } : undefined}
@@ -963,126 +1002,137 @@ export function RouteMap({
         </p>
       ) : null}
       <div
-        ref={bindFsRoot}
-        className={`route-map-fs-root relative h-full w-full${
-          chasing ? 'is-playing' : ''
-        }`}
-        style={
-          chasing
-            ? ({
-                '--playback-hud-height': `${hudHeight}px`,
-              } as CSSProperties)
-            : undefined
+        className={
+          playSurfaceSized
+            ? 'route-map-play-surface is-play-sized'
+            : 'route-map-play-surface'
         }
       >
-        <div className="route-map-top-left absolute top-3 left-3 z-10 flex items-center gap-2">
-          {selectedActivity && onClearSelection ? (
-            <button
-              type="button"
-              onClick={() => {
-                stopChase();
-                orbitRef.current.stop();
-                setChaseRunId(null);
-                onClearSelection();
-              }}
-              className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
-            >
-              <svg
-                className="h-3.5 w-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+        <div
+          ref={bindFsRoot}
+          className={
+            chasing
+              ? 'route-map-fs-root is-playing relative h-full w-full'
+              : 'route-map-fs-root relative h-full w-full'
+          }
+          style={
+            chasing
+              ? ({
+                  '--playback-hud-height': `${hudHeight}px`,
+                } as CSSProperties)
+              : undefined
+          }
+        >
+          <div className="route-map-top-left absolute top-3 left-3 z-10 flex items-center gap-2">
+            {selectedActivity && onClearSelection ? (
+              <button
+                type="button"
+                onClick={() => {
+                  stopChase();
+                  orbitRef.current.stop();
+                  setChaseRunId(null);
+                  onClearSelection();
+                }}
+                className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              {t('overview')}
-            </button>
-          ) : null}
-          {canOffer3d ? (
-            <button
-              type="button"
-              className={
-                view3d
-                  ? 'route-map-toolbar-3d is-active'
-                  : 'route-map-toolbar-3d'
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                {t('overview')}
+              </button>
+            ) : null}
+            {canOffer3d ? (
+              <button
+                type="button"
+                className={
+                  view3d
+                    ? 'route-map-toolbar-3d is-active'
+                    : 'route-map-toolbar-3d'
+                }
+                aria-pressed={view3d}
+                aria-label={view3d ? t('disable3d') : t('enable3d')}
+                title={view3d ? t('disable3d') : t('enable3d')}
+                onClick={handleToggle3d}
+              >
+                3D
+              </button>
+            ) : null}
+            {needsRecenter ? (
+              <button
+                type="button"
+                className="route-map-recenter"
+                aria-label={t('locateTrack')}
+                title={t('locateTrack')}
+                onClick={() => refitViewRef.current()}
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
+                  />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+          <div ref={mapContainerRef} className="h-full w-full" />
+          {chasing && playbackSnap ? (
+            <PlaybackHudView
+              snap={playbackSnap}
+              hrSeries={playbackSeries?.hr ?? null}
+              timeSeries={playbackSeries?.time ?? null}
+              movingTimeSec={
+                selectedActivity
+                  ? parseMovingTime(selectedActivity.moving_time)
+                  : 0
               }
-              aria-pressed={view3d}
-              aria-label={view3d ? t('disable3d') : t('enable3d')}
-              title={view3d ? t('disable3d') : t('enable3d')}
-              onClick={handleToggle3d}
-            >
-              3D
-            </button>
-          ) : null}
-          {needsRecenter ? (
-            <button
-              type="button"
-              className="route-map-recenter"
-              aria-label={t('locateTrack')}
-              title={t('locateTrack')}
-              onClick={() => refitViewRef.current()}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
-                />
-              </svg>
-            </button>
+              averageSpeedMs={selectedActivity?.average_speed ?? 0}
+              fullscreen={isFullscreen}
+              dark={dark !== false}
+              exporting={exporting}
+              exportEnding={exportEnding}
+              exportConverting={exportConverting}
+              exportMessage={exportMessage}
+              onTogglePause={() => {
+                if (chaseRef.current.isPaused()) chaseRef.current.resume();
+                else chaseRef.current.pause();
+              }}
+              onCycleSpeed={() => {
+                chaseRef.current.setSpeed(
+                  nextPlaybackSpeed(chaseRef.current.getSpeed())
+                );
+              }}
+              onSeek={(p) => chaseRef.current.seek(p)}
+              onShowEndpointsChange={(show) =>
+                chaseRef.current.setShowEndpoints(show)
+              }
+              onLockOrientationChange={(locked) =>
+                chaseRef.current.setBearingLocked(locked)
+              }
+              onExport={(opts) => {
+                void handleExportVideo(opts);
+              }}
+              onHeightChange={setHudHeight}
+            />
           ) : null}
         </div>
-        <div ref={mapContainerRef} className="h-full w-full" />
-        {chasing && playbackSnap ? (
-          <PlaybackHudView
-            snap={playbackSnap}
-            hrSeries={playbackSeries?.hr ?? null}
-            timeSeries={playbackSeries?.time ?? null}
-            movingTimeSec={
-              selectedActivity
-                ? parseMovingTime(selectedActivity.moving_time)
-                : 0
-            }
-            averageSpeedMs={selectedActivity?.average_speed ?? 0}
-            fullscreen={isFullscreen}
-            dark={dark !== false}
-            exporting={exporting}
-            exportEnding={exportEnding}
-            exportMessage={exportMessage}
-            onTogglePause={() => {
-              if (chaseRef.current.isPaused()) chaseRef.current.resume();
-              else chaseRef.current.pause();
-            }}
-            onCycleSpeed={() => {
-              chaseRef.current.setSpeed(
-                nextPlaybackSpeed(chaseRef.current.getSpeed())
-              );
-            }}
-            onSeek={(p) => chaseRef.current.seek(p)}
-            onShowEndpointsChange={(show) =>
-              chaseRef.current.setShowEndpoints(show)
-            }
-            onLockOrientationChange={(locked) =>
-              chaseRef.current.setBearingLocked(locked)
-            }
-            onExport={(opts) => {
-              void handleExportVideo(opts);
-            }}
-            onHeightChange={setHudHeight}
-          />
-        ) : null}
       </div>
     </div>
   );
