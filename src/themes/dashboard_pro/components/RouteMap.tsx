@@ -998,13 +998,19 @@ export function RouteMap({
         </p>
       ) : null}
       <div
-        className={`route-map-play-surface${playSurfaceSized ? ' is-play-sized' : ''}`}
+        className={
+          playSurfaceSized
+            ? 'route-map-play-surface is-play-sized'
+            : 'route-map-play-surface'
+        }
       >
         <div
           ref={bindFsRoot}
-          className={`route-map-fs-root relative h-full w-full${
-            chasing ? ' is-playing' : ''
-          }`}
+          className={
+            chasing
+              ? 'route-map-fs-root is-playing relative h-full w-full'
+              : 'route-map-fs-root relative h-full w-full'
+          }
           style={
             chasing
               ? ({
@@ -1013,114 +1019,114 @@ export function RouteMap({
               : undefined
           }
         >
-        <div className="route-map-top-left absolute top-3 left-3 z-10 flex items-center gap-2">
-          {selectedActivity && onClearSelection ? (
-            <button
-              type="button"
-              onClick={() => {
-                stopChase();
-                orbitRef.current.stop();
-                setChaseRunId(null);
-                onClearSelection();
-              }}
-              className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
-            >
-              <svg
-                className="h-3.5 w-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+          <div className="route-map-top-left absolute top-3 left-3 z-10 flex items-center gap-2">
+            {selectedActivity && onClearSelection ? (
+              <button
+                type="button"
+                onClick={() => {
+                  stopChase();
+                  orbitRef.current.stop();
+                  setChaseRunId(null);
+                  onClearSelection();
+                }}
+                className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-[var(--color-bg)]"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              {t('overview')}
-            </button>
-          ) : null}
-          {canOffer3d ? (
-            <button
-              type="button"
-              className={
-                view3d
-                  ? 'route-map-toolbar-3d is-active'
-                  : 'route-map-toolbar-3d'
+                <svg
+                  className="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                {t('overview')}
+              </button>
+            ) : null}
+            {canOffer3d ? (
+              <button
+                type="button"
+                className={
+                  view3d
+                    ? 'route-map-toolbar-3d is-active'
+                    : 'route-map-toolbar-3d'
+                }
+                aria-pressed={view3d}
+                aria-label={view3d ? t('disable3d') : t('enable3d')}
+                title={view3d ? t('disable3d') : t('enable3d')}
+                onClick={handleToggle3d}
+              >
+                3D
+              </button>
+            ) : null}
+            {needsRecenter ? (
+              <button
+                type="button"
+                className="route-map-recenter"
+                aria-label={t('locateTrack')}
+                title={t('locateTrack')}
+                onClick={() => refitViewRef.current()}
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
+                  />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+          <div ref={mapContainerRef} className="h-full w-full" />
+          {chasing && playbackSnap ? (
+            <PlaybackHudView
+              snap={playbackSnap}
+              hrSeries={playbackSeries?.hr ?? null}
+              timeSeries={playbackSeries?.time ?? null}
+              movingTimeSec={
+                selectedActivity
+                  ? parseMovingTime(selectedActivity.moving_time)
+                  : 0
               }
-              aria-pressed={view3d}
-              aria-label={view3d ? t('disable3d') : t('enable3d')}
-              title={view3d ? t('disable3d') : t('enable3d')}
-              onClick={handleToggle3d}
-            >
-              3D
-            </button>
+              averageSpeedMs={selectedActivity?.average_speed ?? 0}
+              fullscreen={isFullscreen}
+              dark={dark !== false}
+              exporting={exporting}
+              exportEnding={exportEnding}
+              exportMessage={exportMessage}
+              onTogglePause={() => {
+                if (chaseRef.current.isPaused()) chaseRef.current.resume();
+                else chaseRef.current.pause();
+              }}
+              onCycleSpeed={() => {
+                chaseRef.current.setSpeed(
+                  nextPlaybackSpeed(chaseRef.current.getSpeed())
+                );
+              }}
+              onSeek={(p) => chaseRef.current.seek(p)}
+              onShowEndpointsChange={(show) =>
+                chaseRef.current.setShowEndpoints(show)
+              }
+              onLockOrientationChange={(locked) =>
+                chaseRef.current.setBearingLocked(locked)
+              }
+              onExport={(opts) => {
+                void handleExportVideo(opts);
+              }}
+              onHeightChange={setHudHeight}
+            />
           ) : null}
-          {needsRecenter ? (
-            <button
-              type="button"
-              className="route-map-recenter"
-              aria-label={t('locateTrack')}
-              title={t('locateTrack')}
-              onClick={() => refitViewRef.current()}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-                aria-hidden
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 2v4m0 12v4M2 12h4m12 0h4M12 8a4 4 0 100 8 4 4 0 000-8z"
-                />
-              </svg>
-            </button>
-          ) : null}
-        </div>
-        <div ref={mapContainerRef} className="h-full w-full" />
-        {chasing && playbackSnap ? (
-          <PlaybackHudView
-            snap={playbackSnap}
-            hrSeries={playbackSeries?.hr ?? null}
-            timeSeries={playbackSeries?.time ?? null}
-            movingTimeSec={
-              selectedActivity
-                ? parseMovingTime(selectedActivity.moving_time)
-                : 0
-            }
-            averageSpeedMs={selectedActivity?.average_speed ?? 0}
-            fullscreen={isFullscreen}
-            dark={dark !== false}
-            exporting={exporting}
-            exportEnding={exportEnding}
-            exportMessage={exportMessage}
-            onTogglePause={() => {
-              if (chaseRef.current.isPaused()) chaseRef.current.resume();
-              else chaseRef.current.pause();
-            }}
-            onCycleSpeed={() => {
-              chaseRef.current.setSpeed(
-                nextPlaybackSpeed(chaseRef.current.getSpeed())
-              );
-            }}
-            onSeek={(p) => chaseRef.current.seek(p)}
-            onShowEndpointsChange={(show) =>
-              chaseRef.current.setShowEndpoints(show)
-            }
-            onLockOrientationChange={(locked) =>
-              chaseRef.current.setBearingLocked(locked)
-            }
-            onExport={(opts) => {
-              void handleExportVideo(opts);
-            }}
-            onHeightChange={setHudHeight}
-          />
-        ) : null}
         </div>
       </div>
     </div>

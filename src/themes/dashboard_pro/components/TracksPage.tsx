@@ -1024,9 +1024,11 @@ function TrackMap({
   return (
     <div
       ref={bindFsRoot}
-      className={`route-map-hover-ctrls route-map-fs-root relative h-full w-full${
-        chasing ? ' is-playing' : ''
-      }`}
+      className={
+        chasing
+          ? 'route-map-hover-ctrls route-map-fs-root is-playing relative h-full w-full'
+          : 'route-map-hover-ctrls route-map-fs-root relative h-full w-full'
+      }
       style={
         {
           ...(lightsOff ? { backgroundColor: bg } : null),
@@ -1484,9 +1486,11 @@ export function TracksPage({
               }`}
             >
               <div
-                className={`route-map-play-surface${
-                  playSurfaceSized ? ' is-play-sized' : ''
-                }`}
+                className={
+                  playSurfaceSized
+                    ? 'route-map-play-surface is-play-sized'
+                    : 'route-map-play-surface'
+                }
               >
                 <TrackMap
                   activity={selectedActivity}
