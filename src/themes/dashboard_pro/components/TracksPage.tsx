@@ -39,6 +39,8 @@ import {
   createMapChaseController,
   createMapOrbitController,
   isMapFullscreen,
+  PLAYBACK_LAYOUT_SETTLE_MS,
+  PLAYBACK_LAYOUT_EXIT_RESIZE_MS,
   removeChaseHighlight,
   setChaseHighlightLine,
   updateChaseControlButton,
@@ -579,6 +581,8 @@ function TrackMap({
         },
         overviewLayerId: 'all-routes',
         getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
+        // Card grows on play (280→~70vh) — wait so start Marker matches canvas.
+        layoutSettleMs: PLAYBACK_LAYOUT_SETTLE_MS,
       },
       {
         onStart: () => setChaseRunId(runId),
@@ -745,17 +749,35 @@ function TrackMap({
     };
   }, []);
 
-  // Parent card height grows/shrinks with playback — resize, then re-fit when ending.
+  // Clip shell eases height; keep play-sized surface for expand AND collapse.
+  // Parent drops is-play-sized after settle — exit resize waits for that.
   const wasChasingRef = useRef(false);
   useEffect(() => {
     const m = map.current;
     if (!m) return;
     const ending = wasChasingRef.current && !chasing;
+    const starting = !wasChasingRef.current && chasing;
     wasChasingRef.current = chasing;
-    const tick = () => m.resize();
-    tick();
-    const t1 = window.setTimeout(tick, 80);
-    const t2 = window.setTimeout(() => {
+    const tick = () => {
+      try {
+        m.resize();
+      } catch {
+        /* map may already be gone */
+      }
+    };
+    // Immediate resize when play surface jumps to final height (avoids white letterbox).
+    let raf1 = 0;
+    let raf2 = 0;
+    if (starting) {
+      raf1 = window.requestAnimationFrame(() => {
+        tick();
+        raf2 = window.requestAnimationFrame(tick);
+      });
+    }
+    const settleMs = ending
+      ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS
+      : PLAYBACK_LAYOUT_SETTLE_MS;
+    const tSettle = window.setTimeout(() => {
       tick();
       if (!ending) return;
       const coords = selectedCoordsRef.current;
@@ -765,10 +787,11 @@ function TrackMap({
       } else {
         fitMapToSelectedRoute(m, coords, lightsOffRef.current);
       }
-    }, 360);
+    }, settleMs);
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      window.clearTimeout(tSettle);
     };
   }, [chasing]);
 
@@ -1002,7 +1025,7 @@ function TrackMap({
     <div
       ref={bindFsRoot}
       className={`route-map-hover-ctrls route-map-fs-root relative h-full w-full${
-        chasing ? 'is-playing' : ''
+        chasing ? ' is-playing' : ''
       }`}
       style={
         {
@@ -1116,6 +1139,19 @@ export function TracksPage({
     null
   );
   const [mapPlaying, setMapPlaying] = useState(false);
+  // Keep play surface tall while outer shell clips down on exit (avoids white flash).
+  const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  useLayoutEffect(() => {
+    if (mapPlaying) setPlaySurfaceSized(true);
+  }, [mapPlaying]);
+  useEffect(() => {
+    if (mapPlaying) return;
+    const t = window.setTimeout(
+      () => setPlaySurfaceSized(false),
+      PLAYBACK_LAYOUT_SETTLE_MS
+    );
+    return () => window.clearTimeout(t);
+  }, [mapPlaying]);
   const [sortBy, setSortBy] = useState<'date' | 'distance'>('date');
 
   // Export
@@ -1441,19 +1477,25 @@ export function TracksPage({
               Idle stays compact; playback grows so HUD + ctrl stack + logo fit. */}
           <div className="sticky top-16 z-40 order-2 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:py-0">
             <div
-              className={`card overflow-hidden transition-[height] duration-300 ease-out [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
+              className={`card route-map-play-spring overflow-hidden [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
                 mapPlaying
                   ? 'h-[min(70vh,520px)] md:h-[min(65vh,560px)]'
                   : 'h-[280px] md:h-[360px]'
               }`}
             >
-              <TrackMap
-                activity={selectedActivity}
-                activities={withPolyline}
-                dark={dark}
-                lightsOff={lightsOff}
-                onPlaybackChange={setMapPlaying}
-              />
+              <div
+                className={`route-map-play-surface${
+                  playSurfaceSized ? ' is-play-sized' : ''
+                }`}
+              >
+                <TrackMap
+                  activity={selectedActivity}
+                  activities={withPolyline}
+                  dark={dark}
+                  lightsOff={lightsOff}
+                  onPlaybackChange={setMapPlaying}
+                />
+              </div>
             </div>
           </div>
         </div>

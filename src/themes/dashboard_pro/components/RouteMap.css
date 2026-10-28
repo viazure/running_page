@@ -70,6 +70,48 @@
   margin-bottom: calc(var(--playback-hud-height, 0px) + 12px);
 }
 
+/*
+ * Playback card grow/shrink.
+ * Outer shell eases height (no overshoot — overshoot letterboxed the Mapbox canvas).
+ * Inner .route-map-play-surface stays at play height for both expand and collapse
+ * so map.resize() is not called while the clip animates (that blanks WebGL).
+ * On exit, hosts drop is-play-sized after the clip, then resize once.
+ * Forcing the canvas to 100% avoids white gaps if buffer size lags CSS height.
+ */
+.route-map-play-spring {
+  transition-property: height;
+  transition-duration: 320ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+.route-map-play-surface {
+  width: 100%;
+  height: 100%;
+}
+
+/* Match .card.route-map--playing / TracksPage play heights — no transition. */
+.route-map-play-surface.is-play-sized {
+  height: min(70vh, 520px);
+}
+
+@media (min-width: 768px) {
+  .route-map-play-surface.is-play-sized {
+    height: min(65vh, 560px);
+  }
+}
+
+.route-map-play-spring .mapboxgl-map,
+.route-map-play-spring .mapboxgl-canvas-container {
+  width: 100%;
+  height: 100%;
+}
+
+.route-map-play-spring .mapboxgl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Grow the map card while chasing so HUD + controls + logo coexist. */
 @media (max-width: 767px) {
   .card.route-map--playing {

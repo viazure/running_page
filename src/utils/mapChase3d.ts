@@ -547,7 +547,24 @@ type ChaseStartArgs = {
   compassTitles?: { lock: string; follow: string };
   /** Start with bearing frozen (from playback prefs). Default false. */
   lockOrientation?: boolean;
+  /**
+   * Wait this many ms (and map.resize) before placing the start Marker / flyTo.
+   * Hosts that grow the map card on play should pass PLAYBACK_LAYOUT_SETTLE_MS
+   * so the pin is projected after the canvas matches the playing height.
+   */
+  layoutSettleMs?: number;
 };
+
+/**
+ * Card height ease: 320ms cubic-bezier(0.22, 1, 0.36, 1) (see .route-map-play-spring).
+ * Hosts keep .route-map-play-surface at play height for the whole grow/shrink clip
+ * (overflow:hidden on the outer shell). Resize once on play start, again at settle;
+ * on exit, drop play-sizing then resize at PLAYBACK_LAYOUT_EXIT_RESIZE_MS.
+ * Mid-animation resize blanks the WebGL canvas.
+ */
+export const PLAYBACK_LAYOUT_SETTLE_MS = 340;
+/** After exit height clip: surface unsize + one resize (settle + React/layout slack). */
+export const PLAYBACK_LAYOUT_EXIT_RESIZE_MS = PLAYBACK_LAYOUT_SETTLE_MS + 50;
 
 type PlaybackSession = {
   map: mapboxgl.Map;
@@ -621,6 +638,17 @@ export function createMapChaseController() {
   let finishing = false;
   let callbacks: ChaseCallbacks = {};
   let endpointMarkers: mapboxgl.Marker[] = [];
+
+  const onMapResize = () => {
+    // DOM Markers can lag WebGL layers when the container resizes mid-flight.
+    for (const marker of endpointMarkers) {
+      marker.setLngLat(marker.getLngLat());
+    }
+  };
+
+  const unbindResize = (map?: mapboxgl.Map | null) => {
+    map?.off('resize', onMapResize);
+  };
 
   const clearEndpoints = () => {
     for (const marker of endpointMarkers) marker.remove();
@@ -941,6 +969,7 @@ export function createMapChaseController() {
     progress = 0;
     speed = 1;
     unbindCompass();
+    unbindResize(map);
     clearEndpoints();
     if (map) removeChaseHighlight(map);
     if (wasRunning && !opts?.silent) callbacks.onEnd?.();
@@ -1109,6 +1138,7 @@ export function createMapChaseController() {
         lock: '朝向已锁定（点击跟随路线）',
         follow: '锁定朝向',
       },
+      layoutSettleMs = 0,
     } = args;
 
     if (coords.length < 2) return;
@@ -1123,11 +1153,8 @@ export function createMapChaseController() {
     finishing = false;
     progress = 0;
     speed = 1;
+    // Fire before layout wait so the host can grow the card / run resize ticks.
     callbacks.onStart?.();
-
-    if (overviewLayerId && m.getLayer(overviewLayerId)) {
-      m.setPaintProperty(overviewLayerId, 'line-opacity', overviewDimOpacity);
-    }
 
     const cumulative = new Float32Array(coords.length);
     cumulative[0] = 0;
@@ -1167,48 +1194,81 @@ export function createMapChaseController() {
       token,
     };
 
-    setChaseHighlightLine(m, [], color, CHASE_LINE_WIDTH * strokeScale);
-    setLeadPoint(m, coords[0], color, strokeScale);
-    if (showEndpoints) {
-      showStartEndpoint(m, coords, endpointTitles);
+    // stop() cleared the highlight — keep the full route visible during layout wait.
+    setChaseHighlightLine(m, coords, color, CHASE_LINE_WIDTH * strokeScale);
+    if (overviewLayerId && m.getLayer(overviewLayerId)) {
+      m.setPaintProperty(overviewLayerId, 'line-opacity', overviewDimOpacity);
     }
-    bindCompass(m, compassTitles);
-    if (lockOrientation) {
-      bearingLocked = true;
-      syncCompassLock(compassTitles);
-    }
-    callbacks.onProgress?.({
-      progress: 0,
-      distanceKm: 0,
-      coord: coords[0],
-      paused: false,
-      speed: 1,
-    });
 
-    let begun = false;
-    const beginPlayback = () => {
-      if (begun || animToken !== token) return;
-      begun = true;
-      clearTimers();
-      startLoop();
+    const beginIntro = () => {
+      if (animToken !== token || !session) return;
+      // Canvas must match the playing card height before projecting the pin.
+      try {
+        m.resize();
+      } catch {
+        /* map may already be gone */
+      }
+
+      setChaseHighlightLine(m, [], color, CHASE_LINE_WIDTH * strokeScale);
+      setLeadPoint(m, coords[0], color, strokeScale);
+      if (showEndpoints) {
+        showStartEndpoint(m, coords, endpointTitles);
+      }
+      unbindResize(m);
+      m.on('resize', onMapResize);
+      bindCompass(m, compassTitles);
+      if (lockOrientation) {
+        bearingLocked = true;
+        syncCompassLock(compassTitles);
+      }
+      callbacks.onProgress?.({
+        progress: 0,
+        distanceKm: 0,
+        coord: coords[0],
+        paused: false,
+        speed: 1,
+      });
+
+      let begun = false;
+      const beginPlayback = () => {
+        if (begun || animToken !== token) return;
+        begun = true;
+        clearTimers();
+        // One more resize in case the CSS height transition finished late.
+        try {
+          m.resize();
+        } catch {
+          /* ignore */
+        }
+        onMapResize();
+        applyFrame(session!, 0, { instant: true });
+        startLoop();
+      };
+
+      const introPitch = mode === '3d' ? ORBIT_PITCH : 0;
+      const introBearing = currentBearing;
+      m.flyTo({
+        center: coords[0],
+        bearing: introBearing,
+        pitch: introPitch,
+        zoom: mode === '3d' ? 16.5 : zoom2dIntro(),
+        duration: 1600,
+        essential: true,
+      });
+
+      m.once('moveend', () => {
+        if (animToken !== token) return;
+        m.once('idle', beginPlayback);
+        chaseTimeout = setTimeout(beginPlayback, 900);
+      });
     };
 
-    const introPitch = mode === '3d' ? ORBIT_PITCH : 0;
-    const introBearing = currentBearing;
-    m.flyTo({
-      center: coords[0],
-      bearing: introBearing,
-      pitch: introPitch,
-      zoom: mode === '3d' ? 16.5 : zoom2dIntro(),
-      duration: 1600,
-      essential: true,
-    });
-
-    m.once('moveend', () => {
-      if (animToken !== token) return;
-      m.once('idle', beginPlayback);
-      chaseTimeout = setTimeout(beginPlayback, 900);
-    });
+    if (layoutSettleMs > 0) {
+      // Do not resize here — host spring is animating; beginIntro resizes at settle.
+      chaseTimeout = setTimeout(beginIntro, layoutSettleMs);
+    } else {
+      beginIntro();
+    }
   };
 
   return {

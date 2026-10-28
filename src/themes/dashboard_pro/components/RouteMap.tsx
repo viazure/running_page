@@ -33,6 +33,8 @@ import {
   createMapChaseController,
   createMapOrbitController,
   isMapFullscreen,
+  PLAYBACK_LAYOUT_SETTLE_MS,
+  PLAYBACK_LAYOUT_EXIT_RESIZE_MS,
   removeChaseHighlight,
   updateChaseControlButton,
   updateFullscreenButton,
@@ -514,6 +516,12 @@ export function RouteMap({
         },
         overviewLayerId: map.getLayer('routes') ? 'routes' : undefined,
         getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
+        // Mobile/tablet card grows on play — wait so start Marker matches canvas.
+        layoutSettleMs:
+          typeof window !== 'undefined' &&
+          window.matchMedia('(max-width: 1023px)').matches
+            ? PLAYBACK_LAYOUT_SETTLE_MS
+            : 0,
       },
       {
         onStart: () => setChaseRunId(runId),
@@ -680,30 +688,57 @@ export function RouteMap({
     };
   }, []);
 
-  // Card height animates with playback — resize, then re-fit when ending.
+  // Keep play-sized surface for expand AND collapse; outer clips. Drop size then
+  // resize on exit so Mapbox/ResizeObserver do not blank mid-animation.
+  const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  useLayoutEffect(() => {
+    if (chasing) setPlaySurfaceSized(true);
+  }, [chasing]);
   const wasChasingRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const ending = wasChasingRef.current && !chasing;
+    const starting = !wasChasingRef.current && chasing;
     wasChasingRef.current = chasing;
-    const tick = () => map.resize();
-    tick();
-    const t1 = window.setTimeout(tick, 80);
-    const t2 = window.setTimeout(() => {
-      tick();
-      if (!ending) return;
-      const coords = selectedCoordsRef.current;
-      if (!coords || coords.length < 2) return;
-      if (view3dRef.current) {
-        startOrbitIfNeeded(map, coords);
-      } else {
-        fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+    const tick = () => {
+      try {
+        map.resize();
+      } catch {
+        /* map may already be gone */
       }
-    }, 360);
+    };
+    let raf1 = 0;
+    let raf2 = 0;
+    let tExit = 0;
+    if (starting) {
+      raf1 = window.requestAnimationFrame(() => {
+        tick();
+        raf2 = window.requestAnimationFrame(tick);
+      });
+    }
+    const tSettle = window.setTimeout(() => {
+      if (ending) {
+        setPlaySurfaceSized(false);
+        tExit = window.setTimeout(() => {
+          tick();
+          const coords = selectedCoordsRef.current;
+          if (!coords || coords.length < 2) return;
+          if (view3dRef.current) {
+            startOrbitIfNeeded(map, coords);
+          } else {
+            fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+          }
+        }, PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS);
+        return;
+      }
+      tick();
+    }, PLAYBACK_LAYOUT_SETTLE_MS);
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      window.clearTimeout(tSettle);
+      if (tExit) window.clearTimeout(tExit);
     };
   }, [chasing]);
 
@@ -939,7 +974,7 @@ export function RouteMap({
 
   return (
     <div
-      className={`card route-map-hover-ctrls relative overflow-hidden transition-[height] duration-300 ease-out ${
+      className={`card route-map-hover-ctrls route-map-play-spring relative overflow-hidden ${
         chasing ? 'route-map--playing' : ''
       } ${className || 'h-[280px] md:h-[380px]'}`}
       style={lightsOff ? { backgroundColor: bg } : undefined}
@@ -963,18 +998,21 @@ export function RouteMap({
         </p>
       ) : null}
       <div
-        ref={bindFsRoot}
-        className={`route-map-fs-root relative h-full w-full${
-          chasing ? 'is-playing' : ''
-        }`}
-        style={
-          chasing
-            ? ({
-                '--playback-hud-height': `${hudHeight}px`,
-              } as CSSProperties)
-            : undefined
-        }
+        className={`route-map-play-surface${playSurfaceSized ? ' is-play-sized' : ''}`}
       >
+        <div
+          ref={bindFsRoot}
+          className={`route-map-fs-root relative h-full w-full${
+            chasing ? ' is-playing' : ''
+          }`}
+          style={
+            chasing
+              ? ({
+                  '--playback-hud-height': `${hudHeight}px`,
+                } as CSSProperties)
+              : undefined
+          }
+        >
         <div className="route-map-top-left absolute top-3 left-3 z-10 flex items-center gap-2">
           {selectedActivity && onClearSelection ? (
             <button
@@ -1083,6 +1121,7 @@ export function RouteMap({
             onHeightChange={setHudHeight}
           />
         ) : null}
+        </div>
       </div>
     </div>
   );
