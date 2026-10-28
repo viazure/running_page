@@ -901,11 +901,13 @@ function startWebCodecsCapture(
         };
         beginEndCardRef = beginEndCard;
 
+        let abortHandled = false;
         abortRef = () => {
-          if (aborted) return;
           aborted = true;
           active = false;
           cancelAnimationFrame(raf);
+          if (abortHandled) return;
+          abortHandled = true;
           void (async () => {
             try {
               await encodeQueue;
