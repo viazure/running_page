@@ -40,6 +40,7 @@ env:
   IGNORE_POLYLINE: 'ktjrFoemeU~IorGq}DeB'
   IGNORE_RANGE: 10 # Unit meter
   USE_CLOUDFLARE_WARP: true # If you want to use Cloudflare WARP to bypass network restrictions, set it to `true`. Currently only Garmin needs this.
+  # Dual mode: false = commit FIT/GPX/TCX/splits via git add (do not gitignore them); true = Actions Cache only.
   SAVE_DATA_IN_GITHUB_CACHE: true # keep FIT/GPX/TCX/db out of git; data lives in Actions Cache
   DATA_CACHE_PREFIX: 'track_data' # keep stable so data.db / TCX history is restored
   # Garmin CN GPX often has no track points; do not clone the last outdoor route onto those runs.
