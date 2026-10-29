@@ -750,18 +750,21 @@ export function RouteMap({
     const tSettle = window.setTimeout(() => {
       if (ending) {
         setPlaySurfaceSized(false);
-        tExit = window.setTimeout(() => {
-          // Resize only — do not map.stop() (cancels in-flight camera) before
-          // the single activity-switch fitBounds below.
-          tick();
-          const coords = selectedCoordsRef.current;
-          if (!coords || coords.length < 2) return;
-          if (view3dRef.current) {
-            startOrbitIfNeeded(map, coords);
-          } else {
-            fitMapToSelectedRoute(map, coords, lightsOffRef.current);
-          }
-        }, grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0);
+        tExit = window.setTimeout(
+          () => {
+            // Resize only — do not map.stop() (cancels in-flight camera) before
+            // the single activity-switch fitBounds below.
+            tick();
+            const coords = selectedCoordsRef.current;
+            if (!coords || coords.length < 2) return;
+            if (view3dRef.current) {
+              startOrbitIfNeeded(map, coords);
+            } else {
+              fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+            }
+          },
+          grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0
+        );
         return;
       }
       if (grow) tick();

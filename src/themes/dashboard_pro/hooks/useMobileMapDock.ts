@@ -198,9 +198,7 @@ export function useMobileMapDock(
     }
     const home = readSlotBox();
     const onScreen =
-      !!home &&
-      home.top < window.innerHeight &&
-      home.top + home.height > 0;
+      !!home && home.top < window.innerHeight && home.top + home.height > 0;
     if (home && onScreen) {
       writePin(home, 0);
       void pinRef.current?.offsetHeight;
@@ -245,8 +243,7 @@ export function useMobileMapDock(
     const home = readSlotBox();
     if (el && home) {
       const childH = el.firstElementChild?.getBoundingClientRect().height ?? 0;
-      const height =
-        childH > 1 ? Math.round(childH) : Math.round(home.height);
+      const height = childH > 1 ? Math.round(childH) : Math.round(home.height);
       if (height > 1) lastHeightRef.current = height;
       const onScreen =
         home.top < window.innerHeight && home.top + home.height > 0;
