@@ -812,18 +812,21 @@ function TrackMap({
     const tSettle = window.setTimeout(() => {
       if (ending) {
         // Parent drops play-surface on the same settle timer; give layout a beat.
-        tExit = window.setTimeout(() => {
-          // Resize then one fitBounds — do not map.stop() first (that cancelled
-          // camera motion and read as blank-then-pop).
-          tick();
-          const coords = selectedCoordsRef.current;
-          if (!coords || coords.length < 2) return;
-          if (view3dRef.current) {
-            startOrbitIfNeeded(m, coords);
-          } else {
-            fitMapToSelectedRoute(m, coords, lightsOffRef.current);
-          }
-        }, grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0);
+        tExit = window.setTimeout(
+          () => {
+            // Resize then one fitBounds — do not map.stop() first (that cancelled
+            // camera motion and read as blank-then-pop).
+            tick();
+            const coords = selectedCoordsRef.current;
+            if (!coords || coords.length < 2) return;
+            if (view3dRef.current) {
+              startOrbitIfNeeded(m, coords);
+            } else {
+              fitMapToSelectedRoute(m, coords, lightsOffRef.current);
+            }
+          },
+          grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0
+        );
         return;
       }
       if (grow) tick();

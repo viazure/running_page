@@ -387,7 +387,10 @@ function DashboardProContent({
         )}
       </div>
       <Suspense fallback={null}>
-        <RunAnalysisLauncher activity={selectedActivity} onOpenChange={setAnalysisOpen} />
+        <RunAnalysisLauncher
+          activity={selectedActivity}
+          onOpenChange={setAnalysisOpen}
+        />
       </Suspense>
     </main>
   );
