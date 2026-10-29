@@ -36,6 +36,8 @@ import {
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TrendChart } from './components/TrendChart';
+import { MapDockFab } from './components/MapDockFab';
+import { useMobileMapDock } from './hooks/useMobileMapDock';
 
 const loadRouteMap = () =>
   import('./components/RouteMap').then((m) => ({ default: m.RouteMap }));
@@ -102,6 +104,7 @@ function DashboardProContent({
     null
   );
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const filtered = useFilteredActivities(activities, filter, year);
   /** Fallback year for components that require a concrete calendar year (e.g. TrendChart). */
@@ -120,51 +123,13 @@ function DashboardProContent({
 
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
-  const [mapOutOfView, setMapOutOfView] = useState(false);
-  const [mapFrame, setMapFrame] = useState<{
-    left: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const pinRouteMap =
-    page === 'home' && allYears && mapOutOfView && mapFrame != null;
-  if ((page !== 'home' || !allYears) && mapOutOfView) setMapOutOfView(false);
-
-  useEffect(() => {
-    if (page !== 'home' || !allYears) return;
-    const slot = mapSlotRef.current;
-    if (!slot) return;
-    const readFrame = () => {
-      const rect = slot.getBoundingClientRect();
-      setMapFrame({ left: rect.left, width: rect.width, height: rect.height });
-    };
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) readFrame();
-        setMapOutOfView(!entry.isIntersecting);
-      },
-      { rootMargin: '-64px 0px 0px 0px', threshold: 0 }
-    );
-    observer.observe(slot);
-    return () => observer.disconnect();
-  }, [page, allYears]);
-
-  useEffect(() => {
-    if (!pinRouteMap) return;
-    const slot = mapSlotRef.current;
-    if (!slot) return;
-    const readFrame = () => {
-      const rect = slot.getBoundingClientRect();
-      setMapFrame({ left: rect.left, width: rect.width, height: rect.height });
-    };
-    const resizeObserver = new ResizeObserver(readFrame);
-    resizeObserver.observe(slot);
-    window.addEventListener('resize', readFrame);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', readFrame);
-    };
-  }, [pinRouteMap]);
+  const mapPinRef = useRef<HTMLDivElement>(null);
+  const mapDock = useMobileMapDock(
+    page === 'home',
+    mapSlotRef,
+    mapPinRef,
+    allYears ? 'all' : 'year'
+  );
 
   if (page === 'tracks') {
     return (
@@ -205,44 +170,65 @@ function DashboardProContent({
     />
   );
 
+  // Long document + viewport: slot is a plain placeholder (lockHeight).
+  // Expanded map is always fixed via pinRef (Option A — no sticky).
+  // No CSS transform on the map wrapper.
   const routeMap = (
-    <div
-      ref={mapSlotRef}
-      className={
-        allYears
-          ? 'order-3 min-h-[220px] md:min-h-[260px] lg:order-none'
-          : 'sticky top-16 z-40 order-3 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:shrink-0 lg:py-0'
-      }
-    >
+    <>
       <div
-        className={pinRouteMap ? 'fixed top-20 z-40' : undefined}
+        ref={mapSlotRef}
+        className={
+          allYears
+            ? 'order-3 min-h-[220px] md:min-h-[260px] lg:order-none'
+            : 'order-3 lg:order-none lg:shrink-0'
+        }
         style={
-          pinRouteMap && mapFrame
-            ? {
-                left: mapFrame.left,
-                width: mapFrame.width,
-                height: mapFrame.height,
-              }
+          mapDock.lockHeight && mapDock.frame
+            ? { height: mapDock.frame.height }
             : undefined
         }
       >
-        <Suspense fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}>
-          <RouteMap
-            activities={provinceFiltered}
-            allActivities={activities}
-            selectedActivity={selectedActivity}
-            dark={dark}
-            lightsOff={privacyActive}
-            onClearSelection={() => setSelectedActivity(null)}
-            className={
-              pinRouteMap
-                ? 'h-full shadow-lg [--card-shadow:var(--shadow-card-hover)]'
-                : 'h-[280px] [--card-shadow:var(--shadow-card-hover)] md:h-[300px] lg:[--card-shadow:var(--shadow-card)]'
-            }
-          />
-        </Suspense>
+        <div
+          ref={mapPinRef}
+          className={mapDock.fillHeight ? 'h-full' : undefined}
+        >
+          <Suspense
+            fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}
+          >
+            <RouteMap
+              activities={provinceFiltered}
+              allActivities={activities}
+              selectedActivity={selectedActivity}
+              dark={dark}
+              lightsOff={privacyActive}
+              onClearSelection={() => setSelectedActivity(null)}
+              className={
+                // No height tween while dock fixed/handoff (Mapbox blanks).
+                // In free flow keep play-spring (RouteMap skips it when
+                // className includes transition-none).
+                mapDock.fillHeight
+                  ? 'h-full shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)]'
+                  : mapDock.lockHeight
+                    ? 'h-[280px] shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)] md:h-[300px]'
+                    : mapDock.active
+                      ? 'h-[280px] shadow-lg [--card-shadow:var(--shadow-card-hover)] md:h-[300px]'
+                      : 'h-[280px] [--card-shadow:var(--shadow-card-hover)] md:h-[300px] lg:[--card-shadow:var(--shadow-card)]'
+              }
+            />
+          </Suspense>
+        </div>
       </div>
-    </div>
+      {mapDock.showFab && !analysisOpen ? (
+        <MapDockFab
+          expanded={mapDock.expanded}
+          labelShow={locale === 'zh' ? '显示轨迹' : 'Show map'}
+          labelHide={locale === 'zh' ? '收起轨迹' : 'Hide map'}
+          onToggle={mapDock.toggle}
+          // Stack above splits bookmark when a run is selected.
+          lifted={selectedActivity != null}
+        />
+      ) : null}
+    </>
   );
 
   const calendar = (
@@ -276,13 +262,17 @@ function DashboardProContent({
   return (
     <main
       className="mx-auto max-w-[1400px] px-4 py-6 md:px-6"
-      // Reserve room for the floating run-analysis button so it never covers
-      // the last row of content or map controls.
-      style={
-        selectedActivity
-          ? { paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }
-          : undefined
-      }
+      // Reserve room for mobile map-dock / splits FABs (desktop: centered splits only).
+      style={(() => {
+        const showDockFab = mapDock.showFab && !analysisOpen;
+        const both = selectedActivity != null && showDockFab;
+        if (selectedActivity == null && !showDockFab) return undefined;
+        return {
+          paddingBottom: both
+            ? 'calc(7.5rem + env(safe-area-inset-bottom, 0px))'
+            : 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+        };
+      })()}
     >
       {/*
         Mobile order: Profile → Stats → sticky RouteMap → Calendar → ActivityLog
@@ -397,7 +387,7 @@ function DashboardProContent({
         )}
       </div>
       <Suspense fallback={null}>
-        <RunAnalysisLauncher activity={selectedActivity} />
+        <RunAnalysisLauncher activity={selectedActivity} onOpenChange={setAnalysisOpen} />
       </Suspense>
     </main>
   );

@@ -478,13 +478,21 @@ export function RouteMap({
     if (!map || !selected || !coords || !canOfferPlayback) return;
 
     if (chaseRef.current.isAnimating()) {
+      // Show selected before tearing down chase highlight — otherwise the map
+      // blanks for a frame (selected was opacity 0 during chase).
+      if (map.getLayer('selected')) {
+        map.setPaintProperty('selected', 'line-opacity', 0.9);
+      }
       stopChase();
+      removeChaseHighlight(map);
       setChaseRunId(null);
-      restoreSelectedLine(map);
+      if (!view3dRef.current) clearMapTerrain(map);
+      // Start easing now (activity-switch feel) while the card still springs
+      // down. Settle effect only resizes — no map.stop() — then a short
+      // correction fit for the final canvas size.
       if (view3dRef.current) {
         startOrbitIfNeeded(map, coords);
       } else {
-        flattenView(map);
         fitMapToSelectedRoute(map, coords, lightsOffRef.current);
       }
       return;
@@ -532,11 +540,20 @@ export function RouteMap({
             videoCaptureRef.current.stop();
             return;
           }
+          // Restore selected before chase highlight is gone (finishPlayback
+          // already drew the full route; keep it continuous into selected).
+          if (map.getLayer('selected')) {
+            map.setPaintProperty('selected', 'line-opacity', 0.9);
+          }
+          removeChaseHighlight(map);
           setChaseRunId(null);
           setPlaybackSnap(null);
-          restoreSelectedLine(map);
           if (!view3dRef.current) clearMapTerrain(map);
-          // Orbit / fitBounds wait until card height + resize settle (chasing effect).
+          const endCoords = selectedCoordsRef.current;
+          if (endCoords && endCoords.length >= 2) {
+            if (view3dRef.current) startOrbitIfNeeded(map, endCoords);
+            else fitMapToSelectedRoute(map, endCoords, lightsOffRef.current);
+          }
         },
         onBearingLockChange: (locked) => {
           setPlaybackPrefs({ lockOrientation: locked });
@@ -694,9 +711,14 @@ export function RouteMap({
 
   // Keep play-sized surface for expand AND collapse; outer clips. Drop size then
   // resize on exit so Mapbox/ResizeObserver do not blank mid-animation.
+  // Desktop (lg+) does not grow the card — never apply is-play-sized there or the
+  // canvas becomes taller than the visible card and the start pin sinks off-route.
   const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  const isPlaybackGrowViewport = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(max-width: 1023px)').matches;
   useLayoutEffect(() => {
-    if (chasing) setPlaySurfaceSized(true);
+    if (chasing && isPlaybackGrowViewport()) setPlaySurfaceSized(true);
   }, [chasing]);
   const wasChasingRef = useRef(false);
   useEffect(() => {
@@ -705,6 +727,7 @@ export function RouteMap({
     const ending = wasChasingRef.current && !chasing;
     const starting = !wasChasingRef.current && chasing;
     wasChasingRef.current = chasing;
+    const grow = isPlaybackGrowViewport();
     const tick = () => {
       try {
         map.resize();
@@ -715,16 +738,21 @@ export function RouteMap({
     let raf1 = 0;
     let raf2 = 0;
     let tExit = 0;
-    if (starting) {
+    // Only resize mid-intro on mobile/tablet while the card is growing — desktop
+    // resize here fights flyTo and drifts the start Marker off the track.
+    if (starting && grow) {
       raf1 = window.requestAnimationFrame(() => {
         tick();
         raf2 = window.requestAnimationFrame(tick);
       });
     }
+    const settleMs = grow || ending ? PLAYBACK_LAYOUT_SETTLE_MS : 0;
     const tSettle = window.setTimeout(() => {
       if (ending) {
         setPlaySurfaceSized(false);
         tExit = window.setTimeout(() => {
+          // Resize only — do not map.stop() (cancels in-flight camera) before
+          // the single activity-switch fitBounds below.
           tick();
           const coords = selectedCoordsRef.current;
           if (!coords || coords.length < 2) return;
@@ -733,11 +761,11 @@ export function RouteMap({
           } else {
             fitMapToSelectedRoute(map, coords, lightsOffRef.current);
           }
-        }, PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS);
+        }, grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0);
         return;
       }
-      tick();
-    }, PLAYBACK_LAYOUT_SETTLE_MS);
+      if (grow) tick();
+    }, settleMs);
     return () => {
       if (raf1) window.cancelAnimationFrame(raf1);
       if (raf2) window.cancelAnimationFrame(raf2);
@@ -917,18 +945,28 @@ export function RouteMap({
     );
 
     const resizeMap = () => {
-      mapRef.current?.resize();
+      try {
+        mapRef.current?.resize();
+      } catch {
+        /* map may already be gone */
+      }
     };
     const ro = new ResizeObserver(() => {
       resizeMap();
       requestAnimationFrame(resizeMap);
     });
     ro.observe(container);
+    const onDockSettled = () => {
+      resizeMap();
+      requestAnimationFrame(resizeMap);
+    };
+    window.addEventListener('mobile-map-dock-settled', onDockSettled);
 
     const chase = chaseRef.current;
     const orbit = orbitRef.current;
     return () => {
       ro.disconnect();
+      window.removeEventListener('mobile-map-dock-settled', onDockSettled);
       window.clearTimeout(timer);
       document.removeEventListener('fullscreenchange', syncFullscreen);
       document.removeEventListener(
@@ -978,9 +1016,9 @@ export function RouteMap({
 
   return (
     <div
-      className={`card route-map-hover-ctrls route-map-play-spring relative overflow-hidden ${
-        chasing ? 'route-map--playing' : ''
-      } ${className || 'h-[280px] md:h-[380px]'}`}
+      className={`card route-map-hover-ctrls relative overflow-hidden ${
+        className?.includes('transition-none') ? '' : 'route-map-play-spring'
+      } ${chasing ? 'route-map--playing' : ''} ${className || 'h-[280px] md:h-[380px]'}`}
       style={lightsOff ? { backgroundColor: bg } : undefined}
     >
       {fallbackActivity ? (

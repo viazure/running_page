@@ -166,3 +166,6 @@ body {
     letter-spacing: 0.02em;
   }
 }
+
+/* Map dock enter/exit animates `top` in JS — never CSS transform on the map
+   wrapper (Mapbox markers / projection break under transform). */
