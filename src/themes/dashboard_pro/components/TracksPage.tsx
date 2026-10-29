@@ -74,6 +74,8 @@ import {
   type MapVideoCapture,
 } from '@/utils/exportMapVideo';
 import './RouteMap.css';
+import { MapDockFab } from './MapDockFab';
+import { useMobileMapDock } from '../hooks/useMobileMapDock';
 
 type SportType = 'Run';
 
@@ -539,6 +541,8 @@ function TrackMap({
     if (!m || !act || !coords || !canOfferPlayback) return;
 
     if (chaseRef.current.isAnimating()) {
+      // Put the full route back BEFORE stop tears down layers — stop() used
+      // to removeChaseHighlight first and blank the map ~1–2 frames.
       videoCaptureRef.current?.abort();
       videoCaptureRef.current = null;
       setExporting(false);
@@ -546,15 +550,26 @@ function TrackMap({
       setExportConverting(false);
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
-      chaseRef.current.stop({ silent: true });
-      setChaseRunId(null);
-      setPlaybackSnap(null);
       restoreOverviewLine(m);
       restoreSelectedHighlight(m);
+      // keepHighlight only on mobile — avoids blanking during height settle.
+      // Desktop restores selected highlight synchronously; keepHighlight there
+      // left chase layers fighting the web selected line (start pin drift).
+      const mobileDock =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(max-width: 1023px)').matches;
+      chaseRef.current.stop({
+        silent: true,
+        keepHighlight: mobileDock,
+      });
+      setChaseRunId(null);
+      setPlaybackSnap(null);
+      if (!view3dRef.current) clearMapTerrain(m);
+      // Ease immediately like activity-switch; settle effect resizes then
+      // gently corrects for the short canvas (no map.stop / blank-then-pop).
       if (view3dRef.current) {
         startOrbitIfNeeded(m, coords);
       } else {
-        flattenView(m);
         fitMapToSelectedRoute(m, coords, lightsOffRef.current);
       }
       return;
@@ -583,8 +598,13 @@ function TrackMap({
         },
         overviewLayerId: 'all-routes',
         getEndView: () => (view3dRef.current ? 'keep' : 'flat'),
-        // Card grows on play (280→~70vh) — wait so start Marker matches canvas.
-        layoutSettleMs: PLAYBACK_LAYOUT_SETTLE_MS,
+        // Mobile/tablet card grows on play — wait so start Marker matches canvas.
+        // Desktop must pass 0 (master path) or the start pin drifts off the track.
+        layoutSettleMs:
+          typeof window !== 'undefined' &&
+          window.matchMedia('(max-width: 1023px)').matches
+            ? PLAYBACK_LAYOUT_SETTLE_MS
+            : 0,
       },
       {
         onStart: () => setChaseRunId(runId),
@@ -594,12 +614,16 @@ function TrackMap({
             videoCaptureRef.current.stop();
             return;
           }
-          setChaseRunId(null);
-          setPlaybackSnap(null);
           restoreOverviewLine(m);
           restoreSelectedHighlight(m);
+          setChaseRunId(null);
+          setPlaybackSnap(null);
           if (!view3dRef.current) clearMapTerrain(m);
-          // Orbit / fitBounds wait until card height + resize settle (chasing effect).
+          const endCoords = selectedCoordsRef.current;
+          if (endCoords && endCoords.length >= 2) {
+            if (view3dRef.current) startOrbitIfNeeded(m, endCoords);
+            else fitMapToSelectedRoute(m, endCoords, lightsOffRef.current);
+          }
         },
         onBearingLockChange: (locked) => {
           setPlaybackPrefs({ lockOrientation: locked });
@@ -754,8 +778,9 @@ function TrackMap({
     };
   }, []);
 
-  // Clip shell eases height; keep play-sized surface for expand AND collapse.
-  // Parent drops is-play-sized after settle — exit resize waits for that.
+  // Clip shell eases height; parent drops is-play-sized after settle.
+  // Match RouteMap: wait settle, then exit-resize + one fitMapToSelectedRoute (activity-switch feel).
+  // Desktop: no card grow — do not resize mid-flyTo (start pin drift).
   const wasChasingRef = useRef(false);
   useEffect(() => {
     const m = map.current;
@@ -763,6 +788,9 @@ function TrackMap({
     const ending = wasChasingRef.current && !chasing;
     const starting = !wasChasingRef.current && chasing;
     wasChasingRef.current = chasing;
+    const grow =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(max-width: 1023px)').matches;
     const tick = () => {
       try {
         m.resize();
@@ -773,30 +801,38 @@ function TrackMap({
     // Immediate resize when play surface jumps to final height (avoids white letterbox).
     let raf1 = 0;
     let raf2 = 0;
-    if (starting) {
+    let tExit = 0;
+    if (starting && grow) {
       raf1 = window.requestAnimationFrame(() => {
         tick();
         raf2 = window.requestAnimationFrame(tick);
       });
     }
-    const settleMs = ending
-      ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS
-      : PLAYBACK_LAYOUT_SETTLE_MS;
+    const settleMs = grow || ending ? PLAYBACK_LAYOUT_SETTLE_MS : 0;
     const tSettle = window.setTimeout(() => {
-      tick();
-      if (!ending) return;
-      const coords = selectedCoordsRef.current;
-      if (!coords || coords.length < 2) return;
-      if (view3dRef.current) {
-        startOrbitIfNeeded(m, coords);
-      } else {
-        fitMapToSelectedRoute(m, coords, lightsOffRef.current);
+      if (ending) {
+        // Parent drops play-surface on the same settle timer; give layout a beat.
+        tExit = window.setTimeout(() => {
+          // Resize then one fitBounds — do not map.stop() first (that cancelled
+          // camera motion and read as blank-then-pop).
+          tick();
+          const coords = selectedCoordsRef.current;
+          if (!coords || coords.length < 2) return;
+          if (view3dRef.current) {
+            startOrbitIfNeeded(m, coords);
+          } else {
+            fitMapToSelectedRoute(m, coords, lightsOffRef.current);
+          }
+        }, grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0);
+        return;
       }
+      if (grow) tick();
     }, settleMs);
     return () => {
       if (raf1) window.cancelAnimationFrame(raf1);
       if (raf2) window.cancelAnimationFrame(raf2);
       window.clearTimeout(tSettle);
+      if (tExit) window.clearTimeout(tExit);
     };
   }, [chasing]);
 
@@ -973,10 +1009,32 @@ function TrackMap({
     mapInstance.on('rotateend', onUserCameraChange);
     mapInstance.on('pitchend', onUserCameraChange);
 
+    // Resize after dock handoff / container size changes. Hosts skip
+    // play-spring while lockHeight so this does not run mid-tween.
+    const resizeMap = () => {
+      try {
+        mapInstance.resize();
+      } catch {
+        /* map may already be gone */
+      }
+    };
+    const ro = new ResizeObserver(() => {
+      resizeMap();
+      requestAnimationFrame(resizeMap);
+    });
+    if (mapContainer.current) ro.observe(mapContainer.current);
+    const onDockSettled = () => {
+      resizeMap();
+      requestAnimationFrame(resizeMap);
+    };
+    window.addEventListener('mobile-map-dock-settled', onDockSettled);
+
     const chase = chaseRef.current;
     const orbit = orbitRef.current;
     return () => {
       window.clearTimeout(timer);
+      ro.disconnect();
+      window.removeEventListener('mobile-map-dock-settled', onDockSettled);
       document.removeEventListener('fullscreenchange', syncFullscreen);
       document.removeEventListener(
         'webkitfullscreenchange' as 'fullscreenchange',
@@ -1148,19 +1206,24 @@ export function TracksPage({
   );
   const [mapPlaying, setMapPlaying] = useState(false);
   // Keep play surface tall while outer shell clips down on exit (avoids white flash).
+  // Desktop card does not grow — skip is-play-sized or the start pin drifts off-route.
   const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  const isPlaybackGrowViewport = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(max-width: 1023px)').matches;
   useLayoutEffect(() => {
-    if (mapPlaying) setPlaySurfaceSized(true);
+    if (mapPlaying && isPlaybackGrowViewport()) setPlaySurfaceSized(true);
   }, [mapPlaying]);
   useEffect(() => {
     if (mapPlaying) return;
-    const t = window.setTimeout(
-      () => setPlaySurfaceSized(false),
-      PLAYBACK_LAYOUT_SETTLE_MS
-    );
+    const delay = isPlaybackGrowViewport() ? PLAYBACK_LAYOUT_SETTLE_MS : 0;
+    const t = window.setTimeout(() => setPlaySurfaceSized(false), delay);
     return () => window.clearTimeout(t);
   }, [mapPlaying]);
   const [sortBy, setSortBy] = useState<'date' | 'distance'>('date');
+  const mapSlotRef = useRef<HTMLDivElement>(null);
+  const mapPinRef = useRef<HTMLDivElement>(null);
+  const mapDock = useMobileMapDock(true, mapSlotRef, mapPinRef, 'tracks');
 
   // Export
   const captureRef = useRef<HTMLDivElement>(null);
@@ -1481,33 +1544,62 @@ export function TracksPage({
             </div>
           )}
 
-          {/* Map — sticky on mobile while browsing the track wall.
-              Idle stays compact; playback grows so HUD + ctrl stack + logo fit. */}
-          <div className="sticky top-16 z-40 order-2 -my-2 py-2 lg:static lg:z-auto lg:order-none lg:my-0 lg:py-0">
+          {/* Map — placeholder slot + pinRef. Expanded = always fixed (Option A). */}
+          <div
+            ref={mapSlotRef}
+            className="order-2 lg:order-none"
+            style={
+              mapDock.lockHeight && mapDock.frame
+                ? { height: mapDock.frame.height }
+                : undefined
+            }
+          >
             <div
-              className={`card route-map-play-spring overflow-hidden [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
-                mapPlaying
-                  ? 'h-[min(70vh,520px)] md:h-[min(65vh,560px)]'
-                  : 'h-[280px] md:h-[360px]'
-              }`}
+              ref={mapPinRef}
+              className={mapDock.fillHeight ? 'h-full' : undefined}
             >
               <div
-                className={
-                  playSurfaceSized
-                    ? 'route-map-play-surface is-play-sized'
-                    : 'route-map-play-surface'
-                }
+                className={`card overflow-hidden [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
+                  // No height tween while dock fixed/handoff — Mapbox blanks.
+                  mapDock.fillHeight ||
+                  mapDock.lockHeight ||
+                  mapDock.pinMotion != null
+                    ? ''
+                    : 'route-map-play-spring'
+                } ${
+                  mapDock.fillHeight
+                    ? 'h-full'
+                    : mapPlaying
+                      ? 'h-[min(70vh,520px)] md:h-[min(65vh,560px)]'
+                      : 'h-[280px] md:h-[360px]'
+                }`}
               >
-                <TrackMap
-                  activity={selectedActivity}
-                  activities={withPolyline}
-                  dark={dark}
-                  lightsOff={lightsOff}
-                  onPlaybackChange={setMapPlaying}
-                />
+                <div
+                  className={
+                    playSurfaceSized
+                      ? 'route-map-play-surface is-play-sized'
+                      : 'route-map-play-surface'
+                  }
+                >
+                  <TrackMap
+                    activity={selectedActivity}
+                    activities={withPolyline}
+                    dark={dark}
+                    lightsOff={lightsOff}
+                    onPlaybackChange={setMapPlaying}
+                  />
+                </div>
               </div>
             </div>
           </div>
+          {mapDock.showFab ? (
+            <MapDockFab
+              expanded={mapDock.expanded}
+              labelShow={locale === 'zh' ? '显示轨迹' : 'Show map'}
+              labelHide={locale === 'zh' ? '收起轨迹' : 'Hide map'}
+              onToggle={mapDock.toggle}
+            />
+          ) : null}
         </div>
 
         {/* Right: track grid with year filter inside */}

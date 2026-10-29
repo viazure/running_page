@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { bookmarkFabClass, desktopCenteredFabClass } from './MapDockFab';
 import type { Activity } from '@/types';
 import { useLocale } from '@/hooks/useLocale';
 import type { Locale } from '@/core/i18n';
@@ -1860,13 +1861,10 @@ function LauncherButton({
   if (!ids.has(activity.run_id)) return null;
   // Portal past sticky map / overflow ancestors so the FAB stays visible on
   // mobile (fixed + z-50 inside the page stack was easy to bury).
-  return createPortal(
-    <button
-      type="button"
-      onClick={onOpen}
-      style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
-      className="fixed left-1/2 z-[70] flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-[var(--color-run)] px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-transform hover:scale-[1.03]"
-    >
+  // Mobile (<=1023px, same as map dock): bookmark edge-peek on the right.
+  // Desktop (lg+): centered pill FAB (master look).
+  const label = (
+    <>
       <svg
         className="size-4"
         fill="none"
@@ -1881,7 +1879,28 @@ function LauncherButton({
         />
       </svg>
       {tr('分段分析', 'Splits')} · {(activity.distance / 1000).toFixed(1)} km
-    </button>,
+    </>
+  );
+  const bottom = { bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' };
+  return createPortal(
+    <>
+      <button
+        type="button"
+        onClick={onOpen}
+        style={bottom}
+        className={`${bookmarkFabClass} border-[var(--color-run)] bg-[var(--color-run)] text-white lg:hidden`}
+      >
+        {label}
+      </button>
+      <button
+        type="button"
+        onClick={onOpen}
+        style={bottom}
+        className={`${desktopCenteredFabClass} bg-[var(--color-run)] text-white`}
+      >
+        {label}
+      </button>
+    </>,
     document.body
   );
 }
@@ -1931,7 +1950,7 @@ function Sheet({
 
   return (
     <div
-      className={`fixed inset-0 z-[60] flex h-[100dvh] max-h-[100dvh] items-end justify-center bg-black/40 backdrop-blur-[2px] transition-opacity ease-out md:items-center md:p-6 ${
+      className={`fixed inset-0 z-[80] flex h-[100dvh] max-h-[100dvh] items-end justify-center bg-black/40 backdrop-blur-[2px] transition-opacity ease-out md:items-center md:p-6 ${
         visible ? 'opacity-100' : 'opacity-0'
       }`}
       style={{ transitionDuration: `${SHEET_MS}ms` }}
@@ -1961,23 +1980,33 @@ function Sheet({
 
 export function RunAnalysisLauncher({
   activity,
+  showFab = true,
+  onOpenChange,
 }: {
   activity: Activity | null;
+  /** When false, hide the bottom FAB (sheet can still open if already open). */
+  showFab?: boolean;
+  /** Fires when the analysis sheet opens/closes (hide map-dock FAB while open). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  const open = activity != null && openId === activity.run_id;
+  useEffect(() => {
+    onOpenChange?.(open);
+    return () => onOpenChange?.(false);
+  }, [open, onOpenChange]);
   if (!activity) return null;
-  const open = openId === activity.run_id;
   return (
     <Suspense fallback={null}>
       {open ? (
         <Sheet activity={activity} onClose={() => setOpenId(null)} />
-      ) : (
+      ) : showFab ? (
         <LauncherButton
           activity={activity}
           index={loadSplitsIndex()}
           onOpen={() => setOpenId(activity.run_id)}
         />
-      )}
+      ) : null}
     </Suspense>
   );
 }

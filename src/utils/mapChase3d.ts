@@ -548,7 +548,7 @@ type ChaseStartArgs = {
   /** Start with bearing frozen (from playback prefs). Default false. */
   lockOrientation?: boolean;
   /**
-   * Wait this many ms (and map.resize) before placing the start Marker / flyTo.
+   * Wait this many ms (and map.resize) before placing the start Marker / easeTo.
    * Hosts that grow the map card on play should pass PLAYBACK_LAYOUT_SETTLE_MS
    * so the pin is projected after the canvas matches the playing height.
    */
@@ -556,15 +556,15 @@ type ChaseStartArgs = {
 };
 
 /**
- * Card height ease: 320ms cubic-bezier(0.22, 1, 0.36, 1) (see .route-map-play-spring).
+ * Card height ease: 480ms cubic-bezier(0.34, 1.45, 0.64, 1) (see .route-map-play-spring).
  * Hosts keep .route-map-play-surface at play height for the whole grow/shrink clip
  * (overflow:hidden on the outer shell). Resize once on play start, again at settle;
  * on exit, drop play-sizing then resize at PLAYBACK_LAYOUT_EXIT_RESIZE_MS.
  * Mid-animation resize blanks the WebGL canvas.
  */
-export const PLAYBACK_LAYOUT_SETTLE_MS = 340;
+export const PLAYBACK_LAYOUT_SETTLE_MS = 520;
 /** After exit height clip: surface unsize + one resize (settle + React/layout slack). */
-export const PLAYBACK_LAYOUT_EXIT_RESIZE_MS = PLAYBACK_LAYOUT_SETTLE_MS + 50;
+export const PLAYBACK_LAYOUT_EXIT_RESIZE_MS = PLAYBACK_LAYOUT_SETTLE_MS + 80;
 
 type PlaybackSession = {
   map: mapboxgl.Map;
@@ -579,6 +579,8 @@ type PlaybackSession = {
   endpointTitles: { start: string; end: string };
   showEndpoints: boolean;
   token: number;
+  /** Mobile card-grow intro (layoutSettleMs > 0). Desktop keeps master flyTo path. */
+  smoothIntro: boolean;
 };
 
 function shortestAngleDelta(from: number, to: number): number {
@@ -610,6 +612,7 @@ export function createMapChaseController() {
   let animToken = 0;
   let chaseRaf: number | null = null;
   let chaseTimeout: ReturnType<typeof setTimeout> | null = null;
+  let introFallback: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let paused = false;
   let speed: PlaybackSpeed = 1;
@@ -708,6 +711,10 @@ export function createMapChaseController() {
     if (chaseTimeout != null) {
       clearTimeout(chaseTimeout);
       chaseTimeout = null;
+    }
+    if (introFallback != null) {
+      clearTimeout(introFallback);
+      introFallback = null;
     }
   };
 
@@ -901,10 +908,9 @@ export function createMapChaseController() {
       if (animToken !== s.token) return;
       removeLeadPoint(s.map);
       const endView = s.getEndView?.() ?? 'flat';
-      // Only flatten pitch/bearing here. Bounds fit belongs to the host after
-      // any playback card-height transition + map.resize() (otherwise the
-      // camera is computed for the tall playing size and clips the route).
-      if (endView === 'flat') {
+      // Mobile smoothIntro: host fits after height settle (easeTo here gets
+      // cancelled by map.stop()). Desktop: flatten pitch/bearing like master.
+      if (endView === 'flat' && !s.smoothIntro) {
         s.map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
       }
       // Unbind before clearing session so compass lock UI does not stick around.
@@ -956,7 +962,7 @@ export function createMapChaseController() {
     }
   };
 
-  const stop = (opts?: { silent?: boolean }) => {
+  const stop = (opts?: { silent?: boolean; keepHighlight?: boolean }) => {
     animToken += 1;
     clearTimers();
     const wasRunning = running;
@@ -971,7 +977,12 @@ export function createMapChaseController() {
     unbindCompass();
     unbindResize(map);
     clearEndpoints();
-    if (map) removeChaseHighlight(map);
+    // keepHighlight: host already showed the full route (or will in the same
+    // tick). Removing the layer here blanks the map for a frame before restore.
+    if (map) {
+      if (opts?.keepHighlight) removeLeadPoint(map);
+      else removeChaseHighlight(map);
+    }
     if (wasRunning && !opts?.silent) callbacks.onEnd?.();
   };
 
@@ -1179,6 +1190,11 @@ export function createMapChaseController() {
     currentZoom = mode === '3d' ? 16.6 : zoom2dInit();
     currentPitch = mode === '3d' ? ORBIT_PITCH : 0;
 
+    // layoutSettleMs > 0 => mobile/tablet card-grow path. Desktop hosts pass 0
+    // and must keep master's flyTo + lone-start intro so the start pin matches
+    // the track (easeTo/full-route intro was a mobile-only smoothness tweak).
+    const smoothIntro = layoutSettleMs > 0;
+
     session = {
       map: m,
       coords,
@@ -1192,13 +1208,30 @@ export function createMapChaseController() {
       endpointTitles,
       showEndpoints,
       token,
+      smoothIntro,
     };
 
-    // stop() cleared the highlight — keep the full route visible during layout wait.
+    // stop() cleared the highlight — keep the full route visible during layout wait
+    // (and until beginIntro swaps to lone-start on desktop).
     setChaseHighlightLine(m, coords, color, CHASE_LINE_WIDTH * strokeScale);
     if (overviewLayerId && m.getLayer(overviewLayerId)) {
       m.setPaintProperty(overviewLayerId, 'line-opacity', overviewDimOpacity);
     }
+
+    let begun = false;
+    const beginPlayback = () => {
+      if (begun || animToken !== token || !session) return;
+      begun = true;
+      clearTimers();
+      try {
+        m.resize();
+      } catch {
+        /* ignore */
+      }
+      onMapResize();
+      applyFrame(session, 0, { instant: true });
+      startLoop();
+    };
 
     const beginIntro = () => {
       if (animToken !== token || !session) return;
@@ -1209,7 +1242,13 @@ export function createMapChaseController() {
         /* map may already be gone */
       }
 
-      setChaseHighlightLine(m, [], color, CHASE_LINE_WIDTH * strokeScale);
+      if (smoothIntro) {
+        // Keep full route while camera eases to start (mobile).
+        setChaseHighlightLine(m, coords, color, CHASE_LINE_WIDTH * strokeScale);
+      } else {
+        // Desktop/master: lone start dot — pin projects on settled desktop canvas.
+        setChaseHighlightLine(m, [], color, CHASE_LINE_WIDTH * strokeScale);
+      }
       setLeadPoint(m, coords[0], color, strokeScale);
       if (showEndpoints) {
         showStartEndpoint(m, coords, endpointTitles);
@@ -1229,38 +1268,33 @@ export function createMapChaseController() {
         speed: 1,
       });
 
-      let begun = false;
-      const beginPlayback = () => {
-        if (begun || animToken !== token) return;
-        begun = true;
-        clearTimers();
-        // One more resize in case the CSS height transition finished late.
-        try {
-          m.resize();
-        } catch {
-          /* ignore */
-        }
-        onMapResize();
-        applyFrame(session!, 0, { instant: true });
-        startLoop();
-      };
-
       const introPitch = mode === '3d' ? ORBIT_PITCH : 0;
       const introBearing = currentBearing;
-      m.flyTo({
-        center: coords[0],
+      const introCamera = {
+        center: coords[0] as [number, number],
         bearing: introBearing,
         pitch: introPitch,
         zoom: mode === '3d' ? 16.5 : zoom2dIntro(),
-        duration: 1600,
-        essential: true,
-      });
-
-      m.once('moveend', () => {
-        if (animToken !== token) return;
-        m.once('idle', beginPlayback);
-        chaseTimeout = setTimeout(beginPlayback, 900);
-      });
+        essential: true as const,
+      };
+      if (smoothIntro) {
+        // After height settle so map.resize above does not cancel this motion.
+        m.easeTo({ ...introCamera, duration: 900 });
+        m.once('moveend', () => {
+          if (animToken !== token) return;
+          m.once('idle', beginPlayback);
+          chaseTimeout = setTimeout(beginPlayback, 400);
+        });
+        introFallback = setTimeout(beginPlayback, 1400);
+      } else {
+        // Master desktop path: flyTo + moveend/idle (no early fallback cut).
+        m.flyTo({ ...introCamera, duration: 1600 });
+        m.once('moveend', () => {
+          if (animToken !== token) return;
+          m.once('idle', beginPlayback);
+          chaseTimeout = setTimeout(beginPlayback, 900);
+        });
+      }
     };
 
     if (layoutSettleMs > 0) {
