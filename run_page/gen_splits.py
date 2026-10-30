@@ -375,6 +375,7 @@ class _Timer:
 # record normalisation
 # --------------------------------------------------------------------------
 
+
 def _activity_bucket(raw) -> str | None:
     """Map FIT activity_type to run/walk/stop for the status bar."""
     if raw is None:
@@ -396,18 +397,24 @@ def _activity_bucket(raw) -> str | None:
         return "run"
     if s in {"walking", "walk", "hiking", "hike", "marching"} or s.startswith("walk"):
         return "walk"
-    if s in {
-        "stationary",
-        "all_day_respiration",
-        "rest",
-        "resting",
-        "stopped",
-        "stop",
-        "inactive",
-        "still",
-    } or "stop" in s or "rest" in s:
+    if (
+        s
+        in {
+            "stationary",
+            "all_day_respiration",
+            "rest",
+            "resting",
+            "stopped",
+            "stop",
+            "inactive",
+            "still",
+        }
+        or "stop" in s
+        or "rest" in s
+    ):
         return "stop"
     return None
+
 
 def _records(msgs: dict, per_leg: bool, timer: _Timer) -> list[dict]:
     out = []
