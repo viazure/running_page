@@ -33,9 +33,9 @@ import sys
 from typing import Any
 
 FIT_EPOCH_S = 631065600  # 1989-12-31T00:00:00Z
-SCHEMA_VERSION = 1
-MAX_CHART_POINTS = 200
-MIN_CHART_STEP_M = 50.0
+SCHEMA_VERSION = 2
+MAX_CHART_POINTS = 1200
+MIN_CHART_STEP_M = 5.0
 ELEV_HYSTERESIS_M = 1.0
 # Isolated running-cadence spikes (watch glitches) sit well above this.
 CADENCE_SPIKE_SPM = 220
@@ -374,6 +374,48 @@ class _Timer:
 # --------------------------------------------------------------------------
 # record normalisation
 # --------------------------------------------------------------------------
+
+
+def _activity_bucket(raw) -> str | None:
+    """Map FIT activity_type to run/walk/stop for the status bar."""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        # Common FIT enums vary by device; keep unknown as None.
+        return None
+    s = str(raw).strip().lower()
+    if not s:
+        return None
+    if s in {
+        "running",
+        "run",
+        "trail_running",
+        "treadmill",
+        "track",
+        "ultra",
+    } or s.startswith("run"):
+        return "run"
+    if s in {"walking", "walk", "hiking", "hike", "marching"} or s.startswith("walk"):
+        return "walk"
+    if (
+        s
+        in {
+            "stationary",
+            "all_day_respiration",
+            "rest",
+            "resting",
+            "stopped",
+            "stop",
+            "inactive",
+            "still",
+        }
+        or "stop" in s
+        or "rest" in s
+    ):
+        return "stop"
+    return None
+
+
 def _records(msgs: dict, per_leg: bool, timer: _Timer) -> list[dict]:
     out = []
     last_d = -1.0
@@ -408,6 +450,9 @@ def _records(msgs: dict, per_leg: bool, timer: _Timer) -> list[dict]:
                 "temp": _num(rec.get("temperature")),
                 "resp": _positive(
                     rec.get("enhanced_respiration_rate") or rec.get("respiration_rate")
+                ),
+                "activity": _activity_bucket(
+                    rec.get("activity_type") or rec.get("activity_subtype")
                 ),
             }
         )
@@ -508,7 +553,8 @@ def build_chart(recs: list[dict]) -> dict | None:
         return None
     step = max(MIN_CHART_STEP_M, total / MAX_CHART_POINTS)
     keys = ("hr", "cad", "power", "alt", "gct", "vo", "vr", "temp")
-    series: dict[str, list] = {k: [] for k in ("d", "t", "pace", *keys)}
+    mode_keys = ("activity",)
+    series: dict[str, list] = {k: [] for k in ("d", "t", "pace", *keys, *mode_keys)}
     bucket: list[dict] = []
     edge = recs[0]["d"] + step
     t_origin = recs[0]["t"]
@@ -525,11 +571,22 @@ def build_chart(recs: list[dict]) -> dict | None:
         series["pace"].append(_r(_pace(speed), 0))
         for k in keys:
             vals = [r[k] for r in rows if r[k] is not None]
+            # Drop non-positive power so stop/idle gaps become null (APP-like breaks).
+            if k == "power":
+                vals = [x for x in vals if x > 0]
             v = _mean(vals)
             if k == "vo" and v is not None:
                 v /= 10
             nd = 1 if k in ("alt", "vo", "vr") else 0
             series[k].append(_r(v, nd))
+        for k in mode_keys:
+            vals = [r[k] for r in rows if r.get(k)]
+            if not vals:
+                series[k].append(None)
+            else:
+                # majority vote in the distance bucket
+                best = max(set(vals), key=vals.count)
+                series[k].append(best)
 
     # `bucket[0]` may be an anchor carried over from the previous bucket so
     # adjacent points share an endpoint; `fresh` counts rows added since.
