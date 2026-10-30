@@ -79,3 +79,39 @@ export const MAPBOX_TOKEN: string =
   import.meta.env.MAPBOX_TOKEN ||
   config.mapbox_token ||
   '';
+
+export interface AnalysisHrZonesConfig {
+  method?: 'percent_lthr' | 'percent_max_hr';
+  lthr_percents?: number[];
+  maxhr_percents?: number[];
+}
+
+export interface AnalysisConfig {
+  hr_zones?: AnalysisHrZonesConfig;
+  /** Optional public default only — prefer VITE_LTHR for personal values. */
+  lthr?: number;
+  /** Optional public default only — prefer VITE_FTP for personal values. */
+  ftp?: number;
+}
+
+interface AppConfigWithAnalysis extends AppConfig {
+  analysis?: AnalysisConfig;
+}
+
+const analysisConfig = (config as AppConfigWithAnalysis).analysis;
+
+export const ANALYSIS_HR_ZONES: AnalysisHrZonesConfig = {
+  method: analysisConfig?.hr_zones?.method ?? 'percent_lthr',
+  lthr_percents: analysisConfig?.hr_zones?.lthr_percents,
+  maxhr_percents: analysisConfig?.hr_zones?.maxhr_percents,
+};
+
+export const ANALYSIS_CONFIG_LTHR: number | null =
+  analysisConfig?.lthr != null && Number.isFinite(analysisConfig.lthr)
+    ? Number(analysisConfig.lthr)
+    : null;
+
+export const ANALYSIS_CONFIG_FTP: number | null =
+  analysisConfig?.ftp != null && Number.isFinite(analysisConfig.ftp)
+    ? Number(analysisConfig.ftp)
+    : null;

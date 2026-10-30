@@ -76,6 +76,8 @@ export interface RunChart {
   vo?: N[];
   vr?: N[]; // vertical ratio %
   temp?: N[];
+  /** FIT activity_type buckets: run | walk | stop (majority per sample). */
+  activity?: (string | null)[];
 }
 
 export interface RunSplits {
