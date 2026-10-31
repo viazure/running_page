@@ -29,6 +29,7 @@ import {
   mapboxControlLocale,
   mapLabelLanguage,
   MAP_STYLE_LOAD_TIMEOUT_MS,
+  nextBasemapProvider,
   type BasemapProvider,
 } from '@/core/mapStyle';
 import type { Coordinate } from '@/utils/routeAnimation';
@@ -936,11 +937,13 @@ function TrackMap({
     let timedOut = false;
     let styleSettled = false;
 
-    const fallBackFromMapbox = (reason: string) => {
-      if (settled || provider !== 'mapbox' || lightsOff) return;
+    const fallBackBasemap = (reason: string) => {
+      if (settled || lightsOff) return;
+      const next = nextBasemapProvider(provider);
+      if (!next) return;
       settled = true;
       console.warn(reason);
-      setProvider('carto');
+      setProvider(next);
     };
 
     const timer = window.setTimeout(() => {
@@ -953,22 +956,24 @@ function TrackMap({
         return;
       if (mapInstance.isStyleLoaded()) return;
       timedOut = true;
-      if (provider === 'mapbox' && !lightsOff) {
-        fallBackFromMapbox(
-          'Track map style load timed out; falling back to CARTO basemap'
-        );
-      } else if (!lightsOff) {
-        console.warn(
-          'Track map CARTO style load timed out; falling back to blank basemap'
-        );
-        mapInstance.setStyle(blankMapStyle(bg));
+      if (!lightsOff) {
+        const next = nextBasemapProvider(provider);
+        if (next) {
+          fallBackBasemap(
+            `Track map style load timed out (${provider}); falling back to ${next}`
+          );
+        } else {
+          console.warn(
+            'Track map style load timed out; no further free basemap fallback'
+          );
+        }
       }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
 
     const onError = (event: mapboxgl.ErrorEvent) => {
       if (map.current !== mapInstance) return;
       if (isMapboxAuthError(event.error)) {
-        fallBackFromMapbox('Mapbox auth failed; falling back to CARTO basemap');
+        fallBackBasemap('Mapbox auth failed; falling back to next basemap');
       }
     };
     mapInstance.on('error', onError);
