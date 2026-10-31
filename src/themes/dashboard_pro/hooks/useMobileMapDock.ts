@@ -20,6 +20,18 @@ const AT_HOME_PX = 12;
 /** Keep slot spacer after unfixed so in-flow height owns layout. */
 const HANDOFF_MS = 100;
 
+/**
+ * Match `.route-map-play-surface.is-play-sized` /
+ * `.card.route-map--playing` mobile play heights.
+ */
+export function playbackMapHeightPx(): number {
+  const vh = window.innerHeight;
+  if (window.matchMedia('(min-width: 768px)').matches) {
+    return Math.round(Math.min(vh * 0.65, 560));
+  }
+  return Math.round(Math.min(vh * 0.7, 520));
+}
+
 export type MapDockFrame = {
   left: number;
   width: number;
@@ -50,7 +62,12 @@ export function useMobileMapDock(
   slotRef: RefObject<HTMLDivElement | null>,
   pinRef: RefObject<HTMLDivElement | null>,
   /** Remount signal (e.g. home allYears vs single year) so observers rebind. */
-  layoutKey: string | number | boolean = 0
+  layoutKey: string | number | boolean = 0,
+  /**
+   * When non-null (chase play surface tall), grow the fixed pin and slot
+   * spacer to this height so Mapbox compass stays inside the visible card.
+   */
+  playHeightPx: number | null = null
 ) {
   const [isMobile, setIsMobile] = useState(false);
   const [outOfView, setOutOfView] = useState(false);
@@ -68,6 +85,11 @@ export function useMobileMapDock(
   const handoffRafRef = useRef<number | null>(null);
   /** True while fixed overlay still covers the slot during collapse handoff. */
   const fixedDuringHandoffRef = useRef(false);
+  const playHeightPxRef = useRef<number | null>(playHeightPx);
+
+  useEffect(() => {
+    playHeightPxRef.current = playHeightPx;
+  }, [playHeightPx]);
 
   useEffect(() => {
     pinMotionRef.current = pinMotion;
@@ -108,7 +130,10 @@ export function useMobileMapDock(
     if (!slot) return null;
     const rect = slot.getBoundingClientRect();
     if (rect.width <= 1) return null;
-    if (rect.height > 1) lastHeightRef.current = rect.height;
+    // Do not let a play-grown spacer contaminate the collapsed base height.
+    if (rect.height > 1 && playHeightPxRef.current == null) {
+      lastHeightRef.current = rect.height;
+    }
     return {
       top: Math.round(rect.top),
       left: Math.round(rect.left),
@@ -122,6 +147,17 @@ export function useMobileMapDock(
     if (!slot) return null;
     return { ...slot, top: PIN_TOP_PX };
   }, [readSlotBox]);
+
+  /** Dock box for the fixed pin — optionally taller while chasing. */
+  const resolveDockBox = useCallback((): PinBox | null => {
+    const box = readDockBox();
+    if (!box) return null;
+    // Non-null playHeightPx enables grow; recompute px so resize stays fresh.
+    if (playHeightPxRef.current != null && playHeightPxRef.current > 0) {
+      return { ...box, height: playbackMapHeightPx() };
+    }
+    return box;
+  }, [readDockBox]);
 
   const writePin = useCallback(
     (box: PinBox, transitionMs = 0) => {
@@ -319,11 +355,17 @@ export function useMobileMapDock(
         if (!entry.isIntersecting) {
           const rect = slot.getBoundingClientRect();
           if (rect.width > 1) {
-            if (rect.height > 1) lastHeightRef.current = rect.height;
+            if (rect.height > 1 && playHeightPxRef.current == null) {
+              lastHeightRef.current = rect.height;
+            }
+            const height =
+              playHeightPxRef.current != null && playHeightPxRef.current > 0
+                ? playbackMapHeightPx()
+                : Math.round(lastHeightRef.current);
             setFrame({
               left: Math.round(rect.left),
               width: Math.round(rect.width),
-              height: Math.round(lastHeightRef.current),
+              height,
             });
           }
           setOutOfView(true);
@@ -361,7 +403,7 @@ export function useMobileMapDock(
     const sync = () => {
       raf = 0;
       if (pinMotionRef.current != null) return;
-      const box = readDockBox();
+      const box = resolveDockBox();
       if (!box) return;
       const el = pinRef.current;
       // Remount can leave geometry without position:fixed — re-assert full box.
@@ -390,13 +432,21 @@ export function useMobileMapDock(
       window.removeEventListener('scroll', onScrollOrResize);
       window.removeEventListener('resize', onScrollOrResize);
     };
-  }, [active, expanded, layoutKey, readDockBox, writePin, pinRef]);
+  }, [
+    active,
+    expanded,
+    layoutKey,
+    playHeightPx,
+    resolveDockBox,
+    writePin,
+    pinRef,
+  ]);
 
   // Enter / exit motion via `top` (no transform on map ancestors).
   useLayoutEffect(() => {
     if (!active || !expanded || pinMotion == null) return;
     const home = readSlotBox();
-    const dock = readDockBox();
+    const dock = resolveDockBox();
     if (!home || !dock) {
       if (pinMotion === 'out') {
         releaseToFlow();
@@ -462,7 +512,7 @@ export function useMobileMapDock(
     expanded,
     pinMotion,
     readSlotBox,
-    readDockBox,
+    resolveDockBox,
     writePin,
     releaseToFlow,
     pinRef,
@@ -474,7 +524,9 @@ export function useMobileMapDock(
     if (!slot) return;
     const ro = new ResizeObserver(() => {
       const rect = slot.getBoundingClientRect();
-      if (rect.height > 1) lastHeightRef.current = rect.height;
+      if (rect.height > 1 && playHeightPxRef.current == null) {
+        lastHeightRef.current = rect.height;
+      }
       if (expandedRef.current || outOfViewRef.current || holdSpacer) return;
       if (rect.width > 1 && rect.height > 1) {
         setFrame({
@@ -487,6 +539,29 @@ export function useMobileMapDock(
     ro.observe(slot);
     return () => ro.disconnect();
   }, [active, layoutKey, holdSpacer, slotRef]);
+
+  // Grow / shrink spacer + pin when chase play height toggles (expanded dock).
+  useLayoutEffect(() => {
+    if (!active || !expanded) return;
+    const box = resolveDockBox();
+    if (!box) return;
+    setFrame((prev) => {
+      if (!prev) {
+        return { left: box.left, width: box.width, height: box.height };
+      }
+      if (
+        prev.height === box.height &&
+        prev.left === box.left &&
+        prev.width === box.width
+      ) {
+        return prev;
+      }
+      return { ...prev, left: box.left, width: box.width, height: box.height };
+    });
+    if (pinMotionRef.current == null) {
+      writePin(box, 0);
+    }
+  }, [active, expanded, playHeightPx, resolveDockBox, writePin]);
 
   const expand = useCallback(() => {
     snapshotFrame();

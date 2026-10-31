@@ -76,7 +76,10 @@ import {
 } from '@/utils/exportMapVideo';
 import './RouteMap.css';
 import { MapDockFab } from './MapDockFab';
-import { useMobileMapDock } from '../hooks/useMobileMapDock';
+import {
+  playbackMapHeightPx,
+  useMobileMapDock,
+} from '../hooks/useMobileMapDock';
 
 type SportType = 'Run';
 
@@ -1231,7 +1234,13 @@ export function TracksPage({
   const [sortBy, setSortBy] = useState<'date' | 'distance'>('date');
   const mapSlotRef = useRef<HTMLDivElement>(null);
   const mapPinRef = useRef<HTMLDivElement>(null);
-  const mapDock = useMobileMapDock(true, mapSlotRef, mapPinRef, 'tracks');
+  const mapDock = useMobileMapDock(
+    true,
+    mapSlotRef,
+    mapPinRef,
+    'tracks',
+    playSurfaceSized ? playbackMapHeightPx() : null
+  );
 
   // Export
   const captureRef = useRef<HTMLDivElement>(null);
