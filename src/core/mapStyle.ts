@@ -1,7 +1,7 @@
 import type { StyleSpecification } from 'mapbox-gl';
 import { MAPBOX_TOKEN } from './config';
 
-/** Local blank style — no Mapbox CDN; used for privacy lights-off / offline fallback. */
+/** Local blank style — no Mapbox CDN; used for privacy lights-off only. */
 export function blankMapStyle(background = '#0d1117'): StyleSpecification {
   return {
     version: 8,
@@ -16,7 +16,7 @@ export function blankMapStyle(background = '#0d1117'): StyleSpecification {
   };
 }
 
-export type BasemapProvider = 'mapbox' | 'carto';
+export type BasemapProvider = 'mapbox' | 'carto' | 'openfreemap';
 
 export function mapboxBasemapStyle(dark: boolean): string {
   return dark !== false
@@ -31,17 +31,40 @@ export function cartoBasemapStyle(dark: boolean): string {
     : 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 }
 
+/**
+ * Free OpenFreeMap styles (classic theme mapcn_openfreemap) — no token.
+ * Prefer as fallback when CARTO tiles are blocked or never settle.
+ */
+export function openfreemapBasemapStyle(dark: boolean): string {
+  return dark !== false
+    ? 'https://tiles.openfreemap.org/styles/dark'
+    : 'https://tiles.openfreemap.org/styles/bright';
+}
+
 export function initialBasemapProvider(): BasemapProvider {
-  return MAPBOX_TOKEN ? 'mapbox' : 'carto';
+  return MAPBOX_TOKEN ? 'mapbox' : 'openfreemap';
 }
 
 export function basemapStyleUrl(
   provider: BasemapProvider,
   dark: boolean
 ): string {
-  return provider === 'mapbox'
-    ? mapboxBasemapStyle(dark)
-    : cartoBasemapStyle(dark);
+  if (provider === 'mapbox') return mapboxBasemapStyle(dark);
+  if (provider === 'openfreemap') return openfreemapBasemapStyle(dark);
+  return cartoBasemapStyle(dark);
+}
+
+/**
+ * Automatic fallback chain when a style fails or times out:
+ * Mapbox → CARTO → OpenFreeMap. Never falls through to blank
+ * (blank is reserved for privacy lights-off).
+ */
+export function nextBasemapProvider(
+  provider: BasemapProvider
+): BasemapProvider | null {
+  if (provider === 'mapbox') return 'carto';
+  if (provider === 'carto') return 'openfreemap';
+  return null;
 }
 
 /** Mapbox/MapLibre label language code from app locale. */
@@ -63,7 +86,7 @@ export function mapboxControlLocale(t: (key: string) => string): {
   };
 }
 
-/** If Mapbox style never loads (e.g. blocked network), fall back to CARTO. */
+/** If Mapbox/CARTO style never loads (e.g. blocked network), advance the fallback chain. */
 export const MAP_STYLE_LOAD_TIMEOUT_MS = 8000;
 
 export function isMapboxAuthError(error: unknown): boolean {

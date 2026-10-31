@@ -5,6 +5,12 @@ import * as polyline from '@mapbox/polyline';
 import type { Activity } from '../types';
 import { hasRoute, routeForActivity } from '../core/routeFallback';
 import { MAPBOX_TOKEN } from '../config';
+import {
+  basemapStyleUrl,
+  initialBasemapProvider,
+  nextBasemapProvider,
+  type BasemapProvider,
+} from '../core/mapStyle';
 import { useLocale } from '../hooks/useLocale';
 import './RouteMap.css';
 
@@ -40,15 +46,14 @@ export function RouteMapCanvas({
   const styleReadyRef = useRef(false);
   const cameraRef = useRef<mapboxgl.CameraOptions | null>(null);
   const fittedRef = useRef<unknown>(null);
-  const [provider, setProvider] = useState(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+  const [provider, setProvider] = useState<BasemapProvider>(
+    initialBasemapProvider
+  );
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading'
   );
   const [retry, setRetry] = useState(0);
-  const style =
-    provider === 'mapbox'
-      ? `mapbox://styles/mapbox/${dark === false ? 'light' : 'dark'}-v11`
-      : `https://basemaps.cartocdn.com/gl/${dark === false ? 'positron' : 'dark-matter'}-gl-style/style.json`;
+  const style = basemapStyleUrl(provider, dark !== false);
 
   const displayActivity = useMemo(
     () =>
@@ -206,8 +211,14 @@ export function RouteMapCanvas({
     let failed = false;
     const onError = (event: mapboxgl.ErrorEvent) => {
       const code = (event.error as Error & { status?: number }).status;
-      if (provider === 'mapbox' && (code === 401 || code === 403)) {
-        setProvider('carto');
+      const next = nextBasemapProvider(provider);
+      if (
+        next &&
+        (provider === 'mapbox'
+          ? code === 401 || code === 403
+          : provider === 'carto')
+      ) {
+        setProvider(next);
       } else {
         failed = true;
         setStatus('error');
@@ -340,23 +351,30 @@ export function RouteMapCanvas({
               ? zh
                 ? '正在加载地图…'
                 : 'Loading map…'
-              : provider === 'carto'
+              : provider === 'openfreemap'
                 ? zh
-                  ? '备用底图 · CARTO'
-                  : 'Alternative basemap · CARTO'
-                : zh
-                  ? '底图 · Mapbox'
-                  : 'Basemap · Mapbox'}
+                  ? '备用底图 · OpenFreeMap'
+                  : 'Alternative basemap · OpenFreeMap'
+                : provider === 'carto'
+                  ? zh
+                    ? '备用底图 · CARTO'
+                    : 'Alternative basemap · CARTO'
+                  : zh
+                    ? '底图 · Mapbox'
+                    : 'Basemap · Mapbox'}
         </span>
-        {(status === 'error' || (provider === 'carto' && !!MAPBOX_TOKEN)) && (
+        {(status === 'error' ||
+          ((provider === 'carto' || provider === 'openfreemap') &&
+            !!MAPBOX_TOKEN)) && (
           <button
             className="route-map-action"
             onClick={() => {
-              setProvider(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+              setProvider(initialBasemapProvider());
               setRetry((value) => value + 1);
             }}
           >
-            {provider === 'carto' && MAPBOX_TOKEN
+            {(provider === 'carto' || provider === 'openfreemap') &&
+            MAPBOX_TOKEN
               ? zh
                 ? '重试 Mapbox'
                 : 'Retry Mapbox'
