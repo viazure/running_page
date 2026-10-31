@@ -42,7 +42,7 @@ export function openfreemapBasemapStyle(dark: boolean): string {
 }
 
 export function initialBasemapProvider(): BasemapProvider {
-  return MAPBOX_TOKEN ? 'mapbox' : 'openfreemap';
+  return MAPBOX_TOKEN ? 'mapbox' : 'carto';
 }
 
 export function basemapStyleUrl(
@@ -67,7 +67,7 @@ export function nextBasemapProvider(
   return null;
 }
 
-/** Mapbox/MapLibre label language code from app locale. */
+/** Mapbox/MapLibre-compatible label language code from app locale. */
 export function mapLabelLanguage(locale: 'zh' | 'en'): string {
   return locale === 'zh' ? 'zh-Hans' : 'en';
 }
