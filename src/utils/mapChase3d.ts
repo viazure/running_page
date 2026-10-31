@@ -626,6 +626,7 @@ export function createMapChaseController() {
   let compassIdleLabel = '';
   let compassTitlesLive: { lock: string; follow: string } | null = null;
   let onCompassClick: ((event: Event) => void) | null = null;
+  let onCompassTouchBlock: ((event: TouchEvent) => void) | null = null;
   let currentZoom = 16.5;
   let currentPitch = ORBIT_PITCH;
   /** Extra zoom-out (positive = farther). Phone 9:16 cover reads closer. */
@@ -780,16 +781,29 @@ export function createMapChaseController() {
   const unbindCompass = () => {
     if (compassBtn && onCompassClick) {
       compassBtn.removeEventListener('click', onCompassClick, true);
+      compassBtn.removeEventListener('touchend', onCompassClick, true);
+      if (onCompassTouchBlock) {
+        compassBtn.removeEventListener('touchstart', onCompassTouchBlock, true);
+      }
       compassBtn.classList.remove('is-bearing-locked');
       if (compassIdleLabel) setCompassTooltip(compassIdleLabel);
     }
     compassBtn = null;
     onCompassClick = null;
+    onCompassTouchBlock = null;
     compassIdleLabel = '';
     compassTitlesLive = null;
     bearingLocked = false;
   };
 
+  /**
+   * Mapbox NavigationControl attaches a rotate/pitch drag helper on the compass
+   * (touchstart → drag; touchend synthesizes click only if move < 10px).
+   * During chase, jumpTo updates bearing every frame, so a finger tap often
+   * exceeds that tolerance — click never fires. Unlock still worked when a
+   * clean click landed; lock felt impossible. Block Mapbox touchstart and
+   * toggle on our own touchend/click instead.
+   */
   const bindCompass = (
     map: mapboxgl.Map,
     titles: { lock: string; follow: string }
@@ -808,8 +822,16 @@ export function createMapChaseController() {
         : '') ||
       btn.title ||
       '';
-    onCompassClick = (event) => {
+    let lastToggleAt = 0;
+    const toggleLock = (event: Event) => {
       if (!running) return;
+      const now = performance.now();
+      if (now - lastToggleAt < 350) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      lastToggleAt = now;
       event.preventDefault();
       event.stopImmediatePropagation();
       bearingLocked = !bearingLocked;
@@ -823,6 +845,18 @@ export function createMapChaseController() {
       syncCompassLock(titles);
       callbacks.onBearingLockChange?.(bearingLocked);
     };
+    onCompassTouchBlock = (event) => {
+      if (!running) return;
+      // Stop Mapbox's compass MouseRotateWrapper before it starts a drag.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    onCompassClick = toggleLock;
+    btn.addEventListener('touchstart', onCompassTouchBlock, {
+      capture: true,
+      passive: false,
+    });
+    btn.addEventListener('touchend', onCompassClick, true);
     btn.addEventListener('click', onCompassClick, true);
     syncCompassLock(titles);
   };

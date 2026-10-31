@@ -4,6 +4,7 @@ import {
   startTransition,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -37,7 +38,11 @@ import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TrendChart } from './components/TrendChart';
 import { MapDockFab } from './components/MapDockFab';
-import { useMobileMapDock } from './hooks/useMobileMapDock';
+import {
+  playbackMapHeightPx,
+  useMobileMapDock,
+} from './hooks/useMobileMapDock';
+import { PLAYBACK_LAYOUT_SETTLE_MS } from '@/utils/mapChase3d';
 
 const loadRouteMap = () =>
   import('./components/RouteMap').then((m) => ({ default: m.RouteMap }));
@@ -124,11 +129,27 @@ function DashboardProContent({
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
   const mapPinRef = useRef<HTMLDivElement>(null);
+  const [mapPlaying, setMapPlaying] = useState(false);
+  // Keep play surface tall through exit settle (same as TracksPage / RouteMap).
+  const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
+  const isPlaybackGrowViewport = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(max-width: 1023px)').matches;
+  useLayoutEffect(() => {
+    if (mapPlaying && isPlaybackGrowViewport()) setPlaySurfaceSized(true);
+  }, [mapPlaying]);
+  useEffect(() => {
+    if (mapPlaying) return;
+    const delay = isPlaybackGrowViewport() ? PLAYBACK_LAYOUT_SETTLE_MS : 0;
+    const t = window.setTimeout(() => setPlaySurfaceSized(false), delay);
+    return () => window.clearTimeout(t);
+  }, [mapPlaying]);
   const mapDock = useMobileMapDock(
     page === 'home',
     mapSlotRef,
     mapPinRef,
-    allYears ? 'all' : 'year'
+    allYears ? 'all' : 'year',
+    playSurfaceSized ? playbackMapHeightPx() : null
   );
 
   if (page === 'tracks') {
@@ -202,6 +223,7 @@ function DashboardProContent({
               dark={dark}
               lightsOff={privacyActive}
               onClearSelection={() => setSelectedActivity(null)}
+              onPlaybackChange={setMapPlaying}
               className={
                 // No height tween while dock fixed/handoff (Mapbox blanks).
                 // In free flow keep play-spring (RouteMap skips it when

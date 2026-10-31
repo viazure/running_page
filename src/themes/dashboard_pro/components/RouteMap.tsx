@@ -82,6 +82,8 @@ interface RouteMapProps {
   /** Hide basemap tiles; keep route lines (classic privacy lights-off) */
   lightsOff?: boolean;
   className?: string;
+  /** Fires when chase playback starts/stops (mobile dock play-height). */
+  onPlaybackChange?: (playing: boolean) => void;
 }
 
 function applyLightsOff(map: mapboxgl.Map, lightsOff: boolean) {
@@ -116,6 +118,7 @@ export function RouteMap({
   onClearSelection,
   lightsOff = false,
   className = '',
+  onPlaybackChange,
 }: RouteMapProps) {
   const { locale, t } = useLocale();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -161,6 +164,9 @@ export function RouteMap({
   const videoCaptureRef = useRef<MapVideoCapture | null>(null);
   const selectedId = selectedActivity ? String(selectedActivity.run_id) : null;
   const chasing = chaseRunId != null && chaseRunId === selectedId;
+  useEffect(() => {
+    onPlaybackChange?.(chasing);
+  }, [chasing, onPlaybackChange]);
   const playbackSeries = usePlaybackSeries(
     chasing,
     selectedActivity?.run_id ?? null
