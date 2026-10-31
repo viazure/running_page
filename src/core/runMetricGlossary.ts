@@ -52,7 +52,7 @@ export const METRIC_GLOSSARY: Record<
   power: {
     titleZh: '功率',
     titleEn: 'Power',
-    zh: '跑步功率（瓦）。仅在 FIT 提供设备功率区间时显示区间表；本站不会硬编功率分区。',
-    en: 'Running power (W). Zone tables appear only when the FIT file includes device power zones — none are invented here.',
+    zh: '跑步功率（瓦）。有功率采样就会画曲线（FIT，或带瓦特扩展的 GPX/TCX）；区间表只在文件自带设备分区时显示，本站不硬编分区。',
+    en: 'Running power (W). The curve uses power samples from the activity (FIT, or GPX/TCX with watts). Zone tables appear only when the file includes device power zones — none are invented here.',
   },
 };
