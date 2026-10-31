@@ -52,7 +52,7 @@ export const METRIC_GLOSSARY: Record<
   power: {
     titleZh: '功率',
     titleEn: 'Power',
-    zh: '跑步功率（瓦）。区间表仅在文件自带设备分区时显示，本站不硬编。',
-    en: 'Running power (W). Zone tables appear only when the file includes device power zones — none are invented here.',
+    zh: '跑步功率（瓦）。区间表仅在文件自带设备分区时显示。',
+    en: 'Running power (W). Zone tables appear only when the file includes device power zones.',
   },
 };
