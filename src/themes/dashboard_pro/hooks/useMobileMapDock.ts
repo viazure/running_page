@@ -511,6 +511,37 @@ export function useMobileMapDock(
     expand();
   }, [expanded, collapse, expand]);
 
+  /**
+   * Auto-collapse once the slot is fully visible again.
+   *
+   * Option A keeps the dock pinned until the user taps the FAB, so scrolling
+   * back to where the in-flow map already fits on screen still showed the
+   * floating map.
+   *
+   * Uses an IntersectionObserver at ratio 1 (root inset by the sticky header)
+   * so it fires on the exact frame the slot clears the header — no scroll
+   * listener and no layout reads of our own, so the scroll thread stays free.
+   * Then hands back with NO motion: at that moment the dock and the slot are
+   * a few pixels apart, so a slide would only read as a stray animation, and
+   * tweening `top` on a fixed Mapbox canvas costs a layout per frame. The FAB
+   * keeps the animated path; this one is silent.
+   */
+  useEffect(() => {
+    if (!active || !expanded) return;
+    const slot = slotRef.current;
+    if (!slot) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.999) return;
+        if (!expandedRef.current || pinMotionRef.current === 'out') return;
+        releaseToFlow();
+      },
+      { rootMargin: `-${HEADER_INSET_PX}px 0px 0px 0px`, threshold: 1 }
+    );
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, [active, expanded, releaseToFlow, slotRef]);
+
   const showFab = active && (expanded || outOfView || holdSpacer);
   // Reserve slot height while away, expanded (map is fixed), or handing off.
   const lockHeight =
