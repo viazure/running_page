@@ -66,6 +66,7 @@ import {
   MapVideoAbortedError,
   MapVideoUnsupportedError,
   phoneChaseZoomOutExtra,
+  prepareMapVideoSourcePixels,
   startMapVideoCapture,
   type MapVideoCapture,
 } from '@/utils/exportMapVideo';
@@ -579,6 +580,7 @@ export function RouteMap({
     }
     const map = mapRef.current;
     if (!map || !chasing) return;
+    let restoreSourcePixels: (() => void) | undefined;
     try {
       // Phone 9:16 cover reads closer — pull 2D chase out for the clip only.
       const canvas = map.getCanvas();
@@ -602,6 +604,9 @@ export function RouteMap({
           caloriesRef.current.kcal = kcal != null && kcal > 0 ? kcal : null;
         });
       }
+      restoreSourcePixels = await prepareMapVideoSourcePixels(map, {
+        sizeMode: opts.sizeMode,
+      });
       const capture = await startMapVideoCapture({
         mapCanvas: map.getCanvas(),
         includeHud: opts.includeHud,
@@ -693,6 +698,7 @@ export function RouteMap({
       setExporting(false);
       setExportEnding(false);
       setExportConverting(false);
+      restoreSourcePixels?.();
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       window.setTimeout(() => setExportMessage(null), 4000);

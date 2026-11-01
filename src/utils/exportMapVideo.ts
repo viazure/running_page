@@ -94,6 +94,96 @@ export function phoneChaseZoomOutExtra(cssW: number, cssH: number): number {
  */
 const MAP_VIDEO_ATTRIBUTION = '© Mapbox, © OpenStreetMap';
 
+/** Cap export backing-store DPR so WebGL stays within common max texture sizes. */
+const MAP_VIDEO_MAX_PIXEL_RATIO = 4;
+const MAP_VIDEO_MAX_BUFFER_EDGE = 4096;
+
+export type MapVideoResizeTarget = {
+  resize: () => unknown;
+  triggerRepaint?: () => void;
+  getCanvas: () => HTMLCanvasElement;
+};
+
+/**
+ * Mapbox sizes its WebGL canvas as CSS × window.devicePixelRatio. Phone export
+ * cover-scales that buffer into 1080×1920; when the on-screen map is a small
+ * card, the buffer is far below Full HD and the MP4 looks soft / tiny.
+ * Temporarily raise devicePixelRatio + map.resize() so source pixels cover the
+ * output (capped), then restore after capture.
+ */
+export function exportPixelRatioNeeded(
+  cssW: number,
+  cssH: number,
+  sizeMode: MapVideoSizeMode,
+  maxWidth = MAP_VIDEO_MAX_WIDTH
+): number {
+  const w = Math.max(cssW, 2);
+  const h = Math.max(cssH, 2);
+  const current =
+    typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const needed =
+    sizeMode === 'phone'
+      ? Math.max(current, MAP_VIDEO_PHONE_WIDTH / w, MAP_VIDEO_PHONE_HEIGHT / h)
+      : Math.max(current, maxWidth / w);
+  const edgeCap = MAP_VIDEO_MAX_BUFFER_EDGE / Math.max(w, h);
+  return Math.min(needed, MAP_VIDEO_MAX_PIXEL_RATIO, edgeCap);
+}
+
+export async function prepareMapVideoSourcePixels(
+  map: MapVideoResizeTarget,
+  opts: { sizeMode: MapVideoSizeMode; maxWidth?: number }
+): Promise<() => void> {
+  const canvas = map.getCanvas();
+  const cssW = canvas.clientWidth || canvas.width;
+  const cssH = canvas.clientHeight || canvas.height;
+  if (cssW < 2 || cssH < 2) return () => {};
+
+  const current = window.devicePixelRatio || 1;
+  const needed = exportPixelRatioNeeded(
+    cssW,
+    cssH,
+    opts.sizeMode,
+    opts.maxWidth ?? MAP_VIDEO_MAX_WIDTH
+  );
+  if (needed <= current + 0.05) return () => {};
+
+  Object.defineProperty(window, 'devicePixelRatio', {
+    configurable: true,
+    enumerable: true,
+    get: () => needed,
+  });
+
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    try {
+      Reflect.deleteProperty(window, 'devicePixelRatio');
+    } catch {
+      /* ignore */
+    }
+    try {
+      map.resize();
+      map.triggerRepaint?.();
+    } catch {
+      /* map may already be gone */
+    }
+  };
+
+  try {
+    map.resize();
+    map.triggerRepaint?.();
+  } catch (err) {
+    restore();
+    throw err;
+  }
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  return restore;
+}
+
 function pickMp4MimeType(): string {
   if (typeof MediaRecorder === 'undefined') return '';
   const candidates = [
@@ -605,8 +695,10 @@ function makePainters(shared: CaptureShared) {
       ctx.fillStyle = '#0b0d10';
       ctx.fillRect(0, 0, outW, outH);
     }
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    const upscaling = src.width + 1 < mapFit.w || src.height + 1 < mapFit.h;
+    // Upscaling a soft buffer: nearest-neighbor stays less mushy than bilinear.
+    ctx.imageSmoothingEnabled = !upscaling;
+    if (!upscaling) ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(src, mapFit.x, mapFit.y, mapFit.w, mapFit.h);
   };
 
