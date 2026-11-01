@@ -215,7 +215,6 @@ export function PlaybackHudView({
   dark = true,
   exporting = false,
   exportEnding = false,
-  exportConverting = false,
   exportMessage = null,
   onTogglePause,
   onCycleSpeed,
@@ -238,8 +237,6 @@ export function PlaybackHudView({
   exporting?: boolean;
   /** True while pullback + end-card stills are encoding. */
   exportEnding?: boolean;
-  /** True while WebM→MP4 (or similar) transcode runs after capture. */
-  exportConverting?: boolean;
   exportMessage?: string | null;
   onTogglePause: () => void;
   onCycleSpeed: () => void;
@@ -745,13 +742,7 @@ export function PlaybackHudView({
             role="status"
             data-export-chrome
           >
-            {t(
-              exportConverting
-                ? 'exportVideoConverting'
-                : exportEnding
-                  ? 'exportVideoEnding'
-                  : 'exportVideoRecording'
-            )}
+            {t(exportEnding ? 'exportVideoEnding' : 'exportVideoRecording')}
           </p>
         ) : null}
       </div>
