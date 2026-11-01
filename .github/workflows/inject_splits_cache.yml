@@ -1,0 +1,48 @@
+name: Inject Xiaomi splits into Actions Cache
+
+# One-shot: restore track_data cache, overlay public/splits from the zip on this
+# branch, save a new cache entry. Then run "Publish GitHub Pages" with
+# save_data_in_github_cache=true. Delete this workflow after success.
+on:
+  workflow_dispatch:
+
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore track data cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            activities
+            assets
+            GPX_OUT
+            TCX_OUT
+            FIT_OUT
+            Workouts
+            run_page/data.db
+            src/static/activities.json
+            public/splits
+            imported.json
+          key: track_data-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            track_data-${{ github.sha }}-
+            track_data-
+
+      - name: Overlay splits from branch zip
+        run: |
+          set -euo pipefail
+          test -f artifacts/public-splits-xiaomi.zip
+          mkdir -p public/splits
+          unzip -o artifacts/public-splits-xiaomi.zip -d public/splits
+          # drop zip-only junk if any
+          find public/splits -name '__MACOSX' -prune -exec rm -rf {} + || true
+          echo "split json count: $(find public/splits -maxdepth 1 -name '*.json' | wc -l)"
+          date -u > public/splits/.cache_inject_marker
+          cat public/splits/.cache_inject_marker
+
+      - name: Keep runner alive briefly for cache post-save
+        run: ls -la public/splits | head
