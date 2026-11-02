@@ -70,7 +70,7 @@ import {
   downloadBlob,
   MapVideoAbortedError,
   MapVideoUnsupportedError,
-  phoneChaseZoomOutExtra,
+  prepareMapVideoViewport,
   startMapVideoCapture,
   type MapVideoCapture,
 } from '@/utils/exportMapVideo';
@@ -195,6 +195,9 @@ function TrackMap({
   const animKeyRef = useRef<string | null>(null);
   /** Non-null while a chase for this run_id should show as active in the UI. */
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  /** Bumped after video export so layout effect rebuilds trail after chasing→false. */
+  const trailRestoreGenRef = useRef(0);
+  const [trailRestoreGen, setTrailRestoreGen] = useState(0);
   const [playbackSnap, setPlaybackSnap] = useState<PlaybackProgress | null>(
     null
   );
@@ -556,9 +559,9 @@ function TrackMap({
       chaseRef.current.setStrokeScale(1);
       restoreOverviewLine(m);
       restoreSelectedHighlight(m);
-      // keepHighlight only on mobile — avoids blanking during height settle.
-      // Desktop restores selected highlight synchronously; keepHighlight there
-      // left chase layers fighting the web selected line (start pin drift).
+      // keepHighlight on mobile avoids a blank frame during height settle.
+      // Desktop: stop() still removes highlight — redraw after (trail IS
+      // chase-highlight on this page; there is no separate selected layer).
       const mobileDock =
         typeof window !== 'undefined' &&
         window.matchMedia('(max-width: 1023px)').matches;
@@ -566,6 +569,8 @@ function TrackMap({
         silent: true,
         keepHighlight: mobileDock,
       });
+      restoreOverviewLine(m);
+      restoreSelectedHighlight(m);
       setChaseRunId(null);
       setPlaybackSnap(null);
       if (!view3dRef.current) clearMapTerrain(m);
@@ -646,13 +651,13 @@ function TrackMap({
     }
     const m = map.current;
     if (!m || !chasing) return;
+    let restoreViewport: (() => void) | undefined;
     try {
-      const canvas = m.getCanvas();
-      chaseRef.current.setZoomOutExtra(
-        opts.sizeMode === 'phone'
-          ? phoneChaseZoomOutExtra(canvas.clientWidth, canvas.clientHeight)
-          : 0
-      );
+      const prepared = await prepareMapVideoViewport(m, {
+        sizeMode: opts.sizeMode,
+      });
+      restoreViewport = prepared.restore;
+      chaseRef.current.setZoomOutExtra(prepared.chaseZoomOutExtra);
       chaseRef.current.seek(0);
       if (chaseRef.current.isPaused()) chaseRef.current.resume();
       await new Promise<void>((resolve) => {
@@ -753,7 +758,11 @@ function TrackMap({
         setExportMessage(t('exportVideoFailed'));
       }
     } finally {
-      const hadCapture = videoCaptureRef.current != null;
+      // Export CSS/DPR restore + setChaseRunId(null) settle-resize can drop the
+      // chase-highlight trail (this page has no separate selected layer).
+      // Force updateRoutes (pre-chase path) after idle and after React commit.
+      const shouldRestoreTrail =
+        videoCaptureRef.current != null || restoreViewport != null;
       videoCaptureRef.current = null;
       setExporting(false);
       setExportEnding(false);
@@ -761,9 +770,16 @@ function TrackMap({
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       window.setTimeout(() => setExportMessage(null), 4000);
-      if (hadCapture) {
+
+      if (!shouldRestoreTrail) {
+        restoreViewport?.();
+      } else {
         const live = map.current;
-        chaseRef.current.stop({ silent: true });
+        if (live) {
+          restoreOverviewLine(live);
+          restoreSelectedHighlight(live);
+        }
+        chaseRef.current.stop({ silent: true, keepHighlight: true });
         setChaseRunId(null);
         setPlaybackSnap(null);
         if (live) {
@@ -771,6 +787,34 @@ function TrackMap({
           restoreSelectedHighlight(live);
           if (!view3dRef.current) clearMapTerrain(live);
         }
+
+        const restore = restoreViewport;
+        const gen = ++trailRestoreGenRef.current;
+        void (async () => {
+          restore?.();
+          const m = map.current;
+          if (!m) return;
+          try {
+            await waitForMapIdle(m, 1500);
+          } catch {
+            /* ignore */
+          }
+          await new Promise<void>((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => r()))
+          );
+          if (trailRestoreGenRef.current !== gen || map.current !== m) return;
+          // Clear animKey so updateRoutes cannot early-return while orbit runs.
+          animKeyRef.current = null;
+          orbitRef.current.stop();
+          updateRoutesRef.current();
+          setTrailRestoreGen(gen);
+          window.setTimeout(() => {
+            if (trailRestoreGenRef.current !== gen) return;
+            animKeyRef.current = null;
+            orbitRef.current.stop();
+            updateRoutesRef.current();
+          }, PLAYBACK_LAYOUT_EXIT_RESIZE_MS + 80);
+        })();
       }
     }
   };
@@ -781,6 +825,18 @@ function TrackMap({
       videoCaptureRef.current = null;
     };
   }, []);
+
+  // After export: rebuild chase-highlight via updateRoutes once chasing is false
+  // in the committed tree (avoids settle/orbit early-return wiping the trail).
+  useLayoutEffect(() => {
+    if (trailRestoreGen === 0 || chasing) return;
+    if (!mapReady.current) return;
+    const m = map.current;
+    if (!m?.isStyleLoaded()) return;
+    animKeyRef.current = null;
+    orbitRef.current.stop();
+    updateRoutesRef.current();
+  }, [trailRestoreGen, chasing]);
 
   // Clip shell eases height; parent drops is-play-sized after settle.
   // Match RouteMap: wait settle, then exit-resize + one fitMapToSelectedRoute (activity-switch feel).

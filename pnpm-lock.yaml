@@ -33,8 +33,8 @@ dependencies:
     specifier: ^3.23.0
     version: 3.23.0
   mediabunny:
-    specifier: ^1.62.1
-    version: 1.62.1
+    specifier: ^1.65.0
+    version: 1.65.0
   rc-virtual-list:
     specifier: ^3.19.2
     version: 3.19.2(react-dom@19.2.5)(react@19.2.5)
@@ -2680,8 +2680,8 @@ packages:
     resolution: {integrity: sha512-GaqWWShW4kv/G9IEucWScBx9G1/vsFZZJUO+tD26M8J8z3Kw5RDQjaoZe03YAClgeS/SWPOcb4nkFBTEi5DUEA==}
     dev: false
 
-  /mediabunny@1.62.1:
-    resolution: {integrity: sha512-lYzeerDwo9QLhBCipqQDXOSV7InvaIFplllZQviPO5rPwH+IUr8M1uvumk1olIUgMRGkPiInRriv25WFErUgMw==}
+  /mediabunny@1.65.0:
+    resolution: {integrity: sha512-TNnDNOmD5Fme4rwMGWuNv485a9iQwd9lgw88PI9zQ0FMnzEUoo6EJpG7ZhdJ2iwZFWo8AzNkP1KPq5IAHaktKw==}
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13

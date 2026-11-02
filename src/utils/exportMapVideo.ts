@@ -5,6 +5,9 @@
  * Map frames are copied synchronously; stats use canvas text (no html-to-image).
  */
 
+import type { Map as MapboxMap } from 'mapbox-gl';
+import { waitForMapIdle } from './mapRouteFit';
+
 export const MAP_VIDEO_MAX_DURATION_MS = 20_000;
 export const MAP_VIDEO_MAX_WIDTH = 1920;
 /** Common phone share size (TikTok / Reels / Shorts Full HD vertical). */
@@ -92,6 +95,251 @@ export function phoneChaseZoomOutExtra(cssW: number, cssH: number): number {
  * Print/static-style credit (docs.mapbox.com/help/dive-deeper/attribution).
  * Must be legible; size/color may match the theme — not a large watermark.
  */
+
+/** Cap export backing-store DPR / edge so WebGL stays within common limits. */
+const MAP_VIDEO_MAX_PIXEL_RATIO = 2;
+const MAP_VIDEO_MAX_BUFFER_EDGE = 4096;
+/**
+ * Mild supersample when native CSS is smaller than the encode frame.
+ * Phone mode already sizes the map CSS to 1080×1920 — forcing 1.5× DPR on top
+ * makes a ~1620×2880 WebGL buffer and is a common source of export jank.
+ */
+const MAP_VIDEO_SUPERSAMPLE = 1.5;
+const MAP_VIDEO_PHONE_SUPERSAMPLE = 1;
+
+type MapVideoViewportTarget = Pick<
+  MapboxMap,
+  'resize' | 'getCanvas' | 'getContainer' | 'triggerRepaint' | 'once'
+>;
+
+export type PrepareMapVideoViewportOptions = {
+  sizeMode: MapVideoSizeMode;
+  maxWidth?: number;
+  /** Idle wait after resize so tiles catch up (ms). */
+  idleTimeoutMs?: number;
+};
+
+export type PreparedMapVideoViewport = {
+  restore: () => void;
+  /**
+   * Pass to chase setZoomOutExtra. Negative zooms in.
+   * Compensates larger CSS box + matches prior phone cover framing.
+   */
+  chaseZoomOutExtra: number;
+  targetWidth: number;
+  targetHeight: number;
+};
+
+/**
+ * Resize the live Mapbox container so its WebGL drawingBuffer matches the
+ * export frame (phone: 1080×1920 CSS; native: same aspect, width capped), then
+ * wait for idle. Prefer this over cover-upscaling a small on-screen buffer.
+ * Returns restore() plus chaseZoomOutExtra so route framing stays like before.
+ */
+export async function prepareMapVideoViewport(
+  map: MapVideoViewportTarget,
+  opts: PrepareMapVideoViewportOptions
+): Promise<PreparedMapVideoViewport> {
+  const container = map.getContainer();
+  const canvas = map.getCanvas();
+  const cssW = Math.max(2, container.clientWidth || canvas.clientWidth || 2);
+  const cssH = Math.max(2, container.clientHeight || canvas.clientHeight || 2);
+  const maxWidth = opts.maxWidth ?? MAP_VIDEO_MAX_WIDTH;
+
+  let targetW: number;
+  let targetH: number;
+  if (opts.sizeMode === 'phone') {
+    targetW = MAP_VIDEO_PHONE_WIDTH;
+    targetH = MAP_VIDEO_PHONE_HEIGHT;
+  } else {
+    // Native: keep on-screen aspect; CSS width capped. Capture still uses
+    // buffer pixels (CSS×DPR) — no phone letterbox/cover.
+    const limited = Math.min(cssW, maxWidth);
+    const scale = limited / cssW;
+    targetW = evenSize(limited);
+    targetH = evenSize(cssH * scale);
+  }
+
+  // Framing: Mapbox zoom is geographic; a larger CSS box at the same zoom shows
+  // more ground (route looks smaller). Chase uses absolute zoom (~13.9 − extra).
+  // Phone previously cover-cropped then applied phoneChaseZoomOutExtra — match that.
+  let chaseZoomOutExtra = 0;
+  if (opts.sizeMode === 'phone') {
+    const cover = Math.max(targetW / cssW, targetH / cssH);
+    chaseZoomOutExtra =
+      phoneChaseZoomOutExtra(cssW, cssH) - Math.log2(Math.max(cover, 1e-6));
+  } else if (cssW > 2) {
+    // Preserve horizontal geographic span when CSS width changes.
+    chaseZoomOutExtra = -Math.log2(Math.max(targetW / cssW, 1e-6));
+    if (Math.abs(chaseZoomOutExtra) < 0.02) chaseZoomOutExtra = 0;
+  }
+
+  const parent = container.parentElement;
+  const slotW = parent?.clientWidth || cssW;
+  const slotH = parent?.clientHeight || cssH;
+
+  const prev = {
+    width: container.style.width,
+    height: container.style.height,
+    maxWidth: container.style.maxWidth,
+    maxHeight: container.style.maxHeight,
+    minWidth: container.style.minWidth,
+    minHeight: container.style.minHeight,
+    transform: container.style.transform,
+    transformOrigin: container.style.transformOrigin,
+    parentOverflow: parent?.style.overflow ?? '',
+  };
+
+  const currentDpr =
+    typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const edgeCap = MAP_VIDEO_MAX_BUFFER_EDGE / Math.max(targetW, targetH, 1);
+  // Phone CSS is already 1080x1920 (= encode size). Force 1x backing store so a
+  // retina laptop does not build a 2160x3840 WebGL buffer just for export.
+  let dprNeeded: number;
+  if (opts.sizeMode === 'phone') {
+    dprNeeded = MAP_VIDEO_PHONE_SUPERSAMPLE;
+  } else {
+    dprNeeded = Math.min(
+      MAP_VIDEO_MAX_PIXEL_RATIO,
+      Math.max(1, edgeCap),
+      Math.max(currentDpr, MAP_VIDEO_SUPERSAMPLE)
+    );
+  }
+  let dprOverridden = false;
+  // Chromium/Edge expose devicePixelRatio as an own window property. Overwriting
+  // then Reflect.deleteProperty permanently removes it (undefined), which freezes
+  // Mapbox painting after phone export. Save + restore the descriptor instead.
+  const previousDprDescriptor =
+    typeof window !== 'undefined'
+      ? Object.getOwnPropertyDescriptor(window, 'devicePixelRatio')
+      : undefined;
+
+  const restoreDpr = () => {
+    if (!dprOverridden) return;
+    dprOverridden = false;
+    const installFallback = () => {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        configurable: true,
+        enumerable: true,
+        get: () => currentDpr,
+      });
+    };
+    try {
+      if (previousDprDescriptor) {
+        Object.defineProperty(
+          window,
+          'devicePixelRatio',
+          previousDprDescriptor
+        );
+      } else {
+        Reflect.deleteProperty(window, 'devicePixelRatio');
+      }
+      if (!(
+        typeof window.devicePixelRatio === 'number' &&
+        Number.isFinite(window.devicePixelRatio) &&
+        window.devicePixelRatio > 0
+      )) {
+        installFallback();
+      }
+    } catch {
+      try {
+        installFallback();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  if (Math.abs(dprNeeded - currentDpr) > 0.05) {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      enumerable: true,
+      get: () => dprNeeded,
+    });
+    dprOverridden = true;
+  }
+
+  container.style.width = `${targetW}px`;
+  container.style.height = `${targetH}px`;
+  container.style.maxWidth = `${targetW}px`;
+  container.style.maxHeight = `${targetH}px`;
+  container.style.minWidth = `${targetW}px`;
+  container.style.minHeight = `${targetH}px`;
+
+  if (parent) parent.style.overflow = 'hidden';
+  const fit = Math.min(slotW / targetW, slotH / targetH, 1);
+  if (fit < 0.999) {
+    container.style.transformOrigin = 'top left';
+    container.style.transform = `scale(${fit})`;
+  }
+
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    container.style.width = prev.width;
+    container.style.height = prev.height;
+    container.style.maxWidth = prev.maxWidth;
+    container.style.maxHeight = prev.maxHeight;
+    container.style.minWidth = prev.minWidth;
+    container.style.minHeight = prev.minHeight;
+    container.style.transform = prev.transform;
+    container.style.transformOrigin = prev.transformOrigin;
+    if (parent) parent.style.overflow = prev.parentOverflow;
+    restoreDpr();
+    try {
+      // Map.resize() no-ops when CSS width/height are unchanged, so a DPR-only
+      // restore would leave a 1x buffer and a frozen painter. Nudge 1px then
+      // restore to force _resizeCanvas with the revived devicePixelRatio.
+      const cssW = Math.max(
+        2,
+        container.clientWidth || canvas.clientWidth || 2
+      );
+      const cssH = Math.max(
+        2,
+        container.clientHeight || canvas.clientHeight || 2
+      );
+      const dprNow =
+        typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      const wantW = Math.max(1, Math.floor(cssW * dprNow));
+      const wantH = Math.max(1, Math.floor(cssH * dprNow));
+      map.resize();
+      if (canvas.width !== wantW || canvas.height !== wantH) {
+        const prevW = container.style.width;
+        container.style.width = `${cssW + 1}px`;
+        try {
+          map.resize();
+        } finally {
+          container.style.width = prevW;
+          map.resize();
+        }
+      }
+      map.triggerRepaint?.();
+    } catch {
+      /* map may already be gone */
+    }
+  };
+
+  try {
+    map.resize();
+    map.triggerRepaint?.();
+  } catch (err) {
+    restore();
+    throw err;
+  }
+
+  await waitForMapIdle(map as MapboxMap, opts.idleTimeoutMs ?? 2500);
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  return {
+    restore,
+    chaseZoomOutExtra,
+    targetWidth: targetW,
+    targetHeight: targetH,
+  };
+}
+
 const MAP_VIDEO_ATTRIBUTION = '© Mapbox, © OpenStreetMap';
 
 function pickMp4MimeType(): string {
@@ -503,8 +751,10 @@ export async function startMapVideoCapture(
   if (sizeMode === 'phone') {
     outW = MAP_VIDEO_PHONE_WIDTH;
     outH = MAP_VIDEO_PHONE_HEIGHT;
+    // After prepareMapVideoViewport the CSS box is already 1080×1920 → identity fit.
     mapFit = fitCover(cssW, cssH, outW, outH);
     coverScale = Math.max(outW / cssW, outH / cssH);
+    if (Math.abs(coverScale - 1) < 0.03) coverScale = 1;
   } else {
     // Keep the WebGL buffer's pixels (retina) up to 1920px wide.
     const bufW = src.width || cssW;
@@ -605,8 +855,9 @@ function makePainters(shared: CaptureShared) {
       ctx.fillStyle = '#0b0d10';
       ctx.fillRect(0, 0, outW, outH);
     }
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    const upscaling = src.width + 1 < mapFit.w || src.height + 1 < mapFit.h;
+    ctx.imageSmoothingEnabled = !upscaling;
+    if (!upscaling) ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(src, mapFit.x, mapFit.y, mapFit.w, mapFit.h);
   };
 

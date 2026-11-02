@@ -14,7 +14,7 @@
     "gcoord": "^1.0.7",
     "html-to-image": "^1.11.13",
     "mapbox-gl": "^3.23.0",
-    "mediabunny": "^1.62.1",
+    "mediabunny": "^1.65.0",
     "rc-virtual-list": "^3.19.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

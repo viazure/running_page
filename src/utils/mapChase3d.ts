@@ -406,15 +406,21 @@ export function setChaseHighlightLine(
       coordinates: coords.length >= 2 ? coords : [],
     },
   };
-  if (m.getSource(HIGHLIGHT_SOURCE)) {
-    (m.getSource(HIGHLIGHT_SOURCE) as mapboxgl.GeoJSONSource).setData(data);
-    if (m.getLayer(HIGHLIGHT_LAYER)) {
-      m.setPaintProperty(HIGHLIGHT_LAYER, 'line-color', color);
-      m.setPaintProperty(HIGHLIGHT_LAYER, 'line-width', lineWidth);
-    }
+  const src = m.getSource(HIGHLIGHT_SOURCE) as
+    mapboxgl.GeoJSONSource | undefined;
+  if (src) {
+    src.setData(data);
+  } else {
+    m.addSource(HIGHLIGHT_SOURCE, { type: 'geojson', data });
+  }
+  if (m.getLayer(HIGHLIGHT_LAYER)) {
+    m.setPaintProperty(HIGHLIGHT_LAYER, 'line-color', color);
+    m.setPaintProperty(HIGHLIGHT_LAYER, 'line-width', lineWidth);
+    m.setPaintProperty(HIGHLIGHT_LAYER, 'line-opacity', 1);
     return;
   }
-  m.addSource(HIGHLIGHT_SOURCE, { type: 'geojson', data });
+  // Source can survive a partial teardown / style glitch without its layer —
+  // never return early or the trail stays invisible with data and no paint.
   m.addLayer({
     id: HIGHLIGHT_LAYER,
     type: 'line',
@@ -1149,7 +1155,8 @@ export function createMapChaseController() {
   };
 
   const setZoomOutExtra = (extra: number) => {
-    zoomOutExtra = Math.max(0, extra);
+    // Negative = zoom in (needed when export CSS box is larger than on-screen).
+    zoomOutExtra = Math.min(4, Math.max(-4, extra));
     if (!session || !running) return;
     if (cameraMode === '2d') {
       currentZoom = zoom2dInit();

@@ -65,7 +65,7 @@ import {
   downloadBlob,
   MapVideoAbortedError,
   MapVideoUnsupportedError,
-  phoneChaseZoomOutExtra,
+  prepareMapVideoViewport,
   startMapVideoCapture,
   type MapVideoCapture,
 } from '@/utils/exportMapVideo';
@@ -143,6 +143,10 @@ export function RouteMap({
   const orbitRef = useRef(createMapOrbitController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
   const [chaseRunId, setChaseRunId] = useState<string | null>(null);
+  /** Bumped after video export so a layout effect can rebuild the selected
+   *  trail AFTER chasing→false effects (settle resize) have committed. */
+  const trailRestoreGenRef = useRef(0);
+  const [trailRestoreGen, setTrailRestoreGen] = useState(0);
   const [playbackSnap, setPlaybackSnap] = useState<PlaybackProgress | null>(
     null
   );
@@ -579,14 +583,16 @@ export function RouteMap({
     }
     const map = mapRef.current;
     if (!map || !chasing) return;
+    let restoreViewport: (() => void) | undefined;
     try {
-      // Phone 9:16 cover reads closer — pull 2D chase out for the clip only.
-      const canvas = map.getCanvas();
-      chaseRef.current.setZoomOutExtra(
-        opts.sizeMode === 'phone'
-          ? phoneChaseZoomOutExtra(canvas.clientWidth, canvas.clientHeight)
-          : 0
-      );
+      // Render the map at the export frame size (e.g. 1080×1920) so WebGL
+      // pixels match the file — no cover-upscale of a small on-screen buffer.
+      const prepared = await prepareMapVideoViewport(map, {
+        sizeMode: opts.sizeMode,
+      });
+      restoreViewport = prepared.restore;
+      // Compensate larger export CSS box so route fill matches prior cover framing.
+      chaseRef.current.setZoomOutExtra(prepared.chaseZoomOutExtra);
       // Always restart from the beginning for a clean export clip.
       chaseRef.current.seek(0);
       if (chaseRef.current.isPaused()) chaseRef.current.resume();
@@ -688,7 +694,11 @@ export function RouteMap({
         setExportMessage(t('exportVideoFailed'));
       }
     } finally {
-      const hadCapture = videoCaptureRef.current != null;
+      // Export grows CSS/DPR; restore + setChaseRunId(null) then settle-resize
+      // can leave selected invisible. Rebuild via updateRoutes (pre-chase path)
+      // after viewport idle AND again after React chasing→false effects.
+      const shouldRestoreTrail =
+        videoCaptureRef.current != null || restoreViewport != null;
       videoCaptureRef.current = null;
       setExporting(false);
       setExportEnding(false);
@@ -696,15 +706,45 @@ export function RouteMap({
       chaseRef.current.setZoomOutExtra(0);
       chaseRef.current.setStrokeScale(1);
       window.setTimeout(() => setExportMessage(null), 4000);
-      if (hadCapture) {
+
+      if (!shouldRestoreTrail) {
+        restoreViewport?.();
+      } else {
+        const live = mapRef.current;
+        if (live?.getLayer('selected')) {
+          live.setPaintProperty('selected', 'line-opacity', 0.9);
+        }
         chaseRef.current.stop({ silent: true });
         setChaseRunId(null);
         setPlaybackSnap(null);
-        const live = mapRef.current;
-        if (live) {
-          restoreSelectedLine(live);
-          if (!view3dRef.current) clearMapTerrain(live);
-        }
+        if (live && !view3dRef.current) clearMapTerrain(live);
+
+        const restore = restoreViewport;
+        const gen = ++trailRestoreGenRef.current;
+        void (async () => {
+          restore?.();
+          const m = mapRef.current;
+          if (!m) return;
+          try {
+            await waitForMapIdle(m, 1500);
+          } catch {
+            /* ignore */
+          }
+          await new Promise<void>((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => r()))
+          );
+          if (trailRestoreGenRef.current !== gen || mapRef.current !== m)
+            return;
+          // Same path as selecting an activity (pre-chase): full layer rebuild.
+          orbitRef.current.stop();
+          updateRoutesRef.current();
+          setTrailRestoreGen(gen);
+          window.setTimeout(() => {
+            if (trailRestoreGenRef.current !== gen) return;
+            orbitRef.current.stop();
+            updateRoutesRef.current();
+          }, PLAYBACK_LAYOUT_EXIT_RESIZE_MS + 80);
+        })();
       }
     }
   };
@@ -715,6 +755,16 @@ export function RouteMap({
       videoCaptureRef.current = null;
     };
   }, []);
+
+  // After export: chasing has flipped false and settle effect may have resized.
+  // Rebuild selected trail on the post-commit tree (updateRoutes = pre-chase path).
+  useLayoutEffect(() => {
+    if (trailRestoreGen === 0 || chasing) return;
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    orbitRef.current.stop();
+    updateRoutesRef.current();
+  }, [trailRestoreGen, chasing]);
 
   // Keep play-sized surface for expand AND collapse; outer clips. Drop size then
   // resize on exit so Mapbox/ResizeObserver do not blank mid-animation.
@@ -827,6 +877,12 @@ export function RouteMap({
       if (!map?.isStyleLoaded()) return;
       styleIdleRef.current = true;
       if (chaseRef.current.isAnimating()) return;
+      // routes-only is not enough: export/DPR resize can drop `selected`
+      // while overview `routes` survives — previous check skipped rebuild.
+      if (selectedRef.current && !map.getLayer('selected')) {
+        updateRoutesRef.current();
+        return;
+      }
       if (hasRouteLayers(map)) return;
       updateRoutesRef.current();
     };
