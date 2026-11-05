@@ -255,6 +255,7 @@
 /* Day hero: larger ink number first (mock hero-metric scale, card-safe) */
 .statHeroDay {
   margin: 0;
+  white-space: nowrap;
   font-family: inherit;
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings:

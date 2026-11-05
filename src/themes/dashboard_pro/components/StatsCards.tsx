@@ -3,6 +3,26 @@ import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
 import { GOALS, DEFAULT_GOAL } from '@/config';
+/** Soften large year-over-year drops so the card does not feel punitive. */
+function formatYearYoY(
+  yearDiff: number,
+  unit: 'time' | 'distance',
+  locale: string,
+  formatHours: (s: number) => string,
+  vsLastYear: string
+): string {
+  const arrow = yearDiff >= 0 ? '↗' : '↘';
+  if (unit === 'time') {
+    return `${arrow} ${formatHours(Math.abs(yearDiff))} ${vsLastYear}`;
+  }
+  const absM = Math.abs(yearDiff);
+  // >=100 km drop -> weak copy (no giant negative km)
+  if (yearDiff < 0 && absM >= 100_000) {
+    return locale === 'zh' ? '少于去年同期' : 'Behind last year';
+  }
+  return `${arrow} ${formatDistance(absM)} km ${vsLastYear}`;
+}
+
 
 function formatWeekRange(start: Date, end: Date, locale: string) {
   if (locale === 'zh') {
@@ -438,14 +458,16 @@ export function StatsCards({
             </span>
             <span>{formatHours(yearSeconds)}</span>
           </div>
-          <p
+                    <p
             className={`mt-1.5 text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
           >
-            {yearDiff >= 0 ? '↗' : '↘'}{' '}
-            {goal.unit === 'time'
-              ? formatHours(Math.abs(yearDiff))
-              : `${formatDistance(Math.abs(yearDiff))} km`}{' '}
-            {t('vsLastYear')}
+            {formatYearYoY(
+              yearDiff,
+              goal.unit,
+              locale,
+              formatHours,
+              t('vsLastYear')
+            )}
           </p>
         </div>
 
@@ -863,14 +885,16 @@ export function StatsCards({
           </span>
           <span>{formatHours(yearSeconds)}</span>
         </div>
-        <p
+                <p
           className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
         >
-          {yearDiff >= 0 ? '↗' : '↘'}{' '}
-          {goal.unit === 'time'
-            ? formatHours(Math.abs(yearDiff))
-            : `${formatDistance(Math.abs(yearDiff))} km`}{' '}
-          <span className="hidden sm:inline">{t('vsLastYear')}</span>
+          {formatYearYoY(
+            yearDiff,
+            goal.unit,
+            locale,
+            formatHours,
+            t('vsLastYear')
+          )}
         </p>
       </div>
 

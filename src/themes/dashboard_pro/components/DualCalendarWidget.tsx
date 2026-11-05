@@ -421,6 +421,8 @@ export function DualCalendarWidget({
               <button
                 type="button"
                 onClick={goToCurrentMonth}
+                aria-label={locale === 'zh' ? '回本月' : 'This month'}
+                title={locale === 'zh' ? '回本月' : 'This month'}
                 className="cursor-pointer rounded-md px-1.5 text-[11px] font-medium whitespace-nowrap text-[var(--color-text)] hover:bg-[var(--color-card)]"
               >
                 {currentMonthLabel}
