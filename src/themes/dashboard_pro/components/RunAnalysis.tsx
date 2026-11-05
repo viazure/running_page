@@ -268,7 +268,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] font-semibold">
-          {mode === 'km' ? tr('分段', 'Splits') : tr('设备圈', 'Laps')}
+          {mode === 'km' ? tr('分段', 'Splits') : tr('设备圈', 'Device laps')}
         </p>
         {hasLaps && data.splits.length ? (
           <div className="flex rounded-full bg-[var(--color-sunken)] p-0.5 text-[11px]">
@@ -286,7 +286,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
               >
                 {m === 'km'
                   ? tr('每公里', 'Per km')
-                  : `${tr('圈', 'Laps')} ${data.laps.length}`}
+                  : tr('设备圈', 'Device laps')}
               </button>
             ))}
           </div>

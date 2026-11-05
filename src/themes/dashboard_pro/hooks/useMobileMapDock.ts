@@ -23,18 +23,21 @@ const HANDOFF_MS = 100;
 /**
  * When the collapsed map FAB may appear.
  * - Still below the fold → hide (homepage must not flash「显示轨迹」).
- * - Fully above the header → show (scrolled past).
- * - Midpoint at/above the header while bottom still peeks → show
- *   (lower half in the visible area).
+ * - Fully above the header → hide (list/calendar/other regions must not
+ *   keep「显示轨迹」after the map has left the viewport).
+ * - Intersecting the content viewport AND the map top has reached the
+ *   lower half of the screen → show (map entered lower half / visible area).
  */
 function mapDockFabVisible(rect: DOMRectReadOnly): boolean {
   const viewTop = HEADER_INSET_PX;
   const viewBottom = typeof window !== 'undefined' ? window.innerHeight : 0;
   if (rect.width < 1 || rect.height < 1 || viewBottom < 1) return false;
-  if (rect.top >= viewBottom) return false;
-  if (rect.bottom <= viewTop) return true;
-  const mid = rect.top + rect.height * 0.5;
-  return mid <= viewTop;
+  // No intersection with the content viewport.
+  if (rect.top >= viewBottom || rect.bottom <= viewTop) return false;
+  // Require the map to have entered the lower half of the screen so the FAB
+  // does not appear while the user is still on cards above the map.
+  const lowerHalfLine = viewTop + (viewBottom - viewTop) * 0.5;
+  return rect.top <= lowerHalfLine;
 }
 
 /**
@@ -62,8 +65,9 @@ type PinBox = { top: number; left: number; width: number; height: number };
 /**
  * Mobile map dock — Option A (two states, no sticky while expanded).
  *
- * Collapsed: map is normal in-flow. FAB when scrolled past / lower half
- * peeks under the header — not while the slot is still below the fold.
+ * Collapsed: map is normal in-flow. FAB when the map has entered the
+ * lower half of the viewport — not below the fold, and not after it has
+ * fully left (list/calendar must not keep the FAB).
  * Expanded: slide-down into `fixed top-20`; stays fixed until FAB
  * collapse (no sticky reseat). Collapse slides out (to slot if on-screen,
  * otherwise up), then releaseToFlow. Spacer keeps document height.
@@ -374,9 +378,9 @@ export function useMobileMapDock(
 
   /**
    * Slot fully away vs in view — drives spacer while expanded / away.
-   * FAB uses mapDockFabVisible (lower-half peek / scrolled past; not
-   * below-the-fold). Root top inset = sticky header. Never clears
-   * pinMotion === 'in'.
+   * FAB uses mapDockFabVisible (in-viewport after entering lower half;
+   * hide below-fold and after fully away). Root top inset = sticky
+   * header. Never clears pinMotion === 'in'.
    */
   useEffect(() => {
     if (!active) {
@@ -448,6 +452,31 @@ export function useMobileMapDock(
 
     return () => observer.disconnect();
   }, [active, layoutKey, slotRef, clearPinInline]);
+
+  // Keep FAB visibility in sync on scroll/resize — IO thresholds alone can
+  // miss lower-half enter/leave while the slot stays "intersecting".
+  useEffect(() => {
+    if (!active) return;
+    let raf = 0;
+    const syncFab = () => {
+      raf = 0;
+      const slot = slotRef.current;
+      if (!slot) return;
+      setFabVisible(mapDockFabVisible(slot.getBoundingClientRect()));
+    };
+    const onScrollOrResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(syncFab);
+    };
+    syncFab();
+    window.addEventListener('scroll', onScrollOrResize, { passive: true });
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScrollOrResize);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [active, layoutKey, slotRef]);
 
   // Expanded: keep fixed dock box in sync (always pinned — Option A).
   useEffect(() => {
