@@ -1,5 +1,7 @@
 /** Capture an element to PNG data URL (html-to-image). */
 
+import { mapHardcodedSvgFill } from './svgThemeFills';
+
 /** Resolve a CSS color (incl. color-mix / vars) to a concrete rgb/hex string. */
 function resolveCssColor(value: string, fallback: string): string {
   const v = value.trim();
@@ -74,15 +76,7 @@ function bakeThemeSvgFills(root: HTMLElement): {
     isDark ? '#0f1218' : '#f7f6f3'
   );
 
-  const fillMap: Record<string, string> = {
-    '#222222': card,
-    '#222': card,
-    '#1a1a1a': card,
-    '#444444': border,
-    '#444': border,
-    '#555555': border,
-    '#4dd2ff': accent,
-  };
+  const palette = { card, border, accent, muted, run, special2 };
 
   const backups: FillBackup[] = [];
   const remember = (el: Element) => {
@@ -100,26 +94,8 @@ function bakeThemeSvgFills(root: HTMLElement): {
 
   root.querySelectorAll('[fill]').forEach((node) => {
     const raw = (node.getAttribute('fill') || '').trim();
-    const key = raw.toLowerCase();
-    if (fillMap[raw]) {
-      setFill(node, fillMap[raw]);
-      return;
-    }
-    if (fillMap[key]) {
-      setFill(node, fillMap[key]);
-      return;
-    }
-    if (raw === 'yellow' || key === '#ffff00') {
-      setFill(node, run);
-      return;
-    }
-    if (raw === 'red' || key === '#ff0000') {
-      setFill(node, special2);
-      return;
-    }
-    if (raw === 'gray' || raw === 'grey') {
-      setFill(node, muted);
-    }
+    const mapped = mapHardcodedSvgFill(raw, palette);
+    if (mapped) setFill(node, mapped);
   });
 
   root.querySelectorAll('.svg-color-bg').forEach((n) => setFill(n, card));

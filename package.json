@@ -42,7 +42,8 @@
     "lint": "eslint src --ext .ts,.tsx --fix",
     "check": "prettier --check \"src/main.tsx\" \"src/**/*.{css,module.css,json,ts,tsx}\" \"*.{yaml,json,ts}\" \"assets/index.tsx\" \"eslint.config.mjs\"",
     "format": "prettier --write \"src/main.tsx\" \"src/**/*.{css,module.css,json,ts,tsx}\" \"*.{yaml,json,ts}\" \"assets/index.tsx\" \"eslint.config.mjs\"",
-    "ci": "pnpm run format && pnpm run lint && pnpm run build"
+    "ci": "pnpm run format && pnpm run lint && pnpm run build",
+    "test": "node --experimental-strip-types --test src/themes/classic/components/ActivityList/localizeMolTitle.test.ts src/utils/svgThemeFills.test.ts"
   },
   "engineStrict": true,
   "browserslist": "defaults, not ie 11",

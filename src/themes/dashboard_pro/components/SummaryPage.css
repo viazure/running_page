@@ -44,6 +44,13 @@
   --svg-color-active-cell: var(--color-accent);
   --svg-special-color: var(--color-run);
   --svg-special-color2: var(--color-accent);
+
+  /*
+   * Desktop Life SVG dvh fallback chrome: page header (~52) + period tabs (~40)
+   * + filter/year row (~48) + root padding (~36) + gaps (~24) ≈ 200px → 12.5rem.
+   * Prefer flex max-height:100%; this only kicks in if the height chain is soft.
+   */
+  --summary-life-viewport-chrome: 12.5rem;
 }
 
 .summary-layout {
@@ -71,13 +78,12 @@
 }
 
 .summary-life-classic {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
-}
-
-.summary-life-classic .activityList,
-.summary-life-classic [class*='activityList'] {
-  height: 100%;
+  color: var(--color-text);
+  background: transparent;
 }
 
 .scrollbar-none {
@@ -87,7 +93,8 @@
   display: none;
 }
 
-/* Month-of-Life / year SVGs: follow dashboard_pro light/dark tokens */
+/* Month-of-Life / year SVGs: follow dashboard_pro light/dark tokens.
+ * Targets stable global SVG class hooks / fill attrs (not CSS-module locals). */
 .summary-life-classic .svg-color-bg,
 .summary-life-classic svg [fill='#222222'],
 .summary-life-classic svg [fill='#222'],
@@ -116,130 +123,19 @@
 .summary-life-classic .svg-special-color2 {
   fill: var(--svg-special-color2, var(--color-accent));
 }
-.summary-life-classic .activityList,
-.summary-life-classic [class*='activityList'] {
-  background-color: var(--color-bg) !important;
-  color: var(--color-text);
-}
-.summary-life-classic {
-  color: var(--color-text);
-  background: transparent;
-}
 
-/* Day embed: clearer filter / card regions under warm-paper shell */
-.summary-day-classic [class*='filterContainer'] {
-  gap: 8px;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.summary-day-classic [class*='chipRow'] {
-  gap: 6px;
-}
-
-.summary-day-classic [class*='activityCard'] {
-  border-radius: var(--radius-xl, 8px);
-}
-
-.summary-day-classic [class*='rowContainer'] {
-  gap: 14px !important;
-  padding-top: 8px;
-  padding-bottom: 12px;
-}
-
-/* Life: tighten vertical empty space — hug SVG, less dead air */
-.summary-life-classic {
-  display: flex;
-  flex-direction: column;
-}
-
-.summary-life-classic [class*='activityList'] {
-  justify-content: flex-start !important;
-}
-
-.summary-life-classic [class*='filterContainer'] {
-  margin-bottom: 8px !important;
-}
-
-.summary-life-classic [class*='lifeContainer'] {
-  flex: 1 1 auto;
-  justify-content: flex-start !important;
-  align-items: stretch !important;
-  padding-top: 0 !important;
-  padding-bottom: 8px !important;
-}
-
-.summary-life-classic [class*='yearSelector'] {
-  margin-bottom: 8px !important;
-  padding-top: 0 !important;
-  padding-bottom: 4px !important;
-  justify-content: flex-start !important;
-}
-
-.summary-life-classic [class*='lifeSvgWrap'] {
-  justify-content: flex-start !important;
-  align-items: flex-start;
-  margin: 0 !important;
-}
-
-.summary-life-classic [class*='yearSummarySvg'],
-.summary-life-classic [class*='lifeContainer'] svg {
-  width: 100% !important;
-  max-width: 100% !important;
-  height: auto !important;
-  display: block;
-}
-
-/* Mobile Life: hug the SVG — flex-grow was leaving a tall empty band under the chart */
+/* Mobile Life: allow vertical scroll inside the host shell */
 @media (max-width: 899px) {
   .summary-life-classic:not(.summary-day-classic) {
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] {
-    flex: 0 1 auto !important;
-  }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='lifeSvgWrap'] {
-    flex: 0 0 auto !important;
-  }
 }
 
-/* Desktop Life: fit Month-of-Life on one viewport (no vertical scroll) */
+/* Desktop Life: clip to the flex viewport (module owns SVG max-height) */
 @media (min-width: 900px) {
   .summary-life-classic:not(.summary-day-classic) {
     overflow: hidden;
-  }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='filterContainer'] {
-    flex-shrink: 0;
-  }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-    padding-bottom: 0 !important;
-  }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='lifeSvgWrap'] {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    width: 100%;
-    align-items: center !important;
-    justify-content: center !important;
-    overflow: hidden;
-  }
-
-  .summary-life-classic:not(.summary-day-classic) [class*='yearSummarySvg'],
-  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] svg {
-    width: auto !important;
-    max-width: 100% !important;
-    /* Prefer remaining flex box; dvh fallback if parent height chain is soft */
-    max-height: min(100%, calc(100dvh - 200px)) !important;
-    height: auto !important;
   }
 }
 

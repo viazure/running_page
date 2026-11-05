@@ -683,3 +683,113 @@
   color: var(--color-summary-chip-fg, var(--color-muted));
   white-space: nowrap;
 }
+
+/* SummaryPage host wrappers — local module classes (no [class*=] substring hooks) */
+
+:global(.summary-day-classic) .filterContainer {
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+:global(.summary-day-classic) .chipRow {
+  gap: 6px;
+}
+
+:global(.summary-day-classic) .activityCard {
+  border-radius: var(--radius-xl, 8px);
+}
+
+:global(.summary-day-classic) .rowContainer {
+  gap: 14px !important;
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+
+:global(.summary-life-classic) .activityList {
+  justify-content: flex-start !important;
+  background-color: var(--color-bg) !important;
+  color: var(--color-text);
+}
+
+:global(.summary-life-classic) .filterContainer {
+  margin-bottom: 8px !important;
+}
+
+:global(.summary-life-classic) .lifeContainer {
+  flex: 1 1 auto;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  padding-top: 0 !important;
+  padding-bottom: 8px !important;
+}
+
+:global(.summary-life-classic) .yearSelector {
+  margin-bottom: 8px !important;
+  padding-top: 0 !important;
+  padding-bottom: 4px !important;
+  justify-content: flex-start !important;
+}
+
+:global(.summary-life-classic) .lifeSvgWrap {
+  justify-content: flex-start !important;
+  align-items: flex-start;
+  margin: 0 !important;
+}
+
+:global(.summary-life-classic) .yearSummarySvg,
+:global(.summary-life-classic) .lifeContainer :global(svg) {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+/* Mobile Life: hug the SVG — flex-grow was leaving a tall empty band under the chart */
+@media (max-width: 899px) {
+  :global(.summary-life-classic:not(.summary-day-classic)) .lifeContainer {
+    flex: 0 1 auto !important;
+  }
+
+  :global(.summary-life-classic:not(.summary-day-classic)) .lifeSvgWrap {
+    flex: 0 0 auto !important;
+  }
+}
+
+/* Desktop Life: fit Month-of-Life on one viewport (no vertical scroll) */
+@media (min-width: 900px) {
+  :global(.summary-life-classic:not(.summary-day-classic)) .filterContainer {
+    flex-shrink: 0;
+  }
+
+  :global(.summary-life-classic:not(.summary-day-classic)) .lifeContainer {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
+  }
+
+  :global(.summary-life-classic:not(.summary-day-classic)) .lifeSvgWrap {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100%;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden;
+  }
+
+  :global(.summary-life-classic:not(.summary-day-classic)) .yearSummarySvg,
+  :global(.summary-life-classic:not(.summary-day-classic))
+    .lifeContainer
+    :global(svg) {
+    width: auto !important;
+    max-width: 100% !important;
+    /* Prefer remaining flex box; dvh fallback uses --summary-life-viewport-chrome */
+    max-height: min(
+      100%,
+      calc(100dvh - var(--summary-life-viewport-chrome, 12.5rem))
+    ) !important;
+    height: auto !important;
+  }
+}
