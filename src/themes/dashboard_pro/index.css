@@ -10,38 +10,36 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-bg: #f4f5f7;
-  --color-card: #ffffff;
-  /* Nested blocks inside a card (progress troughs, pills, zebra rows) — needs
-     more contrast than --color-border now that borders are intentionally light. */
-  --color-sunken: #e9ebf0;
-  --color-border: #e4e7ec;
-  --color-text: #1a1d23;
-  --color-muted: #6b7280;
-  --color-run: #e8663d;
-  --color-all: #7b61d9;
-  --color-accent: #7b61d9;
+  /* Premium warm-paper tokens (design handoff 2026-11-02). */
+  --color-bg: #f7f6f3; /* wash */
+  --color-card: #ffffff; /* paper */
+  --color-sunken: #efece7; /* progress trough / nested wash */
+  --color-border: #e8e4de; /* line */
+  --color-text: #141414; /* ink */
+  --color-muted: #8a8680; /* mute */
+  --color-run: #c45c26; /* amber — heatmap/logo, not primary CTA */
+  --color-all: #5b4bdb;
+  --color-accent: #5b4bdb; /* purple emphasis */
+  --color-amber: #c45c26;
+  --color-amber-soft: #e8a87c;
+  --color-cell: #ede9e3;
 
-  /* Softer than Strava but tighter than Tailwind's stock scale. Overriding the
-     scale itself keeps every existing `rounded-*` call site in sync. */
-  --radius-xs: 0.1875rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
-  --radius-2xl: 0.75rem;
-  --radius-3xl: 1rem;
+  --radius-xs: 0.25rem; /* 4px — cells / tight */
+  --radius-sm: 0.375rem; /* 6px — small cards / wash */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: 0.5rem; /* 8px — align geekplux card feel */
+  --radius-xl: 0.5rem; /* 8px main cards (was 18 / handoff) */
+  --radius-2xl: 0.5rem;
+  --radius-3xl: 0.75rem;
 
   --shadow-card:
-    0 1px 2px -1px rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.05);
+    0 1px 2px rgba(20, 18, 13, 0.06), 0 8px 24px -4px rgba(20, 18, 13, 0.04);
   --shadow-card-hover:
-    0 2px 4px -2px rgb(16 24 40 / 0.08), 0 8px 20px -6px rgb(16 24 40 / 0.12);
+    0 1px 2px rgba(20, 18, 13, 0.08), 0 12px 28px -6px rgba(20, 18, 13, 0.08);
 
-  /* Latin UI prefers Segoe UI Variable (Win11) / SF Pro (macOS); CJK falls
-     through the modern Chinese faces before landing on Microsoft YaHei. */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI Variable Text',
-    'Segoe UI', Roboto, 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
+    'Noto Sans SC', 'PingFang SC', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI Variable Text', 'Segoe UI', Roboto, 'HarmonyOS Sans SC', 'MiSans',
     'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei UI',
     'Microsoft YaHei', sans-serif;
 }
@@ -53,8 +51,12 @@
   --color-border: #23272e;
   --color-text: #e6e8ec;
   --color-muted: #8b919c;
-  --color-run: #fb8a5c;
-  --color-all: #a78bfa;
+  --color-run: #e8a87c;
+  --color-all: #8b7cf0;
+  --color-accent: #8b7cf0;
+  --color-amber: #e8a87c;
+  --color-amber-soft: #f0c4a8;
+  --color-cell: #1b1f26;
 
   /* Drop shadows are invisible on dark surfaces — lift cards with a top
      highlight instead, and keep a real shadow only for the hover state. */
@@ -64,20 +66,20 @@
 }
 
 [data-filter='all'] {
-  --color-accent: #7b61d9;
+  --color-accent: #5b4bdb;
 }
 [data-filter='Run'] {
-  --color-accent: #e8663d;
+  --color-accent: #5b4bdb;
 }
 [data-filter='Ride'] {
   --color-accent: #4f7ce0;
 }
 
 .dark [data-filter='all'] {
-  --color-accent: #a78bfa;
+  --color-accent: #8b7cf0;
 }
 .dark [data-filter='Run'] {
-  --color-accent: #fb8a5c;
+  --color-accent: #8b7cf0;
 }
 .dark [data-filter='Ride'] {
   --color-accent: #7aa5f5;
@@ -143,6 +145,41 @@ body {
   background-color: color-mix(in srgb, var(--color-text) 45%, transparent);
 }
 
+/* Overview secondary metrics: Garmin-like gutters (open crosses, not boxed cells). */
+.ra-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ra-metric-cell {
+  position: relative;
+  min-width: 0;
+}
+
+/* Row rules — full-bleed under every cell of a non-final row. */
+.ra-metric-cell--ruled::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-border) 72%, transparent);
+  pointer-events: none;
+}
+
+/* Column ticks — short verticals that stop short of the row rules (open cross). */
+.ra-metric-cell--vdiv::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  right: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--color-border) 72%, transparent);
+  pointer-events: none;
+}
+
 /* Hide scrollbar while keeping overflow scroll (wheel / touch / trackpad). */
 @utility scrollbar-none {
   scrollbar-width: none;
@@ -169,3 +206,17 @@ body {
 
 /* Map dock enter/exit animates `top` in JS — never CSS transform on the map
    wrapper (Mapbox markers / projection break under transform). */
+
+/* Design-spec progress track (3px) */
+@utility progress-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #efece7;
+}
+@utility progress-track-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+}

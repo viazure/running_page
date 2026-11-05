@@ -27,7 +27,7 @@ function toDisplayType(type: string): 'Run' | 'Ride' | 'Hike' | 'Training' {
   return 'Training';
 }
 
-const EMPTY_CELL = 'var(--color-sunken)';
+const EMPTY_CELL = 'var(--color-cell, var(--color-sunken))';
 
 function accentScale(accent: string): string[] {
   return [
@@ -39,7 +39,7 @@ function accentScale(accent: string): string[] {
 }
 
 const TYPE_PALETTES: Record<string, string[]> = {
-  Run: accentScale('var(--color-run)'),
+  Run: accentScale('var(--color-amber, var(--color-run))'),
   Ride: accentScale('#4f7ce0'),
   Hike: accentScale('#22c55e'),
   Training: accentScale('#ec4899'),
@@ -303,7 +303,7 @@ export function ContributionHeatmap({
   }, [activities, selectedYear, isGym]);
 
   const gymTypeColors: Record<string, string> = {
-    WeightTraining: '#e8663d',
+    WeightTraining: 'var(--color-amber)',
     Workout: '#c026d3',
     StairStepper: '#4f7ce0',
     WaterSport: '#06b6d4',

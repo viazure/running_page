@@ -81,9 +81,10 @@ function MapFallback({
 }) {
   return (
     <div
-      className={`card flex items-center justify-center text-sm text-[var(--color-muted)] ${className}`}
+      className={`card flex flex-col items-center justify-center gap-1 px-4 text-center text-sm text-[var(--color-muted)] ${className}`}
     >
-      …
+      <span>地图暂时不可用</span>
+      <span className="text-[11px]">不影响本周进度与记录</span>
     </div>
   );
 }
@@ -93,11 +94,14 @@ function DashboardProContent({
   dark,
   filter,
   onNavigateHome,
+  onFabClearanceChange,
 }: {
   page: Page;
   dark: boolean;
   filter: 'all';
   onNavigateHome: () => void;
+  /** Mobile FAB clearance for the home footer (0 / one / two stacked). */
+  onFabClearanceChange?: (pad: 'none' | 'one' | 'two') => void;
 }) {
   const activities = getActivityData() as Activity[];
   const isUnlocked = usePrivacyUnlock();
@@ -152,6 +156,27 @@ function DashboardProContent({
     playSurfaceSized ? playbackMapHeightPx() : null
   );
 
+  // Keep footer FAB clearance in sync (padding lives under the copyright, not
+  // between the last card and the footer — that looked like a huge bottom gap).
+  useEffect(() => {
+    if (!onFabClearanceChange) return;
+    if (page !== 'home' || analysisOpen) {
+      onFabClearanceChange('none');
+      return;
+    }
+    const showDockFab = mapDock.showFab;
+    if (selectedActivity != null && showDockFab) onFabClearanceChange('two');
+    else if (selectedActivity != null || showDockFab)
+      onFabClearanceChange('one');
+    else onFabClearanceChange('none');
+  }, [
+    onFabClearanceChange,
+    page,
+    analysisOpen,
+    mapDock.showFab,
+    selectedActivity,
+  ]);
+
   if (page === 'tracks') {
     return (
       <Suspense>
@@ -194,14 +219,31 @@ function DashboardProContent({
   // Long document + viewport: slot is a plain placeholder (lockHeight).
   // Expanded map is always fixed via pinRef (Option A — no sticky).
   // No CSS transform on the map wrapper.
+  const routeMapNoTween =
+    mapDock.fillHeight || mapDock.lockHeight || mapDock.pinMotion != null;
+  const routeMapCardClass = mapDock.fillHeight
+    ? 'h-full shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)]'
+    : [
+        routeMapNoTween ? 'transition-none' : '',
+        mapPlaying
+          ? 'h-[min(70vh,520px)] shadow-lg [--card-shadow:var(--shadow-card-hover)] md:h-[min(65vh,560px)] lg:h-[320px]'
+          : mapDock.active
+            ? 'h-[320px] shadow-lg [--card-shadow:var(--shadow-card-hover)] md:h-[320px]'
+            : 'h-[320px] [--card-shadow:var(--shadow-card-hover)] md:h-[320px] lg:[--card-shadow:var(--shadow-card)]',
+      ]
+        .filter(Boolean)
+        .join(' ');
+  // Match TracksPage: play height while chasing; never force 320px under
+  // lockHeight during play (that left the slot tall after stop). No height
+  // tween while dock fixed/handoff (Mapbox blanks).
   const routeMap = (
     <>
       <div
         ref={mapSlotRef}
         className={
           allYears
-            ? 'order-3 min-h-[220px] md:min-h-[260px] lg:order-none'
-            : 'order-3 lg:order-none lg:shrink-0'
+            ? 'order-4 min-h-[220px] md:min-h-[260px] lg:order-none'
+            : 'order-4 lg:order-none lg:shrink-0'
         }
         style={
           mapDock.lockHeight && mapDock.frame
@@ -224,18 +266,7 @@ function DashboardProContent({
               lightsOff={privacyActive}
               onClearSelection={() => setSelectedActivity(null)}
               onPlaybackChange={setMapPlaying}
-              className={
-                // No height tween while dock fixed/handoff (Mapbox blanks).
-                // In free flow keep play-spring (RouteMap skips it when
-                // className includes transition-none).
-                mapDock.fillHeight
-                  ? 'h-full shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)]'
-                  : mapDock.lockHeight
-                    ? 'h-[280px] shadow-lg transition-none [--card-shadow:var(--shadow-card-hover)] md:h-[300px]'
-                    : mapDock.active
-                      ? 'h-[280px] shadow-lg [--card-shadow:var(--shadow-card-hover)] md:h-[300px]'
-                      : 'h-[280px] [--card-shadow:var(--shadow-card-hover)] md:h-[300px] lg:[--card-shadow:var(--shadow-card)]'
-              }
+              className={routeMapCardClass}
             />
           </Suspense>
         </div>
@@ -254,7 +285,7 @@ function DashboardProContent({
   );
 
   const calendar = (
-    <div className="order-4 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+    <div className="order-5 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
       <DualCalendarWidget
         activities={activities}
         selectedActivity={selectedActivity}
@@ -265,7 +296,7 @@ function DashboardProContent({
 
   const trend = (
     <div
-      className={`order-7 flex min-w-0 flex-col lg:order-none ${
+      className={`order-8 flex min-w-0 flex-col lg:order-none ${
         allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
       }`}
     >
@@ -282,24 +313,11 @@ function DashboardProContent({
   );
 
   return (
-    <main
-      className="mx-auto max-w-[1400px] px-4 py-6 md:px-6"
-      // Reserve room for mobile map-dock / splits FABs (desktop: centered splits only).
-      style={(() => {
-        const showDockFab = mapDock.showFab && !analysisOpen;
-        const both = selectedActivity != null && showDockFab;
-        if (selectedActivity == null && !showDockFab) return undefined;
-        return {
-          paddingBottom: both
-            ? 'calc(7.5rem + env(safe-area-inset-bottom, 0px))'
-            : 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
-        };
-      })()}
-    >
+    <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
       {/*
-        Mobile order: Profile → Stats → sticky RouteMap → Calendar → ActivityLog
-        → ChinaMap → Yearly Distance → Heatmap (bottom).
-        Desktop, one year (2×2, each row stretches):
+        Mobile: Profile → Stats → Heatmap(under 连续) → RouteMap → Calendar
+        → ActivityLog → ChinaMap → Trend.
+        Desktop, one year (2x2, each row stretches):
           [Stats+Heatmap] [Profile + Map]
           [ActivityLog  ] [RouteMap+Calendar+Distance]
         Desktop, all years: one left column and one right column.
@@ -322,7 +340,7 @@ function DashboardProContent({
               compact
             />
           </div>
-          <div className="order-9 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+          <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <ContributionHeatmap
               activities={activities}
               year={year}
@@ -332,7 +350,7 @@ function DashboardProContent({
             />
           </div>
           {allYears ? (
-            <div className="order-5 flex min-w-0 flex-col overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
+            <div className="order-6 flex min-w-0 flex-col overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
               {activityLog}
             </div>
           ) : null}
@@ -356,7 +374,7 @@ function DashboardProContent({
             />
           </div>
           <div
-            className={`order-6 min-w-0 overflow-hidden lg:order-none ${
+            className={`order-7 min-w-0 overflow-hidden lg:order-none ${
               allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
             }`}
           >
@@ -395,7 +413,7 @@ function DashboardProContent({
         </div>
 
         {allYears ? null : (
-          <div className="order-5 flex min-w-0 flex-col overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2 lg:min-h-0">
+          <div className="order-6 flex min-w-0 flex-col overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2 lg:min-h-0">
             {activityLog}
           </div>
         )}
@@ -412,6 +430,7 @@ function DashboardProContent({
         <RunAnalysisLauncher
           activity={selectedActivity}
           onOpenChange={setAnalysisOpen}
+          anonymousTitles={useAnonymousTitles}
         />
       </Suspense>
     </main>
@@ -423,6 +442,9 @@ function DashboardProInner() {
   const { locale } = useLocale();
   const [filter] = useState('all' as const);
   const [page, setPage] = useState<Page>('home');
+  const [fabClearance, setFabClearance] = useState<'none' | 'one' | 'two'>(
+    'none'
+  );
 
   // Drives the `:lang(zh)` rules in index.css (e.g. the `eyebrow` utility,
   // where uppercase/wide tracking only makes sense for Latin labels).
@@ -440,7 +462,7 @@ function DashboardProInner() {
       className={
         page === 'summary'
           ? 'flex h-svh flex-col bg-[var(--color-bg)]'
-          : 'min-h-screen bg-[var(--color-bg)]'
+          : 'min-h-dvh bg-[var(--color-bg)]'
       }
       data-filter={filter}
     >
@@ -466,12 +488,26 @@ function DashboardProInner() {
             dark={dark}
             filter={filter}
             onNavigateHome={() => navigate('home')}
+            onFabClearanceChange={setFabClearance}
           />
         </Suspense>
       </div>
 
       {page !== 'summary' ? (
-        <footer className="flex items-center justify-center border-t border-[var(--color-border)] py-6 text-sm text-[var(--color-muted)]">
+        <footer
+          className="flex items-center justify-center border-t border-[var(--color-border)] py-6 text-sm text-[var(--color-muted)]"
+          style={
+            fabClearance === 'none'
+              ? undefined
+              : {
+                  // Clearance sits under the copyright so the last card hugs the footer.
+                  paddingBottom:
+                    fabClearance === 'two'
+                      ? 'calc(5.75rem + env(safe-area-inset-bottom, 0px))'
+                      : 'calc(3.25rem + env(safe-area-inset-bottom, 0px))',
+                }
+          }
+        >
           <span>
             &copy; {FOOTER_YEAR} Running Page 3.0 ·{' '}
             {GITHUB_URL ? (

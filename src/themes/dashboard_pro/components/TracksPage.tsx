@@ -1249,7 +1249,7 @@ function TrackMap({
 function getColor(a: Activity): string {
   if (a.type === 'Run') {
     const km = a.distance / 1000;
-    return km > 20 ? '#ef4444' : '#e8663d';
+    return km > 20 ? '#ef4444' : '#c45c26'; // Mapbox paint needs hex, not CSS vars
   }
   if (a.type === 'Ride') return '#4f7ce0';
   if (a.type === 'Hike') return '#22c55e';
@@ -1423,7 +1423,7 @@ export function TracksPage({
   };
 
   const allSportTabs: { label: string; value: SportType; color: string }[] = [
-    { label: locale === 'zh' ? '跑步' : 'Run', value: 'Run', color: '#e8663d' },
+    { label: locale === 'zh' ? '跑步' : 'Run', value: 'Run', color: '#c45c26' },
   ];
   const availableSportTabs = allSportTabs.filter((t) => hasSport(t.value));
   const showSportFilter = availableSportTabs.length > 1;
@@ -1643,8 +1643,10 @@ export function TracksPage({
                   mapDock.fillHeight
                     ? 'h-full'
                     : mapPlaying
-                      ? 'h-[min(70vh,520px)] md:h-[min(65vh,560px)]'
-                      : 'h-[280px] md:h-[360px]'
+                      ? // Mobile/tablet grow (with layoutSettleMs). lg+ keep idle
+                        // height — growing here mid-flyTo drifts the start pin.
+                        'h-[min(70vh,520px)] md:h-[min(65vh,560px)] lg:h-[360px]'
+                      : 'h-[320px] md:h-[360px]'
                 }`}
               >
                 <div
@@ -1695,7 +1697,7 @@ export function TracksPage({
                   <button
                     type="button"
                     onClick={() => setSelectedYear(null)}
-                    className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                    className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                   >
                     {locale === 'zh' ? '全部' : 'All'}
                   </button>
@@ -1706,7 +1708,7 @@ export function TracksPage({
                       onClick={() =>
                         setSelectedYear(selectedYear === yr ? null : yr)
                       }
-                      className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+                      className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${selectedYear === yr ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
                     >
                       {yr}
                     </button>
@@ -1909,3 +1911,4 @@ export function TracksPage({
     </div>
   );
 }
+

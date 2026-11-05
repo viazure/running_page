@@ -1,91 +1,91 @@
-/** Shared pulse block for first-paint skeletons */
-function Block({ className = '' }: { className?: string }) {
+import './PageSkeleton.css';
+import { THEME_PRESET } from '../config';
+
+const isPro = THEME_PRESET === 'dashboard_pro';
+
+/** Mist panel — no inner chrome. */
+function Mist({ className }: { className: string }) {
+  return <div className={`sk-mist ${className}`} aria-hidden />;
+}
+
+/**
+ * Fog silhouette for dashboard_pro home.
+ * Desktop: left + right columns only. Mobile: three soft bands.
+ * Shorter than live content so hard-refresh does not jump up.
+ */
+function ProBodySkeleton() {
   return (
-    <div
-      className={`animate-pulse rounded-xl bg-[var(--color-card,#161b22)] ${className}`}
-      style={{ border: '1px solid var(--color-border, #30363d)' }}
-    />
+    <div className="sk-body">
+      <div className="sk-left">
+        <Mist className="sk-panel-primary" />
+        <Mist className="sk-panel-secondary" />
+      </div>
+      <div className="sk-right">
+        <Mist className="sk-panel-side" />
+      </div>
+    </div>
   );
 }
 
-/** Full-page shell used while theme chunk or activity data is loading */
-export function PageSkeleton() {
+/** Compact generic mist — still paints without theme Tailwind. */
+function GenericBodySkeleton() {
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        backgroundColor: 'var(--color-bg, #0d1117)',
-        color: 'var(--color-muted, #8b949e)',
-      }}
-    >
-      <header
-        className="sticky top-0 z-50 border-b px-4 py-4 md:px-6"
-        style={{ borderColor: 'var(--color-border, #30363d)' }}
-      >
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between">
-          <div
-            className="h-6 w-36 animate-pulse rounded"
-            style={{ backgroundColor: 'var(--color-card, #161b22)' }}
-          />
-          <div className="flex gap-4">
-            <div
-              className="hidden h-4 w-10 animate-pulse rounded md:block"
-              style={{ backgroundColor: 'var(--color-card, #161b22)' }}
-            />
-            <div
-              className="hidden h-4 w-10 animate-pulse rounded md:block"
-              style={{ backgroundColor: 'var(--color-card, #161b22)' }}
-            />
-            <div
-              className="h-8 w-8 animate-pulse rounded-lg"
-              style={{ backgroundColor: 'var(--color-card, #161b22)' }}
-            />
-          </div>
+    <div className="sk-gen-grid">
+      <Mist className="sk-gen-primary" />
+      <Mist className="sk-gen-side" />
+    </div>
+  );
+}
+
+function ProHeader() {
+  return (
+    <header className="sk-header">
+      <div className="sk-header-inner">
+        <span className="sk-logo">
+          RUNNING<span className="sk-logo-dot">.</span>PAGE
+        </span>
+        <div className="sk-header-mist" aria-hidden />
+      </div>
+    </header>
+  );
+}
+
+/** Full-page shell while theme chunk loads (main-bundle CSS). */
+export function PageSkeleton() {
+  if (isPro) {
+    return (
+      <div className="sk-page">
+        <ProHeader />
+        <main className="sk-main">
+          <ProBodySkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sk-gen-page">
+      <header className="sk-gen-header">
+        <div className="sk-gen-header-inner">
+          <div className="sk-gen-brand sk-mist" aria-hidden />
+          <div className="sk-header-mist" aria-hidden />
         </div>
       </header>
-
-      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px]">
-          <div className="min-w-0 space-y-6">
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <Block className="h-24" />
-              <Block className="h-24" />
-              <Block className="col-span-2 h-24 sm:col-span-1" />
-            </div>
-            <Block className="h-40" />
-            <Block className="h-72" />
-          </div>
-          <div className="flex min-w-0 flex-col gap-6">
-            <Block className="h-36" />
-            <Block className="h-56" />
-            <Block className="h-80" />
-          </div>
-        </div>
+      <main className="sk-gen-main">
+        <GenericBodySkeleton />
       </main>
     </div>
   );
 }
 
-/** Content-area only (header already visible) */
+/**
+ * Content-area only (real Header already mounted).
+ * Only dashboard_pro uses this; always the pro body.
+ */
 export function DashboardContentSkeleton() {
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_400px]">
-        <div className="min-w-0 space-y-6">
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <Block className="h-24" />
-            <Block className="h-24" />
-            <Block className="col-span-2 h-24 sm:col-span-1" />
-          </div>
-          <Block className="h-40" />
-          <Block className="h-72" />
-        </div>
-        <div className="flex min-w-0 flex-col gap-6">
-          <Block className="h-36" />
-          <Block className="h-56" />
-          <Block className="h-80" />
-        </div>
-      </div>
+    <main className="sk-main">
+      <ProBodySkeleton />
     </main>
   );
 }

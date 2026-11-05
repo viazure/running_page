@@ -1,0 +1,231 @@
+/* Main-bundle mist skeleton — paints before theme Tailwind.
+   Soft fog panels only; no inner chrome. Pro + generic share .sk-mist. */
+
+@keyframes sk-breathe {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+.sk-page,
+.sk-gen-page {
+  min-height: 100dvh;
+  background: var(--color-bg, var(--boot-bg, #0b0d10));
+  color: var(--color-muted, #8b949e);
+}
+
+.sk-header,
+.sk-gen-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border, #23272e) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-bg, var(--boot-bg, #0b0d10)) 78%,
+    transparent
+  );
+  padding: 0.75rem 1rem;
+}
+
+@media (min-width: 768px) {
+  .sk-header,
+  .sk-gen-header {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+.sk-header-inner,
+.sk-gen-header-inner {
+  margin: 0 auto;
+  max-width: 1400px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sk-logo {
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--color-text, #e6edf3) 72%, transparent);
+  letter-spacing: -0.02em;
+}
+
+.sk-logo-dot {
+  color: color-mix(in srgb, var(--color-run, #f97316) 70%, transparent);
+}
+
+.sk-header-mist {
+  height: 1.35rem;
+  width: min(42%, 11rem);
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--color-card, #14171c) 55%,
+    var(--color-bg, #0b0d10)
+  );
+  animation: sk-breathe 3.2s ease-in-out infinite;
+}
+
+.sk-mist {
+  border-radius: 1rem;
+  border: none;
+  background: color-mix(
+    in srgb,
+    var(--color-card, #14171c) 58%,
+    var(--color-bg, #0b0d10)
+  );
+  box-shadow: none;
+  animation: sk-breathe 3.2s ease-in-out infinite;
+}
+
+.sk-main,
+.sk-gen-main {
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 1rem 1rem 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .sk-main,
+  .sk-gen-main {
+    padding: 1.15rem 1.5rem 1.75rem;
+  }
+}
+
+html.light .sk-logo,
+html[data-theme='light'] .sk-logo {
+  color: color-mix(in srgb, var(--color-text, #1a1a1a) 55%, transparent);
+}
+
+html.light .sk-mist,
+html.light .sk-header-mist,
+html[data-theme='light'] .sk-mist,
+html[data-theme='light'] .sk-header-mist {
+  background: color-mix(
+    in srgb,
+    var(--color-card, #ffffff) 70%,
+    var(--color-bg, #f7f6f3)
+  );
+}
+
+html.light .sk-header,
+html[data-theme='light'] .sk-header,
+html.light .sk-gen-header,
+html[data-theme='light'] .sk-gen-header {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--color-border, #e8e4de) 50%,
+    transparent
+  );
+}
+
+/* ---------- generic: two mist panels, main-bundle safe ---------- */
+.sk-gen-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sk-gen-brand {
+  width: 7.5rem;
+  height: 1.15rem;
+  border-radius: 999px;
+}
+
+.sk-gen-primary {
+  height: 11rem;
+}
+
+.sk-gen-side {
+  height: 9rem;
+}
+
+@media (min-width: 1024px) {
+  .sk-gen-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.1rem;
+    align-items: start;
+  }
+  .sk-gen-primary {
+    height: 18rem;
+  }
+  .sk-gen-side {
+    height: 14rem;
+  }
+}
+
+/* ---------- dashboard_pro fog silhouette ---------- */
+/* Mobile: three soft bands, short — under one viewport of real content */
+.sk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.sk-left,
+.sk-right {
+  display: contents;
+}
+
+.sk-panel-primary {
+  order: 1;
+  height: 9.5rem;
+}
+
+.sk-panel-side {
+  order: 2;
+  height: 8.25rem;
+}
+
+.sk-panel-secondary {
+  order: 3;
+  height: 7rem;
+}
+
+/* Desktop: left stack (2) + right (1) — still shorter than live home */
+@media (min-width: 1024px) {
+  .sk-body {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.1rem;
+    align-items: start;
+  }
+
+  .sk-left,
+  .sk-right {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .sk-panel-primary,
+  .sk-panel-secondary,
+  .sk-panel-side {
+    order: unset;
+  }
+
+  .sk-panel-primary {
+    height: 12.5rem;
+  }
+  .sk-panel-secondary {
+    height: 9rem;
+  }
+  .sk-panel-side {
+    height: 18rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .sk-body {
+    grid-template-columns: 1fr 360px;
+  }
+}

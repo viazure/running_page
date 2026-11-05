@@ -1,7 +1,16 @@
-/* Dashboard Summary embed only — scoped under .summary-page-root.
-   Do not put these rules into classic ActivityList CSS modules. */
+/* Dashboard Summary — mock-aligned warm paper + classic Life embed tokens */
 
 .summary-page-root {
+  color: var(--color-text);
+  background-color: transparent;
+  overscroll-behavior-y: contain;
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* ActivityList embed (Life) token bridge */
   --color-summary-fg: var(--color-text);
   --color-summary-accent: var(--color-accent);
   --color-summary-accent-hover: color-mix(
@@ -19,23 +28,8 @@
   --color-summary-radius: var(--radius-xl);
   --color-summary-chip-radius: 9999px;
   --color-summary-card-shadow: var(--shadow-card);
-  --color-summary-card-hover-border: var(--color-border);
-  --color-summary-card-hover-bg: var(--color-card);
-  --color-summary-card-lift: 5px;
   --color-summary-chip-bg: var(--color-sunken);
   --color-summary-chip-fg: var(--color-muted);
-  --color-summary-title-size: 1.125rem;
-  --color-summary-home-bg: color-mix(
-    in srgb,
-    var(--color-accent) 10%,
-    transparent
-  );
-  --color-summary-home-border: color-mix(
-    in srgb,
-    var(--color-accent) 40%,
-    transparent
-  );
-
   --color-brand: var(--color-accent);
   --color-primary: var(--color-accent);
   --color-secondary: var(--color-accent);
@@ -46,155 +40,318 @@
   --color-run-table-thead: var(--color-muted);
   --color-run-row-hover-background: var(--color-card);
   --color-activity-card: var(--color-border);
-  --color-scrollbar-thumb: color-mix(
-    in srgb,
-    var(--color-text) 22%,
-    transparent
-  );
-  --color-scrollbar-thumb-hover: color-mix(
-    in srgb,
-    var(--color-text) 40%,
-    transparent
-  );
-  --color-summary-scrollbar: color-mix(
-    in srgb,
-    var(--color-text) 22%,
-    transparent
-  );
   --svg-color-inactive-cell: var(--color-border);
   --svg-color-active-cell: var(--color-accent);
   --svg-special-color: var(--color-run);
   --svg-special-color2: var(--color-accent);
-
-  color: var(--color-text);
-  background-color: var(--color-bg);
-  overscroll-behavior-y: contain;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
-  /* Match dashboard_pro body (CJK-aware stack in index.css --font-sans). */
-  font-family: var(--font-sans);
-  font-optical-sizing: auto;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-.dark .summary-page-root {
-  --color-summary-accent-hover: color-mix(
-    in srgb,
-    var(--color-accent) 78%,
-    #fff
-  );
-  --color-summary-chart-bg: color-mix(
-    in srgb,
-    var(--color-card) 88%,
-    var(--color-bg)
-  );
-  --color-summary-card-hover-bg: var(--color-card);
-  --color-scrollbar-thumb-hover: color-mix(
-    in srgb,
-    var(--color-text) 45%,
-    transparent
-  );
-  --color-summary-scrollbar: color-mix(
-    in srgb,
-    var(--color-text) 28%,
-    transparent
-  );
+.summary-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
-.summary-page-root .svg-color-bg {
-  fill: var(--color-card);
-}
+@media (min-width: 900px) {
+  .summary-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 16px;
+    align-items: start;
+  }
 
-.summary-page-root .svg-color-inactive-cell {
-  fill: var(--color-border);
-}
-
-.summary-page-root .svg-color-active-cell {
-  fill: var(--svg-color-active-cell);
-}
-
-.summary-page-root .svg-special-color {
-  fill: var(--svg-special-color);
-}
-
-.summary-page-root .svg-special-color2 {
-  fill: var(--svg-special-color2);
-}
-
-.summary-page-root .svg-color-text {
-  fill: var(--color-text);
-}
-
-/* Cap Life / year summary SVGs in dashboard Summary embed (classic stays full). */
-.summary-page-root [class*='yearSummarySvg'],
-.summary-page-root [class*='lifeContainer'] > svg,
-.summary-page-root [class*='lifeContainer'] svg {
-  width: min(100%, 680px) !important;
-  height: auto !important;
-  max-height: none;
-}
-
-/* Classic-like float on real hover; no purple selection ring.
-   Touch devices skip :hover so sticky purple borders don't stick after tap. */
-.summary-page-root [class*='activityCard'] {
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    transform 0.3s,
-    box-shadow 0.3s;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .summary-page-root [class*='activityCard']:hover {
-    transform: translateY(calc(var(--color-summary-card-lift, 5px) * -1));
-    border-color: var(--color-activity-card);
-    background-color: var(--color-run-row-hover-background);
-    box-shadow: 0 6px 16px color-mix(in srgb, #000 18%, transparent);
+  .summary-list {
+    margin-top: 0 !important;
   }
 }
 
-.summary-page-root [class*='chart'] {
-  position: relative;
-  touch-action: manipulation;
-  overflow: visible;
+.summary-page-root .summary-hero,
+.summary-page-root .summary-list {
+  border-radius: var(--radius-xl);
 }
 
-/* Day flip back: fill card with route preview */
-.summary-page-root [class*='routeContainer'] {
+.summary-life-classic {
   min-height: 0;
-  width: 100%;
-  padding: 6px;
-}
-
-.summary-page-root [class*='cardBack'] [class*='routePreview'] {
-  width: 100%;
   height: 100%;
-  min-height: 0;
 }
 
-.summary-page-root [class*='cardBack'] [class*='routeSvg'] {
-  width: 100%;
+.summary-life-classic .activityList,
+.summary-life-classic [class*='activityList'] {
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
 }
 
-.summary-page-root [class*='lifeContainer'] {
-  min-height: 120px;
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
-/* rc-virtual-list keeps its thumb visible for 3s after the pointer moves.
-   Hide as soon as the pointer leaves the list; show only while scrolling. */
-.summary-page-root .rc-virtual-list-scrollbar {
-  visibility: hidden !important;
+/* Month-of-Life / year SVGs: follow dashboard_pro light/dark tokens */
+.summary-life-classic .svg-color-bg,
+.summary-life-classic svg [fill='#222222'],
+.summary-life-classic svg [fill='#222'],
+.summary-life-classic svg [fill='#1a1a1a'] {
+  fill: var(--color-card);
+}
+.summary-life-classic .svg-color-inactive-cell,
+.summary-life-classic svg [fill='#444444'],
+.summary-life-classic svg [fill='#444'] {
+  fill: var(--color-border);
+}
+.summary-life-classic .svg-color-active-cell,
+.summary-life-classic svg [fill='#4dd2ff'] {
+  fill: var(--color-accent);
+}
+.summary-life-classic .svg-color-text,
+.summary-life-classic .github-svg text,
+.summary-life-classic .grid-svg text,
+.summary-life-classic .year-svg text,
+.summary-life-classic svg text {
+  fill: var(--color-muted);
+}
+.summary-life-classic .svg-special-color {
+  fill: var(--svg-special-color, var(--color-run));
+}
+.summary-life-classic .svg-special-color2 {
+  fill: var(--svg-special-color2, var(--color-accent));
+}
+.summary-life-classic .activityList,
+.summary-life-classic [class*='activityList'] {
+  background-color: var(--color-bg) !important;
+  color: var(--color-text);
+}
+.summary-life-classic {
+  color: var(--color-text);
+  background: transparent;
 }
 
-.summary-page-root .rc-virtual-list:hover .rc-virtual-list-scrollbar-visible,
-.summary-page-root .rc-virtual-list-scrollbar:hover {
-  visibility: visible !important;
+/* Day embed: clearer filter / card regions under warm-paper shell */
+.summary-day-classic [class*='filterContainer'] {
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.summary-day-classic [class*='chipRow'] {
+  gap: 6px;
+}
+
+.summary-day-classic [class*='activityCard'] {
+  border-radius: var(--radius-xl, 8px);
+}
+
+.summary-day-classic [class*='rowContainer'] {
+  gap: 14px !important;
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+
+/* Life: tighten vertical empty space — hug SVG, less dead air */
+.summary-life-classic {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-life-classic [class*='activityList'] {
+  justify-content: flex-start !important;
+}
+
+.summary-life-classic [class*='filterContainer'] {
+  margin-bottom: 8px !important;
+}
+
+.summary-life-classic [class*='lifeContainer'] {
+  flex: 1 1 auto;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  padding-top: 0 !important;
+  padding-bottom: 8px !important;
+}
+
+.summary-life-classic [class*='yearSelector'] {
+  margin-bottom: 8px !important;
+  padding-top: 0 !important;
+  padding-bottom: 4px !important;
+  justify-content: flex-start !important;
+}
+
+.summary-life-classic [class*='lifeSvgWrap'] {
+  justify-content: flex-start !important;
+  align-items: flex-start;
+  margin: 0 !important;
+}
+
+.summary-life-classic [class*='yearSummarySvg'],
+.summary-life-classic [class*='lifeContainer'] svg {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+/* Mobile Life: hug the SVG — flex-grow was leaving a tall empty band under the chart */
+@media (max-width: 899px) {
+  .summary-life-classic:not(.summary-day-classic) {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] {
+    flex: 0 1 auto !important;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='lifeSvgWrap'] {
+    flex: 0 0 auto !important;
+  }
+}
+
+/* Desktop Life: fit Month-of-Life on one viewport (no vertical scroll) */
+@media (min-width: 900px) {
+  .summary-life-classic:not(.summary-day-classic) {
+    overflow: hidden;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='filterContainer'] {
+    flex-shrink: 0;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='lifeSvgWrap'] {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    width: 100%;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden;
+  }
+
+  .summary-life-classic:not(.summary-day-classic) [class*='yearSummarySvg'],
+  .summary-life-classic:not(.summary-day-classic) [class*='lifeContainer'] svg {
+    width: auto !important;
+    max-width: 100% !important;
+    /* Prefer remaining flex box; dvh fallback if parent height chain is soft */
+    max-height: min(100%, calc(100dvh - 200px)) !important;
+    height: auto !important;
+  }
+}
+
+/* Top period tabs (年/月/周/日/Life) — single selected language */
+.summary-period-tabs {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 12px;
+}
+
+.summary-period-tab {
+  cursor: pointer;
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  background: transparent;
+  color: var(--color-muted);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.summary-period-tab:hover {
+  color: var(--color-text);
+}
+
+.summary-period-tab.is-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.summary-period-tab.is-active:hover {
+  color: #fff;
+}
+
+/* Month/week period chips: same selected fill as 日/Life tabs + year chips */
+.summary-period-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--color-muted);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.summary-period-chip:hover {
+  color: var(--color-text);
+}
+
+.summary-period-chip.is-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.summary-period-chip.is-active:hover {
+  color: #fff;
+}
+
+/* Period chips row: thin, quiet desktop scrollbar; hide on mobile (gesture scroll) */
+.summary-period-chips {
+  align-items: center;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-muted) 28%, transparent)
+    transparent;
+}
+
+.summary-period-chips::-webkit-scrollbar {
+  height: 4px;
+}
+
+.summary-period-chips::-webkit-scrollbar-track {
+  background: transparent;
+  margin-inline: 2px;
+}
+
+.summary-period-chips::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-muted) 28%, transparent);
+  border-radius: 9999px;
+}
+
+.summary-period-chips:hover::-webkit-scrollbar-thumb,
+.summary-period-chips:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-muted) 48%, transparent);
+}
+
+.summary-period-chips::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--color-muted) 62%, transparent);
+}
+
+@media (max-width: 767px) {
+  .summary-period-chips {
+    scrollbar-width: none;
+    scrollbar-color: transparent transparent;
+  }
+  .summary-period-chips::-webkit-scrollbar {
+    display: none;
+    height: 0;
+  }
 }

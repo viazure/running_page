@@ -42,7 +42,7 @@ function MetricChip({
   unit?: string;
 }) {
   return (
-    <div className="min-w-0 py-1 text-center">
+    <div className="min-w-0 text-center">
       <p className="metric text-[17px] leading-none font-semibold @min-[40rem]:text-[19px]">
         {value}
         {unit ? (
@@ -87,9 +87,21 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
     {
       key: 'cad',
       label: tr('平均步频', 'Avg cadence'),
-      value: fmt(s.cadence_avg),
+      // Prefer chart-mean (ignore walk/stop & sensor spikes) so overview matches chart avg.
+      value: fmt(
+        (() => {
+          const series = data.chart?.cad ?? [];
+          const vals = series.filter(
+            (v): v is number => has(v) && v >= 100 && v <= 220
+          );
+          if (vals.length) {
+            return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+          }
+          return s.cadence_avg;
+        })()
+      ),
       unit: 'spm',
-      show: has(s.cadence_avg),
+      show: has(s.cadence_avg) || Boolean(data.chart?.cad?.some((v) => has(v))),
     },
     {
       key: 'elev',
@@ -141,11 +153,29 @@ function MetricGrid({ data, tr }: { data: RunSplits; tr: Tr }) {
     },
   ].filter((c) => c.show);
   if (!cells.length) return null;
+  const rows = Math.ceil(cells.length / 3);
   return (
-    <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 @min-[40rem]:gap-x-8 @min-[40rem]:gap-y-4">
-      {cells.map((c) => (
-        <MetricChip key={c.key} label={c.label} value={c.value} unit={c.unit} />
-      ))}
+    <div className="ra-metric-grid">
+      {cells.map((c, i) => {
+        const row = Math.floor(i / 3);
+        const col = i % 3;
+        const ruled = row < rows - 1;
+        const vdiv = col < 2;
+        return (
+          <div
+            key={c.key}
+            className={[
+              'ra-metric-cell px-1.5 py-2.5 @min-[40rem]:px-3 @min-[40rem]:py-3.5',
+              ruled ? 'ra-metric-cell--ruled' : null,
+              vdiv ? 'ra-metric-cell--vdiv' : null,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <MetricChip label={c.label} value={c.value} unit={c.unit} />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -289,7 +319,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                       className="h-full rounded-sm"
                       style={{
                         width: `${25 + ratio * 75}%`,
-                        backgroundColor: '#3b82f6',
+                        backgroundColor: 'var(--color-accent)',
                         opacity: 0.35 + ratio * 0.55,
                       }}
                     />
@@ -305,7 +335,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
         </div>
 
         <div className="-mx-0.5 overflow-x-auto">
-          <table className="w-full min-w-[400px] text-[12px] @min-[48rem]:min-w-0">
+          <table className="w-full min-w-0 text-[12px]">
             <thead>
               <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
                 <th className="py-2 pr-2 font-medium">#</th>
@@ -345,7 +375,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                       {formatClock(r.time)}
                     </td>
                     <td
-                      className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                      className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
                     >
                       {formatPaceSeconds(r.pace)}
                       <Delta cur={r.pace} prev={prev?.pace} invert />
@@ -387,18 +417,18 @@ function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
     },
   ];
   return (
-    <div className="grid grid-cols-3 gap-3 @min-[40rem]:gap-6">
+    <div className="grid grid-cols-3 gap-3 @min-[40rem]:gap-10">
       {cells.map((c) => (
         <div key={c.key} className="min-w-0 text-center">
-          <p className="metric text-[1.65rem] leading-none font-semibold @min-[40rem]:text-[2rem]">
+          <p className="metric text-[1.65rem] leading-none font-bold tracking-tight @min-[40rem]:text-[2.125rem]">
             {c.value}
             {c.unit ? (
-              <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
+              <span className="ml-1 text-xs font-medium text-[var(--color-muted)]">
                 {c.unit}
               </span>
             ) : null}
           </p>
-          <p className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)]">
+          <p className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)] @min-[40rem]:mt-2">
             {c.label}
           </p>
         </div>
@@ -410,29 +440,80 @@ function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
 function AnalysisBody({ data }: { data: RunSplits }) {
   const tr = useTr();
   const s = data.summary;
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    const scroller = document.querySelector('.run-analysis-scroll');
+    if (!el || !scroller) return;
+    const sticky = scroller.querySelector(
+      '.ra-anchor-bar'
+    ) as HTMLElement | null;
+    const offset = (sticky?.offsetHeight ?? 0) + 12;
+    const top =
+      el.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop -
+      offset;
+    scroller.scrollTo({ top, behavior: 'smooth' });
+  };
+  const anchors: { id: string; label: string; show?: boolean }[] = [
+    { id: 'ra-overview', label: tr('概览', 'Overview') },
+    { id: 'ra-splits', label: tr('分段', 'Splits') },
+    { id: 'ra-pace', label: tr('配速', 'Pace'), show: Boolean(data.chart) },
+    { id: 'ra-hr', label: tr('心率', 'HR'), show: Boolean(data.chart) },
+    { id: 'ra-power', label: tr('功率', 'Power'), show: Boolean(data.chart) },
+    {
+      id: 'ra-cadence',
+      label: tr('步频', 'Cadence'),
+      show: Boolean(data.chart),
+    },
+    { id: 'ra-form', label: tr('形态', 'Form'), show: Boolean(data.chart) },
+  ].filter((a) => a.show !== false);
+
   return (
-    <div className="space-y-4">
-      <div className="border-b border-[var(--color-border)] pb-4">
-        <PrimaryStats data={data} tr={tr} />
+    <div>
+      <div className="ra-anchor-bar sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 md:-mx-6 md:px-6">
+        <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
+          {anchors.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => scrollTo(a.id)}
+              className="shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] bg-[var(--color-sunken)] px-3 py-1 text-[11px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <MetricGrid data={data} tr={tr} />
-
-      {(has(s.aerobic_te) || has(s.anaerobic_te)) && (
-        <div className="pt-1">
-          <TeScale aerobic={s.aerobic_te} anaerobic={s.anaerobic_te} tr={tr} />
+      <div className="space-y-4 pt-3">
+        <div id="ra-overview">
+          <MetricGrid data={data} tr={tr} />
         </div>
-      )}
 
-      <div className="border-t border-[var(--color-border)] pt-4">
-        <SplitsBlock data={data} tr={tr} />
+        {(has(s.aerobic_te) || has(s.anaerobic_te)) && (
+          <div className="pt-1">
+            <TeScale
+              aerobic={s.aerobic_te}
+              anaerobic={s.anaerobic_te}
+              tr={tr}
+            />
+          </div>
+        )}
+
+        <div
+          id="ra-splits"
+          className="border-t border-[var(--color-border)] pt-4"
+        >
+          <SplitsBlock data={data} tr={tr} />
+        </div>
+
+        {data.chart ? (
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <ChartStack data={data} tr={tr} />
+          </div>
+        ) : null}
       </div>
-
-      {data.chart ? (
-        <div className="border-t border-[var(--color-border)] pt-4">
-          <ChartStack data={data} tr={tr} />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -480,46 +561,53 @@ function AnalysisSkeleton({
   activity,
   className,
   onClose,
+  anonymousTitles = false,
 }: {
   activity: Activity;
   className?: string;
   onClose?: () => void;
+  anonymousTitles?: boolean;
 }) {
   const tr = useTr();
   const { locale } = useLocale();
-  const title = resolveActivityTitle(activity, locale);
+  const title = resolveActivityTitle(activity, locale, anonymousTitles);
   const date = activityDateLabel(activity, locale);
   return (
     <div
       className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-2 md:px-6">
-        <div className="min-w-0 py-1.5">
-          <h2 className="truncate text-base font-bold md:text-lg" title={title}>
-            {title}
-          </h2>
-          {date ? (
-            <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
-              {date}
-            </p>
-          ) : (
-            <Pulse className="mt-1 h-3 w-36" />
-          )}
+      <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 py-1.5">
+            <h2
+              className="truncate text-base font-bold md:text-lg"
+              title={title}
+            >
+              {title}
+            </h2>
+            {date ? (
+              <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
+                {date}
+              </p>
+            ) : (
+              <Pulse className="mt-1 h-3 w-36" />
+            )}
+          </div>
+          {onClose ? (
+            <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+          ) : null}
         </div>
-        {onClose ? (
-          <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
-        ) : null}
-      </div>
-      <div className="min-h-0 flex-auto px-4 py-3 md:px-6 md:py-4">
-        <div className="grid grid-cols-3 gap-3 border-b border-[var(--color-border)] pb-4">
+        <div className="mt-3 grid grid-cols-3 gap-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="min-w-0 space-y-2">
-              <Pulse className="h-7 w-16" />
-              <Pulse className="h-3 w-10" />
+            <div key={i} className="min-w-0 space-y-2 text-center">
+              <Pulse className="mx-auto h-7 w-16" />
+              <Pulse className="mx-auto h-3 w-10" />
             </div>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
+      </div>
+      <div className="min-h-0 flex-auto px-4 py-3 md:px-6 md:py-4">
+        <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
           {Array.from({ length: 6 }, (_, i) => (
             <div key={i} className="min-w-0 space-y-2">
               <Pulse className="h-5 w-14" />
@@ -555,28 +643,39 @@ function Header({
   activity,
   onClose,
   tr,
+  data,
+  anonymousTitles = false,
 }: {
   activity: Activity;
   onClose?: () => void;
   tr: Tr;
+  data?: RunSplits | null;
+  anonymousTitles?: boolean;
 }) {
   const { locale } = useLocale();
-  const title = resolveActivityTitle(activity, locale);
+  const title = resolveActivityTitle(activity, locale, anonymousTitles);
   const date = activityDateLabel(activity, locale);
   return (
-    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-2 md:px-6">
-      <div className="min-w-0 py-1.5">
-        <h2 className="truncate text-base font-bold md:text-lg" title={title}>
-          {title}
-        </h2>
-        {date ? (
-          <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
-            {date}
-          </p>
+    <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 py-1.5">
+          <h2 className="truncate text-base font-bold md:text-lg" title={title}>
+            {title}
+          </h2>
+          {date ? (
+            <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
+              {date}
+            </p>
+          ) : null}
+        </div>
+        {onClose ? (
+          <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
         ) : null}
       </div>
-      {onClose ? (
-        <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+      {data ? (
+        <div className="@container mt-3">
+          <PrimaryStats data={data} tr={tr} />
+        </div>
       ) : null}
     </div>
   );
@@ -587,11 +686,13 @@ function Loaded({
   promise,
   className,
   onClose,
+  anonymousTitles = false,
 }: {
   activity: Activity;
   promise: Promise<RunSplits | null>;
   className?: string;
   onClose?: () => void;
+  anonymousTitles?: boolean;
 }) {
   const data = use(promise);
   const tr = useTr();
@@ -600,8 +701,14 @@ function Loaded({
     <div
       className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
-      <Header activity={activity} onClose={onClose} tr={tr} />
-      <div className="run-analysis-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 md:py-4">
+      <Header
+        activity={activity}
+        onClose={onClose}
+        tr={tr}
+        data={data}
+        anonymousTitles={anonymousTitles}
+      />
+      <div className="run-analysis-scroll min-h-0 flex-auto overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
         <div className="@container">
           <AnalysisBody data={data} />
         </div>
@@ -614,10 +721,13 @@ export function RunAnalysis({
   activity,
   className,
   onClose,
+  anonymousTitles = false,
 }: {
   activity: Activity;
   className?: string;
   onClose?: () => void;
+  /** When true (privacy locked + anonymous titles), hide raw activity.name */
+  anonymousTitles?: boolean;
 }) {
   const promise = loadSplits(activity.run_id);
   return (
@@ -627,6 +737,7 @@ export function RunAnalysis({
           activity={activity}
           className={className}
           onClose={onClose}
+          anonymousTitles={anonymousTitles}
         />
       }
     >
@@ -636,6 +747,7 @@ export function RunAnalysis({
         promise={promise}
         className={className}
         onClose={onClose}
+        anonymousTitles={anonymousTitles}
       />
     </Suspense>
   );
@@ -660,7 +772,7 @@ function LauncherButton({
   const label = (
     <>
       <svg
-        className="size-4"
+        className="size-3.5 shrink-0"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -672,7 +784,10 @@ function LauncherButton({
           d="M3 3v18h18M7 15l4-4 3 3 5-6"
         />
       </svg>
-      {tr('分段分析', 'Splits')} · {(activity.distance / 1000).toFixed(1)} km
+      <span className="whitespace-nowrap">{tr('分段分析', 'Splits')}</span>
+      <span className="text-[10px] opacity-80">
+        {(activity.distance / 1000).toFixed(1)} km
+      </span>
     </>
   );
   const bottom = { bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' };
@@ -702,9 +817,11 @@ function LauncherButton({
 function Sheet({
   activity,
   onClose,
+  anonymousTitles = false,
 }: {
   activity: Activity;
   onClose: () => void;
+  anonymousTitles?: boolean;
 }) {
   const [phase, setPhase] = useState<'enter' | 'open' | 'leave'>('enter');
   const onCloseRef = useRef(onClose);
@@ -754,7 +871,7 @@ function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`flex max-h-[92svh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.4rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[90svh] md:w-[min(1080px,calc(100vw-3rem))] md:origin-center md:rounded-[0.4rem] ${
+        className={`flex max-h-[92svh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.5rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[90svh] md:w-[min(1080px,calc(100vw-3rem))] md:origin-center md:rounded-[0.5rem] ${
           visible
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-6 scale-[0.98] opacity-0 md:translate-y-2'
@@ -766,6 +883,7 @@ function Sheet({
           activity={activity}
           onClose={requestClose}
           className="[--card-radius:0]"
+          anonymousTitles={anonymousTitles}
         />
       </div>
     </div>
@@ -776,12 +894,15 @@ export function RunAnalysisLauncher({
   activity,
   showFab = true,
   onOpenChange,
+  anonymousTitles = false,
 }: {
   activity: Activity | null;
   /** When false, hide the bottom FAB (sheet can still open if already open). */
   showFab?: boolean;
   /** Fires when the analysis sheet opens/closes (hide map-dock FAB while open). */
   onOpenChange?: (open: boolean) => void;
+  /** Match list/profile privacy titles when privacy is locked. */
+  anonymousTitles?: boolean;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const open = activity != null && openId === activity.run_id;
@@ -793,7 +914,11 @@ export function RunAnalysisLauncher({
   return (
     <Suspense fallback={null}>
       {open ? (
-        <Sheet activity={activity} onClose={() => setOpenId(null)} />
+        <Sheet
+          activity={activity}
+          onClose={() => setOpenId(null)}
+          anonymousTitles={anonymousTitles}
+        />
       ) : showFab ? (
         <LauncherButton
           activity={activity}

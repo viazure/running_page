@@ -1,0 +1,156 @@
+/* Injected into index.html only when theme_preset === dashboard_pro. */
+@keyframes sk-breathe {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+#boot-shell {
+  min-height: 100dvh;
+  background: var(--color-bg, var(--boot-bg, #0b0d10));
+  color: var(--color-muted, #8b949e);
+}
+#boot-shell .sk-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border, #23272e) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-bg, var(--boot-bg, #0b0d10)) 78%,
+    transparent
+  );
+  padding: 0.75rem 1rem;
+}
+#boot-shell .sk-header-inner {
+  margin: 0 auto;
+  max-width: 1400px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+#boot-shell .sk-logo {
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--color-text, #e6edf3) 72%, transparent);
+}
+#boot-shell .sk-logo-dot {
+  color: color-mix(in srgb, var(--color-run, #f97316) 70%, transparent);
+}
+#boot-shell .sk-header-mist {
+  height: 1.35rem;
+  width: min(42%, 11rem);
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--color-card, #14171c) 55%,
+    var(--color-bg, #0b0d10)
+  );
+  animation: sk-breathe 3.2s ease-in-out infinite;
+}
+#boot-shell .sk-main {
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 1rem 1rem 1.5rem;
+}
+#boot-shell .sk-mist {
+  border-radius: 1rem;
+  border: none;
+  background: color-mix(
+    in srgb,
+    var(--color-card, #14171c) 58%,
+    var(--color-bg, #0b0d10)
+  );
+  animation: sk-breathe 3.2s ease-in-out infinite;
+}
+#boot-shell .sk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+#boot-shell .sk-left,
+#boot-shell .sk-right {
+  display: contents;
+}
+/* Mobile order: primary → side → secondary (short fog bands) */
+#boot-shell .sk-panel-primary {
+  order: 1;
+  height: 9.5rem;
+}
+#boot-shell .sk-panel-side {
+  order: 2;
+  height: 8.25rem;
+}
+#boot-shell .sk-panel-secondary {
+  order: 3;
+  height: 7rem;
+}
+@media (min-width: 768px) {
+  #boot-shell .sk-header {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+  #boot-shell .sk-main {
+    padding: 1.15rem 1.5rem 1.75rem;
+  }
+}
+@media (min-width: 1024px) {
+  #boot-shell .sk-body {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.1rem;
+    align-items: start;
+  }
+  #boot-shell .sk-left,
+  #boot-shell .sk-right {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+  #boot-shell .sk-panel-primary,
+  #boot-shell .sk-panel-secondary,
+  #boot-shell .sk-panel-side {
+    order: unset;
+  }
+  #boot-shell .sk-panel-primary {
+    height: 12.5rem;
+  }
+  #boot-shell .sk-panel-secondary {
+    height: 9rem;
+  }
+  #boot-shell .sk-panel-side {
+    height: 18rem;
+  }
+}
+@media (min-width: 1280px) {
+  #boot-shell .sk-body {
+    grid-template-columns: 1fr 360px;
+  }
+}
+html.light #boot-shell .sk-logo,
+html[data-theme='light'] #boot-shell .sk-logo {
+  color: color-mix(in srgb, var(--color-text, #1a1a1a) 55%, transparent);
+}
+html.light #boot-shell .sk-mist,
+html.light #boot-shell .sk-header-mist,
+html[data-theme='light'] #boot-shell .sk-mist,
+html[data-theme='light'] #boot-shell .sk-header-mist {
+  background: color-mix(
+    in srgb,
+    var(--color-card, #ffffff) 70%,
+    var(--color-bg, #f7f6f3)
+  );
+}
+html.light #boot-shell .sk-header,
+html[data-theme='light'] #boot-shell .sk-header {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--color-border, #e8e4de) 50%,
+    transparent
+  );
+}

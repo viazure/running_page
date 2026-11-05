@@ -81,7 +81,8 @@ const RoutePreview: React.FC<RoutePreviewProps> = ({
   // SVG dimensions
   const svgWidth = 250;
   const svgHeight = 150;
-  const svgPadding = 10;
+  // Embedded flip cards: less inset so the path fills the face.
+  const svgPadding = responsive ? 4 : 10;
   const drawWidth = svgWidth - 2 * svgPadding;
   const drawHeight = svgHeight - 2 * svgPadding;
 

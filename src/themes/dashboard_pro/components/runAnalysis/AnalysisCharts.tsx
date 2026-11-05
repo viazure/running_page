@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -103,7 +104,70 @@ function smooth(values: (number | null)[], window = 5): (number | null)[] {
   });
 }
 
-function domain(values: number[], robust = true): [number, number] {
+
+type HoverStore = {
+  getSnapshot: () => number | null;
+  set: (i: number | null) => void;
+  subscribe: (onStoreChange: () => void) => () => void;
+};
+
+function createHoverStore(): HoverStore {
+  let hover: number | null = null;
+  let pending: number | null = null;
+  let raf = 0;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    listeners.forEach((l) => l());
+  };
+  return {
+    getSnapshot: () => hover,
+    set: (i) => {
+      pending = i;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (hover === pending) return;
+        hover = pending;
+        emit();
+      });
+    },
+    subscribe: (onStoreChange) => {
+      listeners.add(onStoreChange);
+      return () => {
+        listeners.delete(onStoreChange);
+      };
+    },
+  };
+}
+
+function indexNearTarget(xs: number[], target: number): number {
+  // xs is monotonic (distance/time). Binary search beats O(n) on long activities.
+  let lo = 0;
+  let hi = xs.length - 1;
+  if (hi <= 0) return 0;
+  if (target <= xs[0]) return 0;
+  if (target >= xs[hi]) return hi;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] <= target) lo = mid;
+    else hi = mid;
+  }
+  return Math.abs(xs[hi] - target) < Math.abs(xs[lo] - target) ? hi : lo;
+}
+
+
+function domain(
+  values: number[],
+  robust = true,
+  opts?: {
+    floor?: number;
+    ceil?: number;
+    hardMin?: number;
+    hardMax?: number;
+    fixed?: [number, number];
+  }
+): [number, number] {
+  if (opts?.fixed) return opts.fixed;
   const sorted = [...values].sort((a, b) => a - b);
   const q = (p: number) =>
     sorted[
@@ -114,29 +178,106 @@ function domain(values: number[], robust = true): [number, number] {
     ];
   let lo = robust ? q(0.02) : sorted[0];
   let hi = robust ? q(0.98) : sorted[sorted.length - 1];
+  if (opts?.hardMin != null) lo = Math.max(lo, opts.hardMin);
+  if (opts?.hardMax != null) hi = Math.min(hi, opts.hardMax);
   if (hi - lo < 1e-6) {
     lo -= 1;
     hi += 1;
   }
   const pad = (hi - lo) * 0.12;
-  return [lo - pad, hi + pad];
+  lo = lo - pad;
+  hi = hi + pad;
+  if (opts?.floor != null) lo = Math.max(lo, opts.floor);
+  if (opts?.ceil != null) hi = Math.min(hi, opts.ceil);
+  if (hi <= lo) hi = lo + 1;
+  return [lo, hi];
 }
 
+/** True when robust domain dropped material outliers vs raw min/max. */
+function domainClippedOutliers(values: number[], lo: number, hi: number): boolean {
+  if (values.length < 8) return false;
+  const rawLo = Math.min(...values);
+  const rawHi = Math.max(...values);
+  const span = Math.max(hi - lo, 1e-6);
+  return rawLo < lo - span * 0.05 || rawHi > hi + span * 0.05;
+}
+
+function domainOptsFor(
+  key: string,
+  _unit?: string
+): {
+  floor?: number;
+  ceil?: number;
+  hardMin?: number;
+  hardMax?: number;
+  /** Fixed Y domain (APP-style). Skips adaptive zoom. */
+  fixed?: [number, number];
+} | undefined {
+  switch (key) {
+    case 'stride':
+      // APP: 0–1.8 m so natural stride (~0.8–1.0) sits as a mid band
+      return { floor: 0, fixed: [0, 1.8] };
+    case 'cad':
+      // APP: ~90–190 spm so cadence cloud sits around the mean line
+      return { fixed: [90, 190] };
+    case 'pace':
+      // s/km — clip sprint spikes / standstills for readable Y
+      return { hardMin: 300, hardMax: 540 };
+    case 'vo':
+    case 'vr':
+    case 'gct':
+      return {};
+    default:
+      return key === 'stride' ? { floor: 0 } : undefined;
+  }
+}
+
+
 /** Dynamics charts: full series min/max so peaks are not clipped at the axis. */
-function scatterDomain(values: number[], avg: N): [number, number] {
+function scatterDomain(
+  values: number[],
+  avg: N,
+  opts?: {
+    floor?: number;
+    hardMin?: number;
+    hardMax?: number;
+    fixed?: [number, number];
+  }
+): [number, number] {
+  if (opts?.fixed) return opts.fixed;
   let lo = Math.min(...values);
   let hi = Math.max(...values);
   if (has(avg)) {
     lo = Math.min(lo, avg);
     hi = Math.max(hi, avg);
   }
+  // Robust-ish clamp for physiological ranges before padding.
+  if (opts?.hardMin != null || opts?.hardMax != null) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const q = (p: number) =>
+      sorted[
+        Math.min(
+          sorted.length - 1,
+          Math.max(0, Math.round(p * (sorted.length - 1)))
+        )
+      ];
+    if (opts.hardMin != null) lo = Math.max(q(0.02), opts.hardMin);
+    if (opts.hardMax != null) hi = Math.min(q(0.98), opts.hardMax);
+    if (has(avg)) {
+      lo = Math.min(lo, avg);
+      hi = Math.max(hi, avg);
+    }
+  }
   if (hi - lo < 1e-6) {
     lo -= 1;
     hi += 1;
   }
-  // ~7% pad keeps chip/series extrema inside the plot (was P1–P99 + 12%).
   const pad = (hi - lo) * 0.07;
-  return [lo - pad, hi + pad];
+  lo = lo - pad;
+  hi = hi + pad;
+  if (opts?.floor != null) lo = Math.max(lo, opts.floor);
+  if (hi <= lo) hi = lo + 1;
+  return [lo, hi];
 }
 
 function tickValues(lo: number, hi: number, n: number): number[] {
@@ -356,7 +497,7 @@ function ZoneTable({
         color: colors[Math.min(i, colors.length - 1)],
       };
     })
-    .filter((r) => r.sec > 0);
+    // keep near-zero rows → show as 未进入
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -392,52 +533,85 @@ function ZoneTable({
         ) : null}
       </div>
       <div className="space-y-2">
-        {rows.map((r) => (
-          <div
-            key={r.i}
-            className={`grid items-center gap-2 text-[11px] ${
-              unit === '/km'
-                ? 'grid-cols-[7.25rem_1fr_auto]'
-                : unit === 'spm'
-                  ? 'grid-cols-[5.5rem_1fr_auto]'
-                  : 'grid-cols-[4.5rem_1fr_auto]'
-            }`}
-          >
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 font-medium text-[var(--color-text)]">
-                {unit === 'spm' ? (
-                  <span
-                    className="inline-block size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: r.color }}
-                    aria-hidden
-                  />
-                ) : null}
-                {r.name}
-              </p>
-              {r.range ? (
-                <p className="truncate text-[10px] text-[var(--color-muted)]">
-                  {r.range}
-                  {unit === '/km' || unit === 'spm' ? '' : ` ${unit}`}
-                </p>
-              ) : null}
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+        {rows.map((r) => {
+          const nearZero = r.pct < 0.5 || r.sec < 5;
+          if (nearZero) {
+            return (
               <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.max(2, r.pct)}%`,
-                  backgroundColor: r.color,
-                }}
-              />
+                key={r.i}
+                className={`grid items-center gap-2 text-[11px] ${
+                  unit === '/km'
+                    ? 'grid-cols-[7.25rem_1fr_auto]'
+                    : unit === 'spm'
+                      ? 'grid-cols-[5.5rem_1fr_auto]'
+                      : 'grid-cols-[4.5rem_1fr_auto]'
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 font-medium text-[var(--color-muted)]">
+                    {unit === 'spm' ? (
+                      <span
+                        className="inline-block size-2 shrink-0 rounded-full bg-[var(--color-border)]"
+                        aria-hidden
+                      />
+                    ) : null}
+                    {r.name}
+                  </p>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]/50" />
+                <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
+                  {tr('未进入', 'None')}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={r.i}
+              className={`grid items-center gap-2 text-[11px] ${
+                unit === '/km'
+                  ? 'grid-cols-[7.25rem_1fr_auto]'
+                  : unit === 'spm'
+                    ? 'grid-cols-[5.5rem_1fr_auto]'
+                    : 'grid-cols-[4.5rem_1fr_auto]'
+              }`}
+            >
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 font-medium text-[var(--color-text)]">
+                  {unit === 'spm' ? (
+                    <span
+                      className="inline-block size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: r.color }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  {r.name}
+                </p>
+                {r.range ? (
+                  <p className="truncate text-[10px] text-[var(--color-muted)]">
+                    {r.range}
+                    {unit === '/km' || unit === 'spm' ? '' : ` ${unit}`}
+                  </p>
+                ) : null}
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.max(2, r.pct)}%`,
+                    backgroundColor: r.color,
+                  }}
+                />
+              </div>
+              <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
+                {formatClock(r.sec)}
+                <span className="ml-1 text-[var(--color-text)]">
+                  {Math.round(r.pct)}%
+                </span>
+              </div>
             </div>
-            <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
-              {formatClock(r.sec)}
-              <span className="ml-1 text-[var(--color-text)]">
-                {Math.round(r.pct)}%
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -468,9 +642,11 @@ const BAND_QUALITY = [
 function MetricHelp({
   k,
   tr,
+  note,
 }: {
   k: GlossaryKey;
   tr: (zh: string, en: string) => string;
+  note?: string;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -578,6 +754,11 @@ function MetricHelp({
               <span className="block text-[var(--color-muted)]">
                 {tr(g.zh, g.en)}
               </span>
+              {note ? (
+                <span className="mt-1.5 block border-t border-[var(--color-border)] pt-1.5 text-[var(--color-muted)]">
+                  {note}
+                </span>
+              ) : null}
               {bandRows ? (
                 <ul className="mt-1.5 space-y-1 border-t border-[var(--color-border)] pt-1.5">
                   {bandRows.map((row) => (
@@ -707,13 +888,185 @@ interface TrendDef {
   meanColor?: string | null;
 }
 
-function MetricCard({
+
+function HoverReadout({
+  hoverStore,
+  ys,
+  oys,
+  xs,
+  mode,
+  def,
+  overlay,
+}: {
+  hoverStore: HoverStore;
+  ys: (number | null)[];
+  oys: (number | null)[] | null;
+  xs: number[];
+  mode: 'distance' | 'time';
+  def: TrendDef;
+  overlay?: TrendDef | null;
+}) {
+  // Imperative text updates — scrub should not React-reconcile every metric card.
+  const rootRef = useRef<HTMLParagraphElement>(null);
+  const valRef = useRef<HTMLSpanElement>(null);
+  const axisRef = useRef<HTMLSpanElement>(null);
+  const ovalRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const apply = () => {
+      const hover = hoverStore.getSnapshot();
+      const root = rootRef.current;
+      if (!root) return;
+      if (hover == null) {
+        root.style.visibility = 'hidden';
+        root.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      root.style.visibility = '';
+      root.setAttribute('aria-hidden', 'false');
+      const hv = ys[hover];
+      if (valRef.current) {
+        valRef.current.textContent = has(hv) ? def.format(hv) : '--';
+      }
+      if (overlay) {
+        const ohv = oys ? oys[hover] : null;
+        if (ovalRef.current) {
+          ovalRef.current.textContent = has(ohv) ? overlay.format(ohv) : '--';
+        }
+      } else if (axisRef.current) {
+        axisRef.current.textContent = `${formatAxis(xs[hover], mode)}`;
+      }
+    };
+    apply();
+    return hoverStore.subscribe(apply);
+  }, [hoverStore, ys, oys, xs, mode, def, overlay]);
+  return (
+    <p
+      ref={rootRef}
+      className={`metric shrink-0 text-right text-[12px] text-[var(--color-muted)]`}
+      style={{ visibility: 'hidden' }}
+      aria-hidden
+    >
+      {overlay ? (
+        <>
+          <span className="block text-[10px] text-[var(--color-muted)]">
+            <span
+              className="mr-1 inline-block size-1.5 rounded-full align-middle"
+              style={{ background: def.color }}
+            />
+            {def.title}
+          </span>
+          <span
+            ref={valRef}
+            className="text-base font-semibold"
+            style={{ color: def.color }}
+          >
+            --
+          </span>{' '}
+          <span className="text-[10px]">{def.unit}</span>
+          <span className="mt-0.5 block text-[10px] text-[var(--color-muted)]">
+            <span
+              className="mr-1 inline-block size-1.5 rounded-full align-middle"
+              style={{ background: overlay.color }}
+            />
+            {overlay.title}{' '}
+            <span
+              ref={ovalRef}
+              className="font-semibold"
+              style={{ color: overlay.color }}
+            >
+              --
+            </span>{' '}
+            {overlay.unit}
+          </span>
+        </>
+      ) : (
+        <>
+          <span
+            ref={valRef}
+            className="text-base font-semibold text-[var(--color-text)]"
+          >
+            --
+          </span>{' '}
+          {def.unit}
+          <span ref={axisRef} className="mt-0.5 block text-[10px]">
+            &nbsp;
+          </span>
+        </>
+      )}
+    </p>
+  );
+}
+
+function HoverCrosshair({
+  hoverStore,
+  xs,
+  ys,
+  geomPx,
+  geomPy,
+  color,
+  dynamicsMetric,
+}: {
+  hoverStore: HoverStore;
+  xs: number[];
+  ys: (number | null)[];
+  geomPx: (x: number) => number;
+  geomPy: (v: number) => number;
+  color: string;
+  dynamicsMetric?: DynamicsMetric;
+}) {
+  // Direct DOM updates — avoids N React re-renders of crosshair trees on scrub.
+  const lineRef = useRef<HTMLDivElement>(null);
+  const dotRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const apply = () => {
+      const hover = hoverStore.getSnapshot();
+      const line = lineRef.current;
+      const dot = dotRef.current;
+      if (!line || !dot) return;
+      if (hover == null) {
+        line.style.display = 'none';
+        dot.style.display = 'none';
+        return;
+      }
+      const left = `${(geomPx(xs[hover]) / CHART_W) * 100}%`;
+      line.style.display = '';
+      line.style.left = left;
+      const hv = ys[hover];
+      if (has(hv)) {
+        dot.style.display = '';
+        dot.style.left = left;
+        dot.style.top = `${(geomPy(hv) / CHART_H) * 100}%`;
+        dot.style.background =
+          (dynamicsMetric && dynamicsBandColor(dynamicsMetric, hv)) || color;
+      } else {
+        dot.style.display = 'none';
+      }
+    };
+    apply();
+    return hoverStore.subscribe(apply);
+  }, [hoverStore, xs, ys, geomPx, geomPy, color, dynamicsMetric]);
+  return (
+    <>
+      <div
+        ref={lineRef}
+        className="pointer-events-none absolute top-0 bottom-0 w-px bg-[var(--color-text)] opacity-35"
+        style={{ display: 'none' }}
+      />
+      <span
+        ref={dotRef}
+        className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+        style={{ display: 'none' }}
+      />
+    </>
+  );
+}
+
+const MetricCard = memo(function MetricCard({
   def,
   xs,
   mode,
-  hover,
+  hoverStore,
   onHover,
-  onPin,
   coarse,
   zoneBounds,
   footer,
@@ -732,9 +1085,8 @@ function MetricCard({
   def: TrendDef;
   xs: number[];
   mode: 'distance' | 'time';
-  hover: number | null;
+  hoverStore: HoverStore;
   onHover: (i: number | null) => void;
-  onPin: (i: number) => void;
   coarse: boolean;
   zoneBounds?: (number | null)[] | null;
   footer?: ReactNode;
@@ -759,7 +1111,6 @@ function MetricCard({
     scrubbing: boolean;
     pointerId: number;
   } | null>(null);
-
   const ys = useMemo(() => {
     if (def.kind === 'scatter') return def.series;
     if (def.kind === 'hr-area') return def.series;
@@ -785,10 +1136,14 @@ function MetricCard({
 
   const geom = useMemo(() => {
     if (valid.length < 2 || xs.length < 2) return null;
+    const domainOpts = domainOptsFor(def.key, def.unit);
     const [lo, hi] =
       def.kind === 'scatter'
-        ? scatterDomain(valid, def.avg ?? null)
-        : domain(valid, false);
+        ? scatterDomain(valid, def.avg ?? null, domainOpts)
+        : domain(valid, true, domainOpts);
+    const clippedOutliers = domainOpts?.fixed
+      ? false
+      : domainClippedOutliers(valid, lo, hi);
     const x0 = xs[0];
     const x1 = xs[xs.length - 1] || 1;
     const iw = CHART_W - PAD.l - PAD.r;
@@ -810,15 +1165,15 @@ function MetricCard({
       x: px(x),
       label: formatAxis(x, mode),
     }));
-    return { px, py, lo, hi, ticks, xTicks, x0, x1, iw, ih };
+    return { px, py, lo, hi, ticks, xTicks, x0, x1, iw, ih, clippedOutliers };
   }, [xs, valid, def, mode]);
 
   const ogeom = useMemo(() => {
     if (!overlay || !oys || ovalid.length < 2 || !geom) return null;
     const [lo, hi] =
       overlay.kind === 'scatter'
-        ? scatterDomain(ovalid, overlay.avg ?? null)
-        : domain(ovalid, false);
+        ? scatterDomain(ovalid, overlay.avg ?? null, domainOptsFor(overlay.key, overlay.unit))
+        : domain(ovalid, true, domainOptsFor(overlay.key, overlay.unit));
     const ih = CHART_H - PAD.t - PAD.b;
     const py = (v: number) => {
       const c = Math.min(hi, Math.max(lo, v));
@@ -834,7 +1189,301 @@ function MetricCard({
     return { py, lo, hi, ticks };
   }, [overlay, oys, ovalid, geom]);
 
+  const paths = useMemo(() => {
+    const empty = {
+      linePath: '',
+      areaPath: '',
+      areaSegs: [] as string[],
+      bandPath: '',
+      hrSegs: [] as { d: string; color: string }[],
+      dots: [] as { x: number; y: number; color: string }[],
+      dynSegs: [] as { d: string; color: string }[],
+      primaryLine: '',
+      primaryArea: '',
+      overlayLine: '',
+      overlayArea: '',
+      avgY: null as number | null,
+    };
+    if (!geom) return empty;
+
+    const buildLine = (series: (number | null)[], py: (v: number) => number) => {
+      let d = '';
+      let pen = false;
+      series.forEach((v, i) => {
+        if (!has(v)) {
+          pen = false;
+          return;
+        }
+        d += `${pen ? 'L' : 'M'}${geom.px(xs[i]).toFixed(1)},${py(v).toFixed(1)}`;
+        pen = true;
+      });
+      return d;
+    };
+    /** Closed area polygons per continuous run (nulls / zeros become white gaps). */
+    const buildAreaSegs = (
+      series: (number | null)[],
+      py: (v: number) => number
+    ): string[] => {
+      const segs: string[] = [];
+      let d = '';
+      let pen = false;
+      let firstX = 0;
+      let lastX = 0;
+      const base = (PAD.t + geom.ih).toFixed(1);
+      const flush = () => {
+        if (!pen || !d) return;
+        segs.push(
+          `${d}L${lastX.toFixed(1)},${base}L${firstX.toFixed(1)},${base}Z`
+        );
+        d = '';
+        pen = false;
+      };
+      series.forEach((v, i) => {
+        if (!has(v)) {
+          flush();
+          return;
+        }
+        const x = geom.px(xs[i]);
+        if (!pen) firstX = x;
+        lastX = x;
+        d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${py(v).toFixed(1)}`;
+        pen = true;
+      });
+      flush();
+      return segs;
+    };
+    const buildArea = (line: string) => {
+      if (!line) return '';
+      return `${line}L${geom.px(xs[xs.length - 1]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}L${geom.px(xs[0]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}Z`;
+    };
+
+    let linePath = '';
+    let areaPath = '';
+    let areaSegs: string[] = [];
+    let bandPath = '';
+    const hrSegs: { d: string; color: string }[] = [];
+    const dots: { x: number; y: number; color: string }[] = [];
+    const dynSegs: { d: string; color: string }[] = [];
+
+    if (def.kind === 'scatter') {
+      const radius = Math.max(8, Math.round(def.series.length / 28));
+      const band = movingMean(def.series, radius);
+      const dynMetric = def.dynamicsMetric;
+      let pen = false;
+      let d = '';
+      let firstX = 0;
+      let lastX = 0;
+      let started = false;
+      // Soft fill under the trend (muted); band colouring lives on stroke + dots.
+      band.forEach((v, i) => {
+        if (!has(v)) {
+          pen = false;
+          return;
+        }
+        const x = geom.px(xs[i]);
+        if (!started) firstX = x;
+        lastX = x;
+        started = true;
+        d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${geom.py(v).toFixed(1)}`;
+        pen = true;
+      });
+      if (d) {
+        const base = (PAD.t + geom.ih).toFixed(1);
+        bandPath = `${d}L${lastX.toFixed(1)},${base}L${firstX.toFixed(1)},${base}Z`;
+      }
+      // Multi-segment trend stroke coloured by Garmin band (same pattern as HR zones).
+      if (dynMetric) {
+        let cur = '';
+        let color: string = DYNAMICS_BAND_COLORS[2];
+        let segPen = false;
+        band.forEach((v, i) => {
+          if (!has(v)) {
+            if (segPen && cur) dynSegs.push({ d: cur, color });
+            segPen = false;
+            cur = '';
+            return;
+          }
+          const c = dynamicsBandColor(dynMetric, v) ?? DYNAMICS_BAND_COLORS[2];
+          const pt = `${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
+          if (segPen && c !== color) {
+            dynSegs.push({ d: cur, color });
+            const prev = i > 0 && has(band[i - 1]) ? band[i - 1]! : v;
+            cur = `M${geom.px(xs[i - 1] ?? xs[i]).toFixed(1)},${geom.py(prev).toFixed(1)}L${pt}`;
+            color = c;
+          } else {
+            if (!segPen) color = c;
+            cur += `${segPen ? 'L' : 'M'}${pt}`;
+          }
+          segPen = true;
+        });
+        if (segPen && cur) dynSegs.push({ d: cur, color });
+      }
+      const validIdx: number[] = [];
+      ys.forEach((v, i) => {
+        if (has(v)) validIdx.push(i);
+      });
+      const maxDots = 1200;
+      const pushDot = (i: number, yVal: number) => {
+        const color =
+          (dynMetric && dynamicsBandColor(dynMetric, yVal)) || def.color;
+        dots.push({
+          x: geom.px(xs[i]),
+          y: geom.py(yVal),
+          color,
+        });
+      };
+      if (validIdx.length <= maxDots) {
+        for (const i of validIdx) {
+          pushDot(i, ys[i] as number);
+        }
+      } else {
+        // Bucket by x so dots span the full domain; always pin first & last.
+        const inner = Math.max(1, maxDots - 2);
+        const buckets: number[][] = Array.from({ length: inner }, () => []);
+        const x0 = xs[validIdx[0]];
+        const x1 = xs[validIdx[validIdx.length - 1]];
+        const span = x1 - x0 || 1;
+        const first = validIdx[0];
+        const last = validIdx[validIdx.length - 1];
+        for (const i of validIdx) {
+          if (i === first || i === last) continue;
+          let b = Math.floor(((xs[i] - x0) / span) * inner);
+          if (b < 0) b = 0;
+          if (b >= inner) b = inner - 1;
+          buckets[b].push(i);
+        }
+        pushDot(first, ys[first] as number);
+        for (const group of buckets) {
+          if (!group.length) continue;
+          const mid = group[Math.floor(group.length / 2)];
+          const samples = group
+            .map((i) => ys[i])
+            .filter((v): v is number => has(v))
+            .sort((a, b) => a - b);
+          const y = samples[Math.floor(samples.length / 2)];
+          pushDot(mid, y);
+        }
+        pushDot(last, ys[last] as number);
+      }
+    } else if (def.kind === 'hr-area') {
+      let cur = '';
+      let color = ZONE_COLORS[1];
+      let pen = false;
+      ys.forEach((v, i) => {
+        if (!has(v)) {
+          if (pen && cur) hrSegs.push({ d: cur, color });
+          pen = false;
+          cur = '';
+          return;
+        }
+        const c = ZONE_COLORS[hrZoneIndex(v, zoneBounds, def.max)];
+        const pt = `${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
+        if (pen && c !== color) {
+          hrSegs.push({ d: cur, color });
+          const prev = i > 0 && has(ys[i - 1]) ? ys[i - 1]! : v;
+          cur = `M${geom.px(xs[i - 1] ?? xs[i]).toFixed(1)},${geom.py(prev).toFixed(1)}L${pt}`;
+          color = c;
+        } else {
+          if (!pen) color = c;
+          cur += `${pen ? 'L' : 'M'}${pt}`;
+        }
+        pen = true;
+      });
+      if (pen && cur) hrSegs.push({ d: cur, color });
+      if (hrDrawStyle === 'fill') {
+        let area = '';
+        let ap = false;
+        ys.forEach((v, i) => {
+          if (!has(v)) {
+            ap = false;
+            return;
+          }
+          area += `${ap ? 'L' : 'M'}${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
+          ap = true;
+        });
+        if (area) {
+          areaPath = `${area}L${geom.px(xs[xs.length - 1]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}L${geom.px(xs[0]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}Z`;
+        }
+      }
+    } else {
+      linePath = buildLine(ys, geom.py);
+      if (!overlay) {
+        areaSegs = buildAreaSegs(ys, geom.py);
+      }
+    }
+
+    // Dual-metric overlay: bottom area + top line (roles swappable).
+    // hr-area joins this path so HR-as-primary gets a solid area (not zone strokes).
+    let primaryLine = linePath;
+    let primaryArea = areaPath;
+    let overlayLine = '';
+    let overlayArea = '';
+    if (overlay && oys && ogeom && def.kind !== 'scatter') {
+      const pLine = buildLine(ys, geom.py);
+      const oLine = buildLine(oys, ogeom.py);
+      if (overlayIsArea) {
+        overlayArea = buildArea(oLine);
+        primaryLine = pLine;
+        primaryArea = '';
+        overlayLine = '';
+      } else {
+        primaryArea = buildArea(pLine);
+        primaryLine = '';
+        overlayLine = oLine;
+        overlayArea = '';
+      }
+    } else if (overlay && oys && ogeom) {
+      // Scatter primary: draw overlay as line on right axis.
+      overlayLine = buildLine(oys, ogeom.py);
+    }
+
+    const avgY =
+      has(avgVal) && avgVal >= geom.lo && avgVal <= geom.hi
+        ? geom.py(avgVal)
+        : null;
+
+    return {
+      linePath,
+      areaPath,
+      areaSegs,
+      bandPath,
+      hrSegs,
+      dots,
+      dynSegs,
+      primaryLine,
+      primaryArea,
+      overlayLine,
+      overlayArea,
+      avgY,
+    };
+  }, [
+    ys,
+    xs,
+    geom,
+    oys,
+    ogeom,
+    def,
+    overlay,
+    overlayIsArea,
+    zoneBounds,
+    hrDrawStyle,
+    avgVal,
+  ]);
+
   if (!geom) return null;
+
+  const {
+    linePath,
+    areaPath,
+    areaSegs,
+    hrSegs,
+    dots,
+    primaryLine,
+    primaryArea,
+    overlayLine,
+    overlayArea,
+    avgY,
+  } = paths;
 
   const indexAtClientX = (clientX: number, el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
@@ -843,11 +1492,7 @@ function MetricCard({
     const svgX = frac * CHART_W;
     const u = (svgX - PAD.l) / (CHART_W - PAD.l - PAD.r || 1);
     const target = geom.x0 + Math.max(0, Math.min(1, u)) * (geom.x1 - geom.x0);
-    let best = 0;
-    for (let i = 1; i < xs.length; i++) {
-      if (Math.abs(xs[i] - target) < Math.abs(xs[best] - target)) best = i;
-    }
-    return best;
+    return indexNearTarget(xs, target);
   };
   const hoverAtClientX = (clientX: number, el: HTMLElement) => {
     onHover(indexAtClientX(clientX, el));
@@ -860,9 +1505,7 @@ function MetricCard({
     hoverAtClientX(e.clientX, e.currentTarget);
   };
   const onFinePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    const i = indexAtClientX(e.clientX, e.currentTarget);
-    onHover(i);
-    onPin(i);
+    onHover(indexAtClientX(e.clientX, e.currentTarget));
   };
   const onFinePointerLeave = () => {
     onHover(null);
@@ -915,250 +1558,12 @@ function MetricCard({
     const dx = Math.abs(e.clientX - start.x);
     const dy = Math.abs(e.clientY - start.y);
     if (dx <= TAP_PX && dy <= TAP_PX) {
-      hoverAtClientX(e.clientX, e.currentTarget);
+      onHover(indexAtClientX(e.clientX, e.currentTarget));
     }
   };
   const onCoarsePointerCancel = () => {
     tapRef.current = null;
   };
-
-  const buildLine = (series: (number | null)[], py: (v: number) => number) => {
-    let d = '';
-    let pen = false;
-    series.forEach((v, i) => {
-      if (!has(v)) {
-        pen = false;
-        return;
-      }
-      d += `${pen ? 'L' : 'M'}${geom.px(xs[i]).toFixed(1)},${py(v).toFixed(1)}`;
-      pen = true;
-    });
-    return d;
-  };
-  /** Closed area polygons per continuous run (nulls / zeros become white gaps). */
-  const buildAreaSegs = (
-    series: (number | null)[],
-    py: (v: number) => number
-  ): string[] => {
-    const segs: string[] = [];
-    let d = '';
-    let pen = false;
-    let firstX = 0;
-    let lastX = 0;
-    const base = (PAD.t + geom.ih).toFixed(1);
-    const flush = () => {
-      if (!pen || !d) return;
-      segs.push(
-        `${d}L${lastX.toFixed(1)},${base}L${firstX.toFixed(1)},${base}Z`
-      );
-      d = '';
-      pen = false;
-    };
-    series.forEach((v, i) => {
-      if (!has(v)) {
-        flush();
-        return;
-      }
-      const x = geom.px(xs[i]);
-      if (!pen) firstX = x;
-      lastX = x;
-      d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${py(v).toFixed(1)}`;
-      pen = true;
-    });
-    flush();
-    return segs;
-  };
-  const buildArea = (line: string) => {
-    if (!line) return '';
-    return `${line}L${geom.px(xs[xs.length - 1]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}L${geom.px(xs[0]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}Z`;
-  };
-
-  let linePath = '';
-  let areaPath = '';
-  let areaSegs: string[] = [];
-  let bandPath = '';
-  const hrSegs: { d: string; color: string }[] = [];
-  const dots: { x: number; y: number; color: string }[] = [];
-  const dynSegs: { d: string; color: string }[] = [];
-
-  if (def.kind === 'scatter') {
-    const radius = Math.max(8, Math.round(def.series.length / 28));
-    const band = movingMean(def.series, radius);
-    const dynMetric = def.dynamicsMetric;
-    let pen = false;
-    let d = '';
-    let firstX = 0;
-    let lastX = 0;
-    let started = false;
-    // Soft fill under the trend (muted); band colouring lives on stroke + dots.
-    band.forEach((v, i) => {
-      if (!has(v)) {
-        pen = false;
-        return;
-      }
-      const x = geom.px(xs[i]);
-      if (!started) firstX = x;
-      lastX = x;
-      started = true;
-      d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${geom.py(v).toFixed(1)}`;
-      pen = true;
-    });
-    if (d) {
-      const base = (PAD.t + geom.ih).toFixed(1);
-      bandPath = `${d}L${lastX.toFixed(1)},${base}L${firstX.toFixed(1)},${base}Z`;
-    }
-    // Multi-segment trend stroke coloured by Garmin band (same pattern as HR zones).
-    if (dynMetric) {
-      let cur = '';
-      let color = DYNAMICS_BAND_COLORS[2];
-      let segPen = false;
-      band.forEach((v, i) => {
-        if (!has(v)) {
-          if (segPen && cur) dynSegs.push({ d: cur, color });
-          segPen = false;
-          cur = '';
-          return;
-        }
-        const c = dynamicsBandColor(dynMetric, v) ?? DYNAMICS_BAND_COLORS[2];
-        const pt = `${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
-        if (segPen && c !== color) {
-          dynSegs.push({ d: cur, color });
-          const prev = i > 0 && has(band[i - 1]) ? band[i - 1]! : v;
-          cur = `M${geom.px(xs[i - 1] ?? xs[i]).toFixed(1)},${geom.py(prev).toFixed(1)}L${pt}`;
-          color = c;
-        } else {
-          if (!segPen) color = c;
-          cur += `${segPen ? 'L' : 'M'}${pt}`;
-        }
-        segPen = true;
-      });
-      if (segPen && cur) dynSegs.push({ d: cur, color });
-    }
-    const validIdx: number[] = [];
-    ys.forEach((v, i) => {
-      if (has(v)) validIdx.push(i);
-    });
-    const maxDots = 480;
-    const pushDot = (i: number, yVal: number) => {
-      const color =
-        (dynMetric && dynamicsBandColor(dynMetric, yVal)) || def.color;
-      dots.push({
-        x: geom.px(xs[i]),
-        y: geom.py(yVal),
-        color,
-      });
-    };
-    if (validIdx.length <= maxDots) {
-      for (const i of validIdx) {
-        pushDot(i, ys[i] as number);
-      }
-    } else {
-      // Bucket by x so dots span the full domain; always pin first & last.
-      const inner = Math.max(1, maxDots - 2);
-      const buckets: number[][] = Array.from({ length: inner }, () => []);
-      const x0 = xs[validIdx[0]];
-      const x1 = xs[validIdx[validIdx.length - 1]];
-      const span = x1 - x0 || 1;
-      const first = validIdx[0];
-      const last = validIdx[validIdx.length - 1];
-      for (const i of validIdx) {
-        if (i === first || i === last) continue;
-        let b = Math.floor(((xs[i] - x0) / span) * inner);
-        if (b < 0) b = 0;
-        if (b >= inner) b = inner - 1;
-        buckets[b].push(i);
-      }
-      pushDot(first, ys[first] as number);
-      for (const group of buckets) {
-        if (!group.length) continue;
-        const mid = group[Math.floor(group.length / 2)];
-        const samples = group
-          .map((i) => ys[i])
-          .filter((v): v is number => has(v))
-          .sort((a, b) => a - b);
-        const y = samples[Math.floor(samples.length / 2)];
-        pushDot(mid, y);
-      }
-      pushDot(last, ys[last] as number);
-    }
-  } else if (def.kind === 'hr-area') {
-    let cur = '';
-    let color = ZONE_COLORS[1];
-    let pen = false;
-    ys.forEach((v, i) => {
-      if (!has(v)) {
-        if (pen && cur) hrSegs.push({ d: cur, color });
-        pen = false;
-        cur = '';
-        return;
-      }
-      const c = ZONE_COLORS[hrZoneIndex(v, zoneBounds, def.max)];
-      const pt = `${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
-      if (pen && c !== color) {
-        hrSegs.push({ d: cur, color });
-        const prev = i > 0 && has(ys[i - 1]) ? ys[i - 1]! : v;
-        cur = `M${geom.px(xs[i - 1] ?? xs[i]).toFixed(1)},${geom.py(prev).toFixed(1)}L${pt}`;
-        color = c;
-      } else {
-        if (!pen) color = c;
-        cur += `${pen ? 'L' : 'M'}${pt}`;
-      }
-      pen = true;
-    });
-    if (pen && cur) hrSegs.push({ d: cur, color });
-    if (hrDrawStyle === 'fill') {
-      let area = '';
-      let ap = false;
-      ys.forEach((v, i) => {
-        if (!has(v)) {
-          ap = false;
-          return;
-        }
-        area += `${ap ? 'L' : 'M'}${geom.px(xs[i]).toFixed(1)},${geom.py(v).toFixed(1)}`;
-        ap = true;
-      });
-      if (area) {
-        areaPath = `${area}L${geom.px(xs[xs.length - 1]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}L${geom.px(xs[0]).toFixed(1)},${(PAD.t + geom.ih).toFixed(1)}Z`;
-      }
-    }
-  } else {
-    linePath = buildLine(ys, geom.py);
-    if (!overlay) {
-      areaSegs = buildAreaSegs(ys, geom.py);
-    }
-  }
-
-  // Dual-metric overlay: bottom area + top line (roles swappable).
-  // hr-area joins this path so HR-as-primary gets a solid area (not zone strokes).
-  let primaryLine = linePath;
-  let primaryArea = areaPath;
-  let overlayLine = '';
-  let overlayArea = '';
-  if (overlay && oys && ogeom && def.kind !== 'scatter') {
-    const pLine = buildLine(ys, geom.py);
-    const oLine = buildLine(oys, ogeom.py);
-    if (overlayIsArea) {
-      overlayArea = buildArea(oLine);
-      primaryLine = pLine;
-      primaryArea = '';
-      overlayLine = '';
-    } else {
-      primaryArea = buildArea(pLine);
-      primaryLine = '';
-      overlayLine = oLine;
-      overlayArea = '';
-    }
-  } else if (overlay && oys && ogeom) {
-    // Scatter primary: draw overlay as line on right axis.
-    overlayLine = buildLine(oys, ogeom.py);
-  }
-
-  const hv = hover != null ? ys[hover] : null;
-  const ohv = hover != null && oys ? oys[hover] : null;
-  const avgY =
-    has(avgVal) && avgVal >= geom.lo && avgVal <= geom.hi
-      ? geom.py(avgVal)
-      : null;
 
   // Same plot height for area + scatter so power/cadence row footers align.
   const plotH = prominent ? 'h-44 @min-[40rem]:h-56' : 'h-36 @min-[40rem]:h-40';
@@ -1222,7 +1627,20 @@ function MetricCard({
                 {titleAddon}
               </>
             )}
-            {def.helpKey ? <MetricHelp k={def.helpKey} tr={tr} /> : null}
+            {def.helpKey ? (
+              <MetricHelp
+                k={def.helpKey}
+                tr={tr}
+                note={
+                  geom.clippedOutliers
+                    ? tr(
+                        '已忽略极端值 · 区间带弱化',
+                        'Outliers clipped · zones softened'
+                      )
+                    : undefined
+                }
+              />
+            ) : null}
             {def.kind === 'scatter' && !overlay ? (
               <span className="text-[11px] font-normal text-[var(--color-muted)]">
                 {def.unit}
@@ -1275,57 +1693,15 @@ function MetricCard({
             ) : null}
           </div>
         </div>
-        <p
-          className={`metric shrink-0 text-right text-[12px] text-[var(--color-muted)] ${
-            overlay ? 'min-h-[2.75rem]' : 'h-[2.125rem]'
-          } ${hover == null ? 'invisible' : ''}`}
-          aria-hidden={hover == null}
-        >
-          {overlay ? (
-            <>
-              <span className="block text-[10px] text-[var(--color-muted)]">
-                <span
-                  className="mr-1 inline-block size-1.5 rounded-full align-middle"
-                  style={{ background: def.color }}
-                />
-                {def.title}
-              </span>
-              <span
-                className="text-base font-semibold"
-                style={{ color: def.color }}
-              >
-                {has(hv) ? def.format(hv) : '--'}
-              </span>{' '}
-              <span className="text-[10px]">{def.unit}</span>
-              <span className="mt-0.5 block text-[10px] text-[var(--color-muted)]">
-                <span
-                  className="mr-1 inline-block size-1.5 rounded-full align-middle"
-                  style={{ background: overlay.color }}
-                />
-                {overlay.title}{' '}
-                <span
-                  className="font-semibold"
-                  style={{ color: overlay.color }}
-                >
-                  {has(ohv) ? overlay.format(ohv) : '--'}
-                </span>{' '}
-                {overlay.unit}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-base font-semibold text-[var(--color-text)]">
-                {has(hv) ? def.format(hv) : '--'}
-              </span>{' '}
-              {def.unit}
-              <span className="mt-0.5 block text-[10px]">
-                {hover != null
-                  ? `${formatAxis(xs[hover], mode)}${mode === 'distance' ? ' km' : ''}`
-                  : '\u00a0'}
-              </span>
-            </>
-          )}
-        </p>
+        <HoverReadout
+          hoverStore={hoverStore}
+          ys={ys}
+          oys={oys}
+          xs={xs}
+          mode={mode}
+          def={def}
+          overlay={overlay}
+        />
       </div>
       <div
         className={`grid gap-x-1.5 ${overlay ? 'grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]' : 'grid-cols-[2.5rem_minmax(0,1fr)]'} ${plotH}`}
@@ -1378,9 +1754,7 @@ function MetricCard({
                 opacity={0.08}
               />
             ))}
-            {bandPath ? (
-              <path d={bandPath} fill="var(--color-muted)" opacity={0.12} />
-            ) : null}
+            {/* soft trend fill removed — scatter stays dots-only */}
             {primaryArea ? (
               <path d={primaryArea} fill={def.color} opacity={0.16} />
             ) : null}
@@ -1427,21 +1801,7 @@ function MetricCard({
                   />
                 ))
               : null}
-            {def.kind === 'scatter' && dynSegs.length
-              ? dynSegs.map((s) => (
-                  <path
-                    key={`${s.color}-${s.d.slice(0, 24)}`}
-                    d={s.d}
-                    fill="none"
-                    stroke={s.color}
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                    opacity={0.9}
-                  />
-                ))
-              : null}
+            {/* Scatter charts: dots only — no moving-mean trend stroke */}
             {(def.kind === 'area' || primaryLine) &&
             (primaryLine || linePath) ? (
               <path
@@ -1477,25 +1837,14 @@ function MetricCard({
                 vectorEffect="non-scaling-stroke"
               />
             ) : null}
-            {hover != null ? (
-              <line
-                x1={geom.px(xs[hover])}
-                x2={geom.px(xs[hover])}
-                y1={PAD.t}
-                y2={PAD.t + geom.ih}
-                stroke="var(--color-text)"
-                strokeOpacity={0.35}
-                strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-              />
-            ) : null}
+
           </svg>
           {/* HTML dots stay circular under preserveAspectRatio=none; x uses same viewBox fraction as SVG. */}
           {def.kind === 'scatter'
             ? dots.map((d) => (
                 <span
                   key={`dot-${d.color}-${d.x.toFixed(2)}-${d.y.toFixed(2)}`}
-                  className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  className="pointer-events-none absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
                   style={{
                     left: `${(d.x / CHART_W) * 100}%`,
                     top: `${(d.y / CHART_H) * 100}%`,
@@ -1505,19 +1854,15 @@ function MetricCard({
                 />
               ))
             : null}
-          {hover != null && has(hv) ? (
-            <span
-              className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
-              style={{
-                left: `${(geom.px(xs[hover]) / CHART_W) * 100}%`,
-                top: `${(geom.py(hv) / CHART_H) * 100}%`,
-                background:
-                  (def.dynamicsMetric &&
-                    dynamicsBandColor(def.dynamicsMetric, hv)) ||
-                  def.color,
-              }}
-            />
-          ) : null}
+          <HoverCrosshair
+            hoverStore={hoverStore}
+            xs={xs}
+            ys={ys}
+            geomPx={geom.px}
+            geomPy={geom.py}
+            color={def.color}
+            dynamicsMetric={def.dynamicsMetric}
+          />
         </div>
         {overlay && ogeom ? (
           <div className="relative">
@@ -1571,31 +1916,19 @@ function MetricCard({
       ) : null}
     </div>
   );
-}
+});
 
 export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
   const base = data.chart;
-  const [liveHover, setLiveHover] = useState<number | null>(null);
-  const [pinned, setPinned] = useState<number | null>(null);
-  const hover = liveHover ?? pinned;
-  const clearPin = useCallback(() => {
-    setPinned(null);
-    setLiveHover(null);
-  }, []);
+  // Shared live hover — scrub one chart, all crosshairs follow (no pinned sync).
+  const hoverStore = useMemo(() => createHoverStore(), []);
+  const setLiveHover = useCallback(
+    (i: number | null) => {
+      hoverStore.set(i);
+    },
+    [hoverStore]
+  );
   const coarse = useCoarsePointer();
-  useEffect(() => {
-    if (hover == null) return;
-    const onDocPointerDown = (e: globalThis.PointerEvent) => {
-      const t = e.target;
-      if (t instanceof Element && t.closest('[data-run-metric-card]')) {
-        return;
-      }
-      clearPin();
-    };
-    document.addEventListener('pointerdown', onDocPointerDown, true);
-    return () =>
-      document.removeEventListener('pointerdown', onDocPointerDown, true);
-  }, [hover, clearPin]);
   const [axis, setAxis] = useState<'distance' | 'time'>('distance');
   const [compareOn, setCompareOn] = useState(false);
   const [primaryKey, setPrimaryKey] = useState('pace');
@@ -1917,9 +2250,8 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
               def={comparePrimary}
               xs={xs}
               mode={axis}
-              hover={hover}
+              hoverStore={hoverStore}
               onHover={setLiveHover}
-              onPin={setPinned}
               coarse={coarse}
               prominent
               overlay={compareOverlay}
@@ -1944,6 +2276,22 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
           return (
             <div
               key={d.key}
+              id={
+                isPace
+                  ? 'ra-pace'
+                  : isHr
+                    ? 'ra-hr'
+                    : d.key === 'power'
+                      ? 'ra-power'
+                      : d.key === 'cad'
+                        ? 'ra-cadence'
+                        : d.key === 'stride' ||
+                            d.key === 'vo' ||
+                            d.key === 'vr' ||
+                            d.key === 'gct'
+                          ? 'ra-form'
+                          : undefined
+              }
               className={
                 isPace || isHr
                   ? 'border-t border-[var(--color-border)] pt-4 @min-[48rem]:col-span-2'
@@ -1955,9 +2303,8 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
                 def={d}
                 xs={xs}
                 mode={axis}
-                hover={hover}
+                hoverStore={hoverStore}
                 onHover={setLiveHover}
-                onPin={setPinned}
                 coarse={coarse}
                 prominent={isPace || isHr}
                 hrDrawStyle={isHr ? hrStyle : 'fill'}

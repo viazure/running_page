@@ -186,16 +186,31 @@ export function fitTrackMapOverview(
   const lats = allCoords.map((c) => c[1]).sort((a, b) => a - b);
   const t = Math.floor(lngs.length * 0.1);
 
-  map.easeTo({ pitch: 0, bearing: 0, duration: privacy ? 200 : 600 });
-  map.fitBounds(
-    new mapboxgl.LngLatBounds(
-      [lngs[t], lats[t]],
-      [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
-    ),
-    {
-      padding: 30,
-      maxZoom: 13,
-      duration: privacy ? 200 : 800,
-    }
+  const bounds = new mapboxgl.LngLatBounds(
+    [lngs[t], lats[t]],
+    [lngs[lngs.length - 1 - t], lats[lats.length - 1 - t]]
   );
+  const duration = privacy ? 200 : 800;
+  // One Mapbox zoom level closer than a plain fitBounds (padding 30 / maxZoom 13).
+  map.stop();
+  const camera = map.cameraForBounds(bounds, {
+    padding: 30,
+    maxZoom: 14,
+  });
+  if (!camera || camera.zoom == null) {
+    map.easeTo({ pitch: 0, bearing: 0, duration: privacy ? 200 : 600 });
+    map.fitBounds(bounds, {
+      padding: 30,
+      maxZoom: 14,
+      duration,
+    });
+    return;
+  }
+  map.easeTo({
+    center: camera.center,
+    zoom: Math.min(camera.zoom + 1, 14),
+    bearing: 0,
+    pitch: 0,
+    duration,
+  });
 }

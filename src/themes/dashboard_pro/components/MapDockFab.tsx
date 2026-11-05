@@ -7,11 +7,11 @@ import { createPortal } from 'react-dom';
  */
 /** ~80%+ peek: only tuck a small right edge so icon + label stay readable. */
 export const bookmarkFabClass =
-  'fixed right-0 z-[70] flex translate-x-4 cursor-pointer items-center gap-2 rounded-l-full border border-r-0 py-2.5 pl-3.5 pr-5 text-sm font-medium shadow-lg transition-transform duration-200 ease-out hover:translate-x-0 focus-visible:translate-x-0 active:translate-x-0';
+  'fixed right-0 z-[70] flex translate-x-3 cursor-pointer items-center gap-1.5 rounded-l-full border border-r-0 py-2 pl-3 pr-4 text-xs font-medium shadow-md transition-transform duration-200 ease-out hover:translate-x-0 focus-visible:translate-x-0 active:translate-x-0';
 
 /** Desktop (≥1024px / Tailwind `lg`): centered pill FAB. */
 export const desktopCenteredFabClass =
-  'fixed left-1/2 z-[70] hidden -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium shadow-lg transition-transform hover:scale-[1.03] lg:flex';
+  'fixed left-1/2 z-[70] hidden -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium shadow-md transition-transform hover:scale-[1.03] lg:flex';
 
 /** Floating control to show/hide the map after it has scrolled off-screen. */
 export function MapDockFab({
@@ -44,7 +44,7 @@ export function MapDockFab({
       aria-label={expanded ? labelHide : labelShow}
     >
       <svg
-        className="size-4 shrink-0"
+        className="size-3.5 shrink-0"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
