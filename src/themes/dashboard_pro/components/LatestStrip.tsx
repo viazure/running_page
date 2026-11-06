@@ -24,6 +24,28 @@ function sportTone(type: string): string {
   return 'var(--color-accent)';
 }
 
+function sportLabel(type: string, locale: string): string {
+  if (locale !== 'zh') return type;
+  if (type === 'Run') return '跑步';
+  if (type === 'Ride') return '骑行';
+  if (type === 'Hike') return '徒步';
+  return type;
+}
+
+/** Relative day label: 今天/昨天 or MM-DD. */
+function formatActivityDate(isoLocal: string, locale: string): string {
+  const day = isoLocal.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const yest = new Date(now);
+  yest.setDate(yest.getDate() - 1);
+  const yesterday = `${yest.getFullYear()}-${String(yest.getMonth() + 1).padStart(2, '0')}-${String(yest.getDate()).padStart(2, '0')}`;
+  if (day === today) return locale === 'zh' ? '今天' : 'Today';
+  if (day === yesterday) return locale === 'zh' ? '昨天' : 'Yesterday';
+  return day.slice(5); // MM-DD
+}
+
 function renderMiniTrack(summaryPolyline: string, size = 48): string {
   try {
     let coords = polyline.decode(summaryPolyline);
@@ -89,6 +111,7 @@ export function LatestStrip({
               : '';
           const title = getTitle ? getTitle(a) : a.name;
           const hasDist = a.distance > 0;
+          const when = formatActivityDate(a.start_date_local, locale);
           return (
             <button
               key={a.run_id}
@@ -120,11 +143,14 @@ export function LatestStrip({
                 )}
               </div>
               <div className="latest-strip-body">
-                <div
-                  className="latest-strip-sport"
-                  style={{ color: sportTone(a.type) }}
-                >
-                  {a.type}
+                <div className="latest-strip-meta">
+                  <span
+                    className="latest-strip-sport"
+                    style={{ color: sportTone(a.type) }}
+                  >
+                    {sportLabel(a.type, locale)}
+                  </span>
+                  <span className="latest-strip-date">{when}</span>
                 </div>
                 <div className="latest-strip-title">{title}</div>
                 <div className="latest-strip-stats">

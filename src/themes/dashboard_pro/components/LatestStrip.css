@@ -56,12 +56,26 @@
   border-radius: 999px;
 }
 
+.latest-strip-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
 .latest-strip-sport {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  margin-bottom: 2px;
+}
+
+.latest-strip-date {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--color-muted);
+  flex-shrink: 0;
 }
 
 .latest-strip-title {

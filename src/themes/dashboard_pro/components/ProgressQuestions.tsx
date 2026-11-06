@@ -37,15 +37,19 @@ function paceSecFromSpeed(speedMs: number): number | null {
   return 1000 / speedMs;
 }
 
-function hasPaceSport(type: string): boolean {
-  return type === 'Run' || type === 'Ride' || type === 'Hike';
-}
-
 function sportColor(type: string): string {
   if (type === 'Run') return 'var(--color-run, #c45c26)';
   if (type === 'Ride') return '#4f7ce0';
   if (type === 'Hike') return '#c98500';
   return 'var(--color-accent)';
+}
+
+function sportLabel(type: string, locale: string): string {
+  if (locale !== 'zh') return type;
+  if (type === 'Run') return '跑步';
+  if (type === 'Ride') return '骑行';
+  if (type === 'Hike') return '徒步';
+  return type;
 }
 
 function currentStreakDays(activities: Activity[]): number {
@@ -153,19 +157,54 @@ export function ProgressQuestions({
         if (m < 0 || m > 11) continue;
         months[m].days.add(a.start_date_local.slice(0, 10));
       }
-      return months.map((m) => ({ label: m.label, count: m.days.size }));
+      return months.map((m) => ({
+        label: m.label,
+        count: m.days.size,
+        aria:
+          locale === 'zh'
+            ? `${m.label} · ${m.days.size} 活跃日`
+            : `${m.label}: ${m.days.size} active days`,
+      }));
     }
-    // month / week: reuse volume buckets as day-level presence
-    const dayMap = new Map<string, number>();
-    for (const a of activities) {
-      const key = a.start_date_local.slice(0, 10);
-      dayMap.set(key, (dayMap.get(key) ?? 0) + 1);
+    if (period === 'month') {
+      // Aggregate active days by week-of-month (days 1–7 → W1, …) so the
+      // chart stays ~4–5 readable columns instead of 28–31 binary stubs.
+      const y = Number(periodKey.slice(0, 4));
+      const m = Number(periodKey.slice(5, 7));
+      const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const weekCount = Math.max(1, Math.ceil(daysInMonth / 7));
+      const weeks = Array.from({ length: weekCount }, (_, i) => ({
+        label: locale === 'zh' ? `第${i + 1}周` : `W${i + 1}`,
+        days: new Set<string>(),
+      }));
+      for (const a of activities) {
+        const d = Number(a.start_date_local.slice(8, 10));
+        if (!Number.isFinite(d) || d < 1 || d > daysInMonth) continue;
+        const wi = Math.min(weekCount - 1, Math.floor((d - 1) / 7));
+        weeks[wi].days.add(a.start_date_local.slice(0, 10));
+      }
+      return weeks.map((w) => ({
+        label: w.label,
+        count: w.days.size,
+        aria:
+          locale === 'zh'
+            ? `${w.label} · ${w.days.size} 活跃日`
+            : `${w.label}: ${w.days.size} active days`,
+      }));
     }
-    return volumeSeries.map((b) => ({
-      label: b.label,
-      count: b.hours > 0 || b.km > 0 ? 1 : 0,
-    }));
-  }, [activities, period, locale, volumeSeries]);
+    // week: keep 7 day-level presence bars
+    return volumeSeries.map((b) => {
+      const on = b.hours > 0 || b.km > 0;
+      return {
+        label: b.label,
+        count: on ? 1 : 0,
+        aria:
+          locale === 'zh'
+            ? `${b.label} · ${on ? '有训' : '无训'}`
+            : `${b.label}: ${on ? 'active' : 'rest'}`,
+      };
+    });
+  }, [activities, period, periodKey, locale, volumeSeries]);
 
   const totalSeconds = useMemo(
     () => activities.reduce((s, a) => s + parseMovingTime(a.moving_time), 0),
@@ -177,6 +216,7 @@ export function ProgressQuestions({
   );
   const streak = useMemo(() => currentStreakDays(activities), [activities]);
 
+  // Q3 scatter: Run only (site owner shows running). Pace axis = min/km.
   const scatter = useMemo(() => {
     const pts: {
       id: number;
@@ -186,12 +226,11 @@ export function ProgressQuestions({
       name: string;
     }[] = [];
     for (const a of activities) {
-      if (!hasPaceSport(a.type)) continue;
+      if (a.type !== 'Run') continue;
       const pace = paceSecFromSpeed(a.average_speed);
       if (pace == null || !Number.isFinite(pace)) continue;
       if (a.distance < 500) continue;
-      // Keep pace in a readable band for running chart.
-      if (a.type === 'Run' && (pace < 180 || pace > 600)) continue;
+      if (pace < 180 || pace > 600) continue;
       pts.push({
         id: a.run_id,
         km: Math.round((a.distance / 1000) * 100) / 100,
@@ -203,11 +242,10 @@ export function ProgressQuestions({
     return pts;
   }, [activities]);
 
-  const runCount = scatter.filter((p) => p.type === 'Run').length;
+  const runCount = scatter.length;
   const avgPace = useMemo(() => {
-    const runs = scatter.filter((p) => p.type === 'Run');
-    if (!runs.length) return null;
-    return runs.reduce((s, p) => s + p.pace, 0) / runs.length;
+    if (!scatter.length) return null;
+    return scatter.reduce((s, p) => s + p.pace, 0) / scatter.length;
   }, [scatter]);
 
   const maxAttend = Math.max(1, ...attendance.map((a) => a.count));
@@ -230,10 +268,30 @@ export function ProgressQuestions({
         ? tr('日训练小时', 'Daily training hours')
         : tr('本周训练小时', 'Weekly training hours');
 
+  const volumeAria =
+    period === 'year'
+      ? tr(
+          `本年累计 ${formatHours(totalSeconds)}，按月训练小时`,
+          `Year total ${formatHours(totalSeconds)}, hours by month`
+        )
+      : period === 'month'
+        ? tr(
+            `本月累计 ${formatHours(totalSeconds)}，按日训练小时`,
+            `Month total ${formatHours(totalSeconds)}, hours by day`
+          )
+        : tr(
+            `本周累计 ${formatHours(totalSeconds)}，按日训练小时`,
+            `Week total ${formatHours(totalSeconds)}, hours by day`
+          );
+
   const attendCaption =
     period === 'year'
       ? tr('各月活跃天数', 'Active days by month')
-      : tr('本期出勤', 'Attendance this period');
+      : period === 'month'
+        ? tr('各周活跃天数', 'Active days by week')
+        : tr('本期出勤', 'Attendance this period');
+
+  const trainedMonths = volumeSeries.filter((v) => v.hours > 0).length;
 
   return (
     <section
@@ -250,23 +308,21 @@ export function ProgressQuestions({
             {tr('累计', 'Total')} <strong>{formatHours(totalSeconds)}</strong>
             {period === 'year' ? (
               <>
-                {' · '}
-                {tr('月均', 'avg/mo')}{' '}
+                {' \u00b7 '}
+                {tr('有训月均', 'avg / trained mo')}{' '}
                 <strong>
-                  {formatHours(
-                    totalSeconds /
-                      Math.max(
-                        1,
-                        volumeSeries.filter((v) => v.hours > 0).length || 1
-                      )
-                  )}
+                  {formatHours(totalSeconds / Math.max(1, trainedMonths || 1))}
                 </strong>
               </>
             ) : null}
           </div>
         </div>
         <p className="progress-q-caption">{volumeCaption}</p>
-        <div className="progress-chart-surface">
+        <div
+          className="progress-chart-surface"
+          role="img"
+          aria-label={volumeAria}
+        >
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={volumeSeries}
@@ -346,8 +402,9 @@ export function ProgressQuestions({
           </h2>
           <div className="progress-q-stat">
             {tr('活跃日', 'Active days')} <strong>{activeDays}</strong>
-            {' · '}
-            {tr('连续', 'streak')} <strong>{streak}</strong> {tr('天', 'd')}
+            {' \u00b7 '}
+            {tr('本期连续', 'period streak')} <strong>{streak}</strong>{' '}
+            {tr('天', 'd')}
           </div>
         </div>
         <p className="progress-q-caption">{attendCaption}</p>
@@ -360,7 +417,12 @@ export function ProgressQuestions({
           {attendance.map((m) => {
             const h = Math.round((m.count / maxAttend) * 100);
             return (
-              <div key={m.label} className="progress-attend-mon">
+              <div
+                key={m.label}
+                className="progress-attend-mon"
+                title={m.aria}
+                aria-label={m.aria}
+              >
                 <div className="progress-attend-lab">{m.label}</div>
                 <div className="progress-attend-bar">
                   <div
@@ -384,26 +446,25 @@ export function ProgressQuestions({
             {tr('跑得更快更远？', 'Faster & farther?')}
           </h2>
           <div className="progress-q-stat">
-            {tr('有配速场次', 'paced')} <strong>{scatter.length}</strong>
+            {tr('跑步场次', 'runs')} <strong>{runCount}</strong>
             {avgPace != null ? (
               <>
-                {' · '}
-                {tr('跑步均配', 'avg pace')}{' '}
+                {' \u00b7 '}
+                {tr('均配速', 'avg pace')}{' '}
                 <strong>{formatPaceSeconds(avgPace)}</strong>
-                {runCount ? ` (${runCount})` : null}
               </>
             ) : null}
           </div>
         </div>
         <p className="progress-q-caption">
           {tr(
-            '距离 × 配速散点（Run / Ride / Hike）',
-            'Distance × pace (Run / Ride / Hike)'
+            '距离 × 配速散点（跑步，min/km）',
+            'Distance × pace (Run, min/km)'
           )}
         </p>
         {scatter.length === 0 ? (
           <p className="progress-empty">
-            {tr('本期暂无配速数据', 'No paced activities in this period')}
+            {tr('本期暂无跑步配速数据', 'No paced runs in this period')}
           </p>
         ) : (
           <div className="progress-scatter-wrap">
@@ -411,7 +472,10 @@ export function ProgressQuestions({
               className="progress-scatter"
               viewBox="0 0 640 260"
               role="img"
-              aria-label={tr('距离配速散点', 'Distance vs pace')}
+              aria-label={tr(
+                `跑步距离与配速散点，共 ${runCount} 场`,
+                `Run distance vs pace, ${runCount} activities`
+              )}
             >
               <g stroke="var(--color-border)" strokeWidth="1">
                 <line x1="56" y1="20" x2="56" y2="210" />
@@ -490,7 +554,7 @@ export function ProgressQuestions({
                     opacity="0.85"
                   >
                     <title>
-                      {`${p.name}: ${p.km} km · ${formatPaceSeconds(p.pace)}`}
+                      {`${p.name}: ${p.km} km \u00b7 ${formatPaceSeconds(p.pace)}`}
                     </title>
                   </circle>
                 );
@@ -499,17 +563,9 @@ export function ProgressQuestions({
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
                 fontSize="11"
               >
-                <circle cx="470" cy="36" r="4.5" fill={sportColor('Run')} />
-                <text x="482" y="40" fill="var(--color-muted)">
-                  Run
-                </text>
-                <circle cx="530" cy="36" r="4.5" fill={sportColor('Ride')} />
+                <circle cx="530" cy="36" r="4.5" fill={sportColor('Run')} />
                 <text x="542" y="40" fill="var(--color-muted)">
-                  Ride
-                </text>
-                <circle cx="470" cy="54" r="4.5" fill={sportColor('Hike')} />
-                <text x="482" y="58" fill="var(--color-muted)">
-                  Hike
+                  {sportLabel('Run', locale)}
                 </text>
               </g>
             </svg>
@@ -517,8 +573,8 @@ export function ProgressQuestions({
         )}
         <p className="progress-note">
           {tr(
-            '※ 无配速运动已排除（力量等）',
-            '※ Activities without pace are excluded'
+            '※ 仅展示跑步；无配速场次已排除',
+            '※ Runs only; activities without pace are excluded'
           )}
         </p>
       </div>
