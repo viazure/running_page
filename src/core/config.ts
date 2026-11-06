@@ -28,6 +28,29 @@ export function navLinkLabel(link: NavLink, locale: Locale): string {
   return link.name_en || link.name || link.name_zh || link.url;
 }
 
+export interface DashboardProModules {
+  /** 本周目标 */
+  weekly: boolean;
+  /** 年目标 */
+  yearly_goal: boolean;
+  /** 月目标 */
+  monthly_goal: boolean;
+  /** 连续 */
+  streak: boolean;
+  /** 贡献热力 */
+  heatmap: boolean;
+  /** 足迹（中国地图） */
+  footprint: boolean;
+  /** 年距离趋势 */
+  yearly_distance: boolean;
+}
+
+export interface DashboardProConfig {
+  /** 首页 Latest 紧凑条；默认 false */
+  show_latest?: boolean;
+  modules?: Partial<DashboardProModules>;
+}
+
 interface AppConfig {
   locale: Locale;
   theme: 'light' | 'dark' | 'system';
@@ -45,6 +68,7 @@ interface AppConfig {
   blog_url?: string;
   /** Optional GitHub repo URL — shown in footer when set */
   github_url?: string;
+  dashboard_pro?: DashboardProConfig;
 }
 
 const config = rawConfig as unknown as AppConfig;
@@ -79,6 +103,28 @@ export const MAPBOX_TOKEN: string =
   import.meta.env.MAPBOX_TOKEN ||
   config.mapbox_token ||
   '';
+
+const DEFAULT_DASHBOARD_PRO_MODULES: DashboardProModules = {
+  weekly: true,
+  yearly_goal: true,
+  monthly_goal: true,
+  streak: true,
+  heatmap: true,
+  footprint: true,
+  yearly_distance: true,
+};
+
+const rawDashboardPro = config.dashboard_pro ?? {};
+
+/** Homepage Latest strip (1–3 compact rows). Default off. */
+export const DASHBOARD_PRO_SHOW_LATEST: boolean =
+  rawDashboardPro.show_latest === true;
+
+/** Homepage module visibility. Defaults keep current layout (all on). */
+export const DASHBOARD_PRO_MODULES: DashboardProModules = {
+  ...DEFAULT_DASHBOARD_PRO_MODULES,
+  ...(rawDashboardPro.modules ?? {}),
+};
 
 export interface AnalysisHrZonesConfig {
   method?: 'percent_lthr' | 'percent_max_hr';

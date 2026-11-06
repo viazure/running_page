@@ -33,12 +33,15 @@ import {
   PRIVACY_MODE,
   PRIVACY_ANONYMOUS_TITLES,
   GITHUB_URL,
+  DASHBOARD_PRO_MODULES,
+  DASHBOARD_PRO_SHOW_LATEST,
 } from '@/core/config';
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TracksPageSkeleton } from './components/TracksPageSkeleton';
 import { TrendChart } from './components/TrendChart';
 import { MapDockFab } from './components/MapDockFab';
+import { LatestStrip } from './components/LatestStrip';
 import {
   playbackMapHeightPx,
   useMobileMapDock,
@@ -119,6 +122,7 @@ function DashboardProContent({
   const filtered = useFilteredActivities(activities, filter, year);
   /** Fallback year for components that require a concrete calendar year (e.g. TrendChart). */
   const chartYear = year ?? years[0] ?? FOOTER_YEAR;
+  const modules = DASHBOARD_PRO_MODULES;
   const privacyActive = PRIVACY_MODE && !isUnlocked;
   const useAnonymousTitles = privacyActive && PRIVACY_ANONYMOUS_TITLES;
   const activityTitle = (a: Activity) =>
@@ -203,18 +207,28 @@ function DashboardProContent({
   }
 
   const activityLog = (
-    <ActivityLog
-      activities={filtered}
-      years={years}
-      year={year}
-      setYear={setYear}
-      selectedActivity={selectedActivity}
-      onSelectActivity={setSelectedActivity}
-      filter={filter}
-      getTitle={activityTitle}
-      pageSize={ACTIVITY_LOG_PAGE_SIZE}
-      variant="pro"
-    />
+    <>
+      {DASHBOARD_PRO_SHOW_LATEST ? (
+        <LatestStrip
+          activities={filtered}
+          getTitle={activityTitle}
+          onSelectActivity={setSelectedActivity}
+          limit={3}
+        />
+      ) : null}
+      <ActivityLog
+        activities={filtered}
+        years={years}
+        year={year}
+        setYear={setYear}
+        selectedActivity={selectedActivity}
+        onSelectActivity={setSelectedActivity}
+        filter={filter}
+        getTitle={activityTitle}
+        pageSize={ACTIVITY_LOG_PAGE_SIZE}
+        variant="pro"
+      />
+    </>
   );
 
   // Long document + viewport: slot is a plain placeholder (lockHeight).
@@ -295,7 +309,7 @@ function DashboardProContent({
     </div>
   );
 
-  const trend = (
+  const trend = modules.yearly_distance ? (
     <div
       className={`order-8 flex min-w-0 flex-col lg:order-none ${
         allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
@@ -311,7 +325,7 @@ function DashboardProContent({
         }
       />
     </div>
-  );
+  ) : null;
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
@@ -341,15 +355,17 @@ function DashboardProContent({
               compact
             />
           </div>
-          <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
-            <ContributionHeatmap
-              activities={activities}
-              year={year}
-              filter={filter}
-              onSelectActivity={setSelectedActivity}
-              onYearChange={setYear}
-            />
-          </div>
+          {modules.heatmap ? (
+            <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+              <ContributionHeatmap
+                activities={activities}
+                year={year}
+                filter={filter}
+                onSelectActivity={setSelectedActivity}
+                onYearChange={setYear}
+              />
+            </div>
+          ) : null}
           {allYears ? (
             <div className="order-6 flex min-w-0 flex-col overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
               {activityLog}
@@ -374,36 +390,38 @@ function DashboardProContent({
               showLocationStats
             />
           </div>
-          <div
-            className={`order-7 min-w-0 overflow-hidden lg:order-none ${
-              allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
-            }`}
-          >
-            <Suspense
-              fallback={
-                <MapFallback
+          {modules.footprint ? (
+            <div
+              className={`order-7 min-w-0 overflow-hidden lg:order-none ${
+                allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+              }`}
+            >
+              <Suspense
+                fallback={
+                  <MapFallback
+                    className={
+                      allYears
+                        ? 'h-[220px] lg:h-[260px]'
+                        : 'h-[200px] lg:h-full lg:min-h-[180px]'
+                    }
+                  />
+                }
+              >
+                <ChinaMap
+                  activities={filtered}
+                  filter={filter}
+                  selectedProvince={selectedProvince}
+                  onSelectProvince={(p) => {
+                    setSelectedProvince(p);
+                    setSelectedActivity(null);
+                  }}
                   className={
-                    allYears
-                      ? 'h-[220px] lg:h-[260px]'
-                      : 'h-[200px] lg:h-full lg:min-h-[180px]'
+                    allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
                   }
                 />
-              }
-            >
-              <ChinaMap
-                activities={filtered}
-                filter={filter}
-                selectedProvince={selectedProvince}
-                onSelectProvince={(p) => {
-                  setSelectedProvince(p);
-                  setSelectedActivity(null);
-                }}
-                className={
-                  allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
-                }
-              />
-            </Suspense>
-          </div>
+              </Suspense>
+            </div>
+          ) : null}
           {allYears ? (
             <>
               {routeMap}

@@ -40,6 +40,21 @@ privacy_unlock: true
 # false：始终显示原活动名（仅地图关灯受隐私影响）
 privacy_anonymous_titles: true
 
+# ── dashboard_pro 主题选项 ────────────────────────────────────────────────────
+# 仅 theme_preset: dashboard_pro 时生效；默认外观与现在一致（模块全开、Latest 关）
+dashboard_pro:
+  # 首页 Latest 紧凑条（活动列表顶 1～3 条）；默认关
+  show_latest: false
+  # 首页模块开关（false 不渲染）
+  modules:
+    weekly: true # 本周目标
+    yearly_goal: true # 年目标
+    monthly_goal: true # 月目标
+    streak: true # 连续
+    heatmap: true # 贡献热力
+    footprint: true # 足迹（中国地图）
+    yearly_distance: true # 年距离趋势
+
 # 博客 URL（可选；配置后顶栏最右侧显示强调入口，未配置则不显示）
 blog_url: 'https://viazure.cc'
 

@@ -11,6 +11,7 @@ import {
 import { formatPaceSeconds } from '@/core/splits';
 import ActivityList from '@/themes/classic/components/ActivityList';
 import { ChipScrollRow } from './ChipScrollRow';
+import { ProgressQuestions } from './ProgressQuestions';
 import './SummaryPage.css';
 
 interface SummaryPageProps {
@@ -393,6 +394,15 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 </table>
               </div>
             </section>
+
+            {period === 'year' || period === 'month' || period === 'week' ? (
+              <ProgressQuestions
+                activities={periodActivities}
+                period={period}
+                periodKey={activeKey}
+                locale={locale}
+              />
+            ) : null}
           </div>
         </>
       )}

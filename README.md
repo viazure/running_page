@@ -14,6 +14,22 @@
 - 地图：路线地图与轨迹页，路线自动适配视野、轨迹回放动画、3D 追随视角；无 GPS 的活动可复用上一条路线展示；轨迹墙与手机地图 FAB
 - 汇总页（年 / 月 / 日 / Life）、横向 Chip 滚动（年份等）、中国地图、页眉页脚与中英文本地化
 - 首屏骨架与 boot 壳；主题偏好与上游 dashboard 默认值隔离；前端 chunk 加载失败时自动恢复
+- 汇总 Progress 三问（做得更多 / 坚持出现 / 更快更远）；首页模块开关与可选 Latest（见下方配置）
+
+`config.yml` 中 `dashboard_pro`（仅本主题生效；默认与当前外观一致）：
+
+```yaml
+dashboard_pro:
+  show_latest: false # 首页 Latest 紧凑条（列表顶 1～3 条）
+  modules:
+    weekly: true # 本周目标
+    yearly_goal: true # 年目标
+    monthly_goal: true # 月目标
+    streak: true # 连续
+    heatmap: true # 贡献热力
+    footprint: true # 足迹（中国地图）
+    yearly_distance: true # 年距离趋势
+```
 
 ### 2. 每次活动的分段分析弹层
 
