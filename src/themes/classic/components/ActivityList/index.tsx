@@ -217,6 +217,14 @@ const getSportTypeOptions = (activityData: Activity[]) => {
   return cache.sportTypeOptions;
 };
 
+const defaultSelectedYear = (years: string[]): string | null => {
+  if (!years.length) return null;
+  const calendarYear = String(new Date().getFullYear());
+  if (years.includes(calendarYear)) return calendarYear;
+  // availableYears is newest-first
+  return years[0] ?? null;
+};
+
 const getAvailableActivityYears = (activityData: Activity[]) => {
   const cache = getActivityListCache(activityData);
   if (cache.availableYears) return cache.availableYears;
@@ -460,14 +468,21 @@ function useActivityListMeasurements(
   const sampleResizeObserverRef = useRef<ResizeObserver | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
 
-  const itemsPerRowStore = useMemo(() => createSnapshotStore(0), []);
+  const itemsPerRowStore = useMemo(
+    () => createSnapshotStore(embedded ? (interval === 'day' ? 2 : 1) : 0),
+    // once per mount — embed defaults avoid a 0-column / viewport-tall first paint
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
   const cardWidthStore = useMemo(
     () => createSnapshotStore(itemWidth),
     [itemWidth]
   );
   const rowHeightStore = useMemo(() => createSnapshotStore(360), []);
   const listHeightStore = useMemo(
-    () => createSnapshotStore(getInitialListHeight()),
+    () => createSnapshotStore(embedded ? 320 : getInitialListHeight()),
+    // once per mount — embed must not start at window.innerHeight-40
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -619,7 +634,9 @@ function useActivityListMeasurements(
       containerRef.current = node;
 
       if (!node) {
-        itemsPerRowStore.setSnapshot(0);
+        itemsPerRowStore.setSnapshot(
+          embedded ? (interval === 'day' ? 2 : 1) : 0
+        );
         return;
       }
 
@@ -628,7 +645,13 @@ function useActivityListMeasurements(
       containerResizeObserverRef.current = observer;
       scheduleMeasurementUpdate();
     },
-    [disconnectContainerObserver, itemsPerRowStore, scheduleMeasurementUpdate]
+    [
+      disconnectContainerObserver,
+      embedded,
+      interval,
+      itemsPerRowStore,
+      scheduleMeasurementUpdate,
+    ]
   );
 
   const setFilterContainerRef = useCallback(
@@ -1044,12 +1067,30 @@ const ActivityListInner: React.FC<
   const { activities: activityData } = useActivities();
   const { t, locale } = useLocale();
   const cs = embedded ? embedStyles : styles;
-  const [interval, setInterval] = useState<IntervalType>(initialInterval);
-  useEffect(() => {
-    setInterval(initialInterval);
-  }, [initialInterval]);
+  const [intervalState, setInterval] = useState<IntervalType>(initialInterval);
+  // Embedded Pro Summary owns period pills via initialInterval. Keep interval
+  // controlled so day->Life never paints a stale Day card grid while the host
+  // drops `.summary-day-classic` (overflow/width thrash = visible shrink).
+  const interval: IntervalType = embedded ? initialInterval : intervalState;
   const [sportType, setSportType] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  // Day / Life keep independent year chips (Pro Summary switches interval in-place).
+  // Sync defaults on first mount (activities already resolved via Suspense) so the
+  // first paint never shows the unfiltered full Day list / full Life SVG.
+  const [daySelectedYear, setDaySelectedYear] = useState<string | null>(() =>
+    defaultSelectedYear(getAvailableActivityYears(activityData))
+  );
+  const [lifeSelectedYear, setLifeSelectedYear] = useState<string | null>(() =>
+    defaultSelectedYear(getAvailableActivityYears(activityData))
+  );
+  const [otherSelectedYear, setOtherSelectedYear] = useState<string | null>(
+    null
+  );
+  const dayYearSeededRef = useRef(
+    defaultSelectedYear(getAvailableActivityYears(activityData)) != null
+  );
+  const lifeYearSeededRef = useRef(
+    defaultSelectedYear(getAvailableActivityYears(activityData)) != null
+  );
   const lifeCaptureRef = useRef<HTMLDivElement>(null);
   const [lifeExporting, setLifeExporting] = useState(false);
   const lifeExportingRef = useRef(false);
@@ -1065,6 +1106,43 @@ const ActivityListInner: React.FC<
     const timer = window.setTimeout(() => setLifeExportMessage(''), 2500);
     return () => window.clearTimeout(timer);
   }, [lifeExportMessage]);
+
+  const availableYears = useMemo(
+    () => getAvailableActivityYears(activityData),
+    [activityData]
+  );
+
+  // Seed defaults once per mode: calendar year if present, else newest with data.
+  // Prevents first Day/Life visit from rendering the unfiltered full set / full Life SVG.
+  useEffect(() => {
+    if (!availableYears.length) return;
+    const def = defaultSelectedYear(availableYears);
+    if (!def) return;
+    if (!dayYearSeededRef.current) {
+      dayYearSeededRef.current = true;
+      setDaySelectedYear(def);
+    }
+    if (!lifeYearSeededRef.current) {
+      lifeYearSeededRef.current = true;
+      setLifeSelectedYear(def);
+    }
+  }, [availableYears]);
+
+  const selectedYear =
+    interval === 'life'
+      ? lifeSelectedYear
+      : interval === 'day'
+        ? daySelectedYear
+        : otherSelectedYear;
+
+  const setSelectedYear = useCallback(
+    (year: string | null) => {
+      if (interval === 'life') setLifeSelectedYear(year);
+      else if (interval === 'day') setDaySelectedYear(year);
+      else setOtherSelectedYear(year);
+    },
+    [interval]
+  );
 
   const handleLifeExport = useCallback(async () => {
     if (!lifeCaptureRef.current || lifeExportingRef.current) return;
@@ -1086,10 +1164,6 @@ const ActivityListInner: React.FC<
     }
   }, [locale, selectedYear]);
 
-  const availableYears = useMemo(
-    () => getAvailableActivityYears(activityData),
-    [activityData]
-  );
   const sportTypeOptions = useMemo(
     () => getSportTypeOptions(activityData),
     [activityData]
@@ -1166,8 +1240,11 @@ const ActivityListInner: React.FC<
   }
 
   const dataList = useMemo(() => {
+    // Life never renders the period card list - skip grouping so day->Life
+    // does not burn a frame aggregating hundreds of day rows first.
+    if (interval === 'life') return [];
     const summaries = getPeriodSummaries(activityData, interval, sportType);
-    if (!embedded || !selectedYear || interval === 'life') return summaries;
+    if (!embedded || !selectedYear) return summaries;
     return summaries.filter(({ period }) =>
       periodMatchesYear(period, selectedYear, interval)
     );
@@ -1230,7 +1307,9 @@ const ActivityListInner: React.FC<
       ? '100%'
       : `${itemsPerRow * (embedded ? cardWidth : ITEM_WIDTH) + Math.max(0, itemsPerRow - 1) * ITEM_GAP}px`;
 
-  const loading = itemsPerRow < 1 || !rowHeight;
+  // Classic full-page Summary still waits for measure; Pro embed must not —
+  // a viewport-tall LOADING_TEXT was covering the Summary period tabs visually.
+  const loading = embedded ? false : itemsPerRow < 1 || !rowHeight;
   const SelectedYearSvg = selectedYear
     ? yearSummarySvgs[`./year_summary_${selectedYear}.svg`]
     : null;
@@ -1297,7 +1376,8 @@ const ActivityListInner: React.FC<
         )}
         {embedded ? (
           <>
-            {showSportTypeFilter ? (
+            {/* Life only allows "all" — hide sport row so year chips align with 年/月/周. */}
+            {showSportTypeFilter && interval !== 'life' ? (
               <div className={cs.chipRow}>
                 {sportTypeOptions.map((type) => {
                   const disabled = interval === 'life' && type !== 'all';
@@ -1537,7 +1617,28 @@ const ActivityListInner: React.FC<
             className={embedded ? cs.lifeSvgWrap : styles.lifeSvgWrap}
           >
             <SvgTitleTipHost key={`${selectedYear ?? 'life'}-${sportType}`}>
-              <Suspense fallback={<div>Loading SVG...</div>}>
+              <Suspense
+                fallback={
+                  <div
+                    className={embedded ? cs.embedPending : undefined}
+                    role="status"
+                    aria-live="polite"
+                    style={
+                      embedded
+                        ? undefined
+                        : {
+                            minHeight: 160,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--color-run-table-thead)',
+                          }
+                    }
+                  >
+                    {LOADING_TEXT}
+                  </div>
+                }
+              >
                 {SelectedYearSvg ? (
                   <SelectedYearSvg className={cs.yearSummarySvg} />
                 ) : (

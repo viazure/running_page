@@ -44,13 +44,6 @@
   --svg-color-active-cell: var(--color-accent);
   --svg-special-color: var(--color-run);
   --svg-special-color2: var(--color-accent);
-
-  /*
-   * Desktop Life SVG dvh fallback chrome: page header (~52) + period tabs (~40)
-   * + filter/year row (~48) + root padding (~36) + gaps (~24) ≈ 200px → 12.5rem.
-   * Prefer flex max-height:100%; this only kicks in if the height chain is soft.
-   */
-  --summary-life-viewport-chrome: 12.5rem;
 }
 
 .summary-layout {
@@ -124,6 +117,23 @@
   fill: var(--svg-special-color2, var(--color-accent));
 }
 
+/* Life SVG fills the bordered wrap; wrap itself is min(100%, 680px) + centered. */
+.summary-page-root [class*='yearSummarySvg'],
+.summary-page-root [class*='lifeContainer'] > svg,
+.summary-page-root [class*='lifeContainer'] svg,
+.summary-life-classic [class*='yearSummarySvg'],
+.summary-life-classic [class*='lifeContainer'] > svg,
+.summary-life-classic [class*='lifeContainer'] svg {
+  width: 100% !important;
+  height: auto !important;
+  max-height: none;
+}
+
+.summary-page-root [class*='lifeContainer'],
+.summary-life-classic [class*='lifeContainer'] {
+  min-height: 120px;
+}
+
 /* Mobile Life: allow vertical scroll inside the host shell */
 @media (max-width: 899px) {
   .summary-life-classic:not(.summary-day-classic) {
@@ -132,7 +142,7 @@
   }
 }
 
-/* Desktop Life: clip to the flex viewport (module owns SVG max-height) */
+/* Desktop Life: clip to the flex viewport; inner .lifeContainer may still scroll */
 @media (min-width: 900px) {
   .summary-life-classic:not(.summary-day-classic) {
     overflow: hidden;
@@ -209,45 +219,17 @@
   color: #fff;
 }
 
-/* Period chips row: thin, quiet desktop scrollbar; hide on mobile (gesture scroll) */
-.summary-period-chips {
+/* Period chips row chrome lives in ChipScrollRow (hidden scrollbar + edge fades).
+ * `.summary-period-chips` remains as a root hook class for spacing utilities. */
+
+/* In-panel wait for day/Life embed — never covers page chrome / period tabs */
+.summary-embed-pending {
+  display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  padding-bottom: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-muted) 28%, transparent)
-    transparent;
-}
-
-.summary-period-chips::-webkit-scrollbar {
-  height: 4px;
-}
-
-.summary-period-chips::-webkit-scrollbar-track {
-  background: transparent;
-  margin-inline: 2px;
-}
-
-.summary-period-chips::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-muted) 28%, transparent);
-  border-radius: 9999px;
-}
-
-.summary-period-chips:hover::-webkit-scrollbar-thumb,
-.summary-period-chips:focus-within::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-muted) 48%, transparent);
-}
-
-.summary-period-chips::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--color-muted) 62%, transparent);
-}
-
-@media (max-width: 767px) {
-  .summary-period-chips {
-    scrollbar-width: none;
-    scrollbar-color: transparent transparent;
-  }
-  .summary-period-chips::-webkit-scrollbar {
-    display: none;
-    height: 0;
-  }
+  justify-content: center;
+  min-height: 10rem;
+  padding: 1.5rem;
+  color: var(--color-muted);
+  font-size: 13px;
 }

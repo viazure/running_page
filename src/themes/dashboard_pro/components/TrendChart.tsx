@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Area,
   AreaChart,
@@ -19,6 +26,16 @@ interface TrendChartProps {
   className?: string;
 }
 
+function finePointerHover(): boolean {
+  if (
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function'
+  ) {
+    return false;
+  }
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+}
+
 export function TrendChart({
   activities,
   year,
@@ -28,6 +45,10 @@ export function TrendChart({
   const gradientId = useId().replace(/:/g, '');
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  /** Controlled tooltip index — null = dismissed (mobile sticky-focus fix). */
+  const [tipIndex, setTipIndex] = useState<number | null>(null);
+
+  const clearTip = useCallback(() => setTipIndex(null), []);
 
   // Avoid Recharts ResponsiveContainer width/height(-1) warn when flex parents
   // have not resolved size on the first paint.
@@ -45,6 +66,25 @@ export function TrendChart({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Outside tap / Escape clears sticky Recharts tooltip (esp. mobile).
+  useEffect(() => {
+    if (tipIndex == null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const root = surfaceRef.current;
+      if (!root) return;
+      if (!root.contains(e.target as Node)) clearTip();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearTip();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [tipIndex, clearTip]);
 
   const data = useMemo(() => {
     const buckets = Array.from({ length: 12 }, (_, month) => {
@@ -101,6 +141,46 @@ export function TrendChart({
               accessibilityLayer={false}
               tabIndex={-1}
               style={{ outline: 'none' }}
+              onMouseMove={(state) => {
+                if (!finePointerHover()) return;
+                if (
+                  state?.isTooltipActive &&
+                  state.activeTooltipIndex != null &&
+                  state.activeTooltipIndex !== ''
+                ) {
+                  setTipIndex(Number(state.activeTooltipIndex));
+                }
+              }}
+              onMouseLeave={() => {
+                if (finePointerHover()) clearTip();
+              }}
+              onClick={(state, event) => {
+                // Recharts retains its last index on axis/margin clicks.
+                // Only taps inside the plot should select a month.
+                const plot = surfaceRef.current
+                  ?.querySelector('.recharts-cartesian-grid')
+                  ?.getBoundingClientRect();
+                if (
+                  !plot ||
+                  event.clientX < plot.left ||
+                  event.clientX > plot.right ||
+                  event.clientY < plot.top ||
+                  event.clientY > plot.bottom
+                ) {
+                  clearTip();
+                  return;
+                }
+                if (
+                  !state ||
+                  state.activeTooltipIndex == null ||
+                  state.activeTooltipIndex === ''
+                ) {
+                  clearTip();
+                  return;
+                }
+                const idx = Number(state.activeTooltipIndex);
+                setTipIndex((prev) => (prev === idx ? null : idx));
+              }}
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -137,6 +217,10 @@ export function TrendChart({
                 allowDecimals={false}
               />
               <Tooltip
+                active={tipIndex != null}
+                // Touch clicks update Recharts' click index synchronously;
+                // hover index can still be stale on the first mobile tap.
+                trigger={finePointerHover() ? 'hover' : 'click'}
                 cursor={{
                   stroke: 'var(--color-accent)',
                   strokeWidth: 1,

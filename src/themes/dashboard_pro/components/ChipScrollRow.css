@@ -1,0 +1,145 @@
+/* Shared horizontal chip scroller: no classic scrollbar gutter; edge fades + optional arrows. */
+
+.chip-scroll-row {
+  --chip-scroll-fade: var(--color-bg);
+  --chip-scroll-fade-size: 22px;
+  min-width: 0;
+}
+
+/* Rail ignores outer padding (e.g. pb-1.5 on root) so arrows center on chip text. */
+.chip-scroll-rail {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+}
+
+.chip-scroll-viewport {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  -ms-overflow-style: none;
+}
+
+.chip-scroll-viewport::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.chip-scroll-content {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* Edge fades — only when the matching data flag is set (overflow + room to scroll). */
+.chip-scroll-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: var(--chip-scroll-fade-size);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.chip-scroll-fade-left {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    var(--chip-scroll-fade) 0%,
+    color-mix(in srgb, var(--chip-scroll-fade) 72%, transparent) 45%,
+    transparent 100%
+  );
+}
+
+.chip-scroll-fade-right {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    var(--chip-scroll-fade) 0%,
+    color-mix(in srgb, var(--chip-scroll-fade) 72%, transparent) 45%,
+    transparent 100%
+  );
+}
+
+.chip-scroll-row[data-can-left='true'] .chip-scroll-fade-left,
+.chip-scroll-row[data-can-right='true'] .chip-scroll-fade-right {
+  opacity: 1;
+}
+
+/* Quiet chevron: small visible glyph, slightly larger transparent hit target. */
+.chip-scroll-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--chip-scroll-fade) 70%, transparent);
+  color: color-mix(in srgb, var(--color-muted) 72%, transparent);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.chip-scroll-arrow-left {
+  left: 1px;
+}
+
+.chip-scroll-arrow-right {
+  right: 1px;
+}
+
+.chip-scroll-arrow:hover {
+  color: var(--color-muted);
+  background: color-mix(
+    in srgb,
+    var(--chip-scroll-fade) 55%,
+    var(--color-sunken) 45%
+  );
+}
+
+.chip-scroll-arrow:disabled {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chip-scroll-arrow svg {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+/* Arrows only for the side that can still scroll; desktop pointer only (mobile: swipe). */
+@media (hover: hover) and (pointer: fine) {
+  .chip-scroll-row[data-can-left='true'] .chip-scroll-arrow-left,
+  .chip-scroll-row[data-can-right='true'] .chip-scroll-arrow-right {
+    display: inline-flex;
+  }
+}
+
+/* Heatmap PNG export: hide chrome */
+.exporting .chip-scroll-fade,
+.exporting .chip-scroll-arrow {
+  display: none !important;
+  opacity: 0 !important;
+}

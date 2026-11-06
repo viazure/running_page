@@ -9,6 +9,7 @@ import {
 import type { Activity, SportFilter } from '@/types';
 import { formatDuration, formatPace } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
+import { ChipScrollRow } from './ChipScrollRow';
 
 type PageSizeConfig = number | { mobile: number; desktop: number };
 
@@ -263,37 +264,63 @@ export function ActivityLog({
       </div>
 
       {/* Year tabs */}
-      <div
-        className={
-          isPro
-            ? '-mx-1 mb-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
-            : 'mb-3 flex flex-wrap items-center gap-2'
-        }
-      >
-        <button
-          type="button"
-          onClick={() => {
-            setYear(null);
-            setPage(0);
-          }}
-          className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+      {isPro ? (
+        <ChipScrollRow
+          className="mb-3"
+          contentClassName="gap-2"
+          fadeFrom="var(--color-card)"
         >
-          {locale === 'zh' ? '全部' : 'All'}
-        </button>
-        {years.map((y) => (
           <button
             type="button"
-            key={y}
             onClick={() => {
-              setYear(y);
+              setYear(null);
               setPage(0);
             }}
-            className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
           >
-            {y}
+            {locale === 'zh' ? '全部' : 'All'}
           </button>
-        ))}
-      </div>
+          {years.map((y) => (
+            <button
+              type="button"
+              key={y}
+              onClick={() => {
+                setYear(y);
+                setPage(0);
+              }}
+              className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            >
+              {y}
+            </button>
+          ))}
+        </ChipScrollRow>
+      ) : (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setYear(null);
+              setPage(0);
+            }}
+            className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === null ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+          >
+            {locale === 'zh' ? '全部' : 'All'}
+          </button>
+          {years.map((y) => (
+            <button
+              type="button"
+              key={y}
+              onClick={() => {
+                setYear(y);
+                setPage(0);
+              }}
+              className={`shrink-0 cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all ${FOCUS_RING} ${year === y ? 'bg-[var(--color-accent)] text-white' : 'bg-[var(--color-sunken)] text-[var(--color-muted)] hover:text-[var(--color-text)]'}`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Distance filter */}
       <div

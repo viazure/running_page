@@ -36,6 +36,7 @@ import {
 } from '@/core/config';
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
+import { TracksPageSkeleton } from './components/TracksPageSkeleton';
 import { TrendChart } from './components/TrendChart';
 import { MapDockFab } from './components/MapDockFab';
 import {
@@ -179,7 +180,7 @@ function DashboardProContent({
 
   if (page === 'tracks') {
     return (
-      <Suspense>
+      <Suspense fallback={<TracksPageSkeleton />}>
         <TracksPage
           activities={activities}
           filter={filter}
@@ -460,8 +461,12 @@ function DashboardProInner() {
   return (
     <div
       className={
-        page === 'summary'
-          ? 'flex h-svh flex-col bg-[var(--color-bg)]'
+        page === 'summary' || page === 'tracks'
+          ? // dvh (not svh): mobile toolbars make svh shorter than the visual
+            // viewport and left a ~100px paper-colored gap under the summary shell.
+            // Tracks: same lock so body/html never grows a document scrollbar;
+            // wall/page scrolls inside the content pane instead.
+            'flex h-dvh flex-col overflow-hidden bg-[var(--color-bg)]'
           : 'min-h-dvh bg-[var(--color-bg)]'
       }
       data-filter={filter}
@@ -477,7 +482,7 @@ function DashboardProInner() {
 
       <div
         className={
-          page === 'summary'
+          page === 'summary' || page === 'tracks'
             ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
             : undefined
         }
@@ -493,7 +498,7 @@ function DashboardProInner() {
         </Suspense>
       </div>
 
-      {page !== 'summary' ? (
+      {page === 'home' ? (
         <footer
           className="flex items-center justify-center border-t border-[var(--color-border)] py-6 text-sm text-[var(--color-muted)]"
           style={

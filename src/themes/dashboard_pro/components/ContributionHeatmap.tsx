@@ -8,6 +8,7 @@ import {
   formatPace,
 } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
+import { ChipScrollRow } from './ChipScrollRow';
 
 interface HeatmapProps {
   activities: Activity[];
@@ -405,8 +406,12 @@ export function ContributionHeatmap({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="shrink-0 text-lg font-semibold">{heatmapTitle}</h2>
         <div className="flex min-w-0 items-center gap-2">
-          {/* Year tabs — swipe/scroll like ActivityLog */}
-          <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Year tabs — ChipScrollRow: hidden bar + edge fades + desktop arrows */}
+          <ChipScrollRow
+            className="min-w-0 flex-1"
+            contentClassName="gap-2"
+            fadeFrom="var(--color-card)"
+          >
             <button
               type="button"
               onClick={() => handleSelectYear('all')}
@@ -432,7 +437,7 @@ export function ContributionHeatmap({
                 {y}
               </button>
             ))}
-          </div>
+          </ChipScrollRow>
 
           {/* Export button */}
           <button

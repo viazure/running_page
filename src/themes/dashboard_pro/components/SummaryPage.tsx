@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import type { Activity } from '@/types';
 import { getActivityData, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
@@ -10,6 +10,7 @@ import {
 } from '@/utils/summary';
 import { formatPaceSeconds } from '@/core/splits';
 import ActivityList from '@/themes/classic/components/ActivityList';
+import { ChipScrollRow } from './ChipScrollRow';
 import './SummaryPage.css';
 
 interface SummaryPageProps {
@@ -122,26 +123,8 @@ function SummaryInner({ onBack }: SummaryPageProps) {
   const edges = chartEdgeLabels(period, bars, locale);
   const avgDistance = stats.count ? stats.distance / stats.count : 0;
   const periodKeys = groups.map(([k]) => k);
-  const chipsRowRef = useRef<HTMLDivElement>(null);
-  // Desktop: vertical wheel → horizontal chip scroll (overflow-x alone ignores deltaY).
-  useEffect(() => {
-    const el = chipsRowRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (el.scrollWidth <= el.clientWidth + 1) return;
-      const dy = e.deltaY;
-      const dx = e.deltaX;
-      if (Math.abs(dy) >= Math.abs(dx) && dy !== 0) {
-        el.scrollLeft += dy;
-        e.preventDefault();
-      }
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [period, periodKeys.length]);
-
   return (
-    <div className="summary-page-root mx-auto flex h-full min-h-0 w-full max-w-[1280px] flex-col overflow-hidden px-4 pt-3 md:px-10 md:pt-4">
+    <div className="summary-page-root mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col overflow-hidden px-4 pt-3 md:px-6 md:pt-4">
       <div className="flex shrink-0 items-center gap-3.5 pb-3">
         {onBack ? (
           <button
@@ -153,11 +136,6 @@ function SummaryInner({ onBack }: SummaryPageProps) {
           </button>
         ) : null}
         <h1 className="text-lg font-bold">{tr('汇总', 'Summary')}</h1>
-        {activeKey && period !== 'life' && period !== 'day' ? (
-          <span className="ml-auto text-xs text-[var(--color-muted)]">
-            {periodLabel(period, activeKey, locale)}
-          </span>
-        ) : null}
       </div>
 
       <div
@@ -192,14 +170,29 @@ function SummaryInner({ onBack }: SummaryPageProps) {
             period === 'day' ? 'summary-day-classic' : ''
           }`}
         >
-          <ActivityList embedded initialInterval={period} hideIntervalChips />
+          {/* Local Suspense: day/Life lazy SVG/chart must not bubble to
+              DashboardContentSkeleton (that wiped 返回 / 汇总 / period tabs). */}
+          <Suspense
+            fallback={
+              <div
+                className="summary-embed-pending"
+                role="status"
+                aria-live="polite"
+              >
+                {tr('加载中…', 'Loading…')}
+              </div>
+            }
+          >
+            <ActivityList embedded initialInterval={period} hideIntervalChips />
+          </Suspense>
         </div>
       ) : (
         <>
           {periodKeys.length > 1 ? (
-            <div
-              ref={chipsRowRef}
-              className="summary-period-chips mb-3 flex min-w-0 shrink-0 gap-1.5 overflow-x-auto overscroll-x-contain pb-1.5"
+            <ChipScrollRow
+              className="summary-period-chips mb-3 shrink-0 pb-1.5"
+              contentClassName="gap-1.5"
+              fadeFrom="var(--color-bg)"
             >
               {periodKeys.map((k) => {
                 const on = k === activeKey;
@@ -218,7 +211,7 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                   </button>
                 );
               })}
-            </div>
+            </ChipScrollRow>
           ) : null}
 
           <div className="summary-layout min-h-0 flex-auto overflow-y-auto overscroll-contain pb-6">

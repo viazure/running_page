@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -20,6 +21,7 @@ import {
   formatPace,
 } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
+import { ChipScrollRow } from './ChipScrollRow';
 import { MAPBOX_TOKEN } from '@/config';
 import {
   blankMapStyle,
@@ -94,44 +96,61 @@ interface TracksPageProps {
   dark?: boolean;
 }
 
+const trackSvgCache = new Map<string, string>();
+
 function renderTrackSVG(summaryPolyline: string, size = 80): string {
+  const cacheKey = `${size}|${summaryPolyline}`;
+  const cached = trackSvgCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   try {
     const coords = polyline.decode(summaryPolyline);
-    if (coords.length < 2) return '';
-    const lats = coords.map((c) => c[0]);
-    const lngs = coords.map((c) => c[1]);
-    const minLat = Math.min(...lats),
-      maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs),
-      maxLng = Math.max(...lngs);
+    if (coords.length < 2) {
+      trackSvgCache.set(cacheKey, '');
+      return '';
+    }
+    let minLat = coords[0][0],
+      maxLat = coords[0][0],
+      minLng = coords[0][1],
+      maxLng = coords[0][1];
+    for (let i = 1; i < coords.length; i++) {
+      const lat = coords[i][0];
+      const lng = coords[i][1];
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
     const latRange = maxLat - minLat || 0.001;
     const lngRange = maxLng - minLng || 0.001;
     const scale = Math.min((size - 8) / lngRange, (size - 8) / latRange);
     const offsetX = (size - lngRange * scale) / 2;
     const offsetY = (size - latRange * scale) / 2;
-    return coords
+    const points = coords
       .map(([lat, lng]) => {
         const x = (lng - minLng) * scale + offsetX;
         const y = size - ((lat - minLat) * scale + offsetY);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(' ');
+    trackSvgCache.set(cacheKey, points);
+    return points;
   } catch {
+    trackSvgCache.set(cacheKey, '');
     return '';
   }
 }
 
-function TrackThumb({
+const TrackThumb = memo(function TrackThumb({
   activity,
   color,
   selected,
-  onClick,
+  onSelect,
   title,
 }: {
   activity: Activity;
   color: string;
   selected: boolean;
-  onClick: () => void;
+  onSelect: (a: Activity) => void;
   title?: string;
 }) {
   const size = 80;
@@ -143,8 +162,8 @@ function TrackThumb({
     title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
   return (
     <div
-      className={`group relative h-[72px] w-[72px] cursor-pointer rounded transition-all md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
-      onClick={onClick}
+      className={`group relative h-[72px] w-[72px] cursor-pointer rounded md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
+      onClick={() => onSelect(activity)}
       title={label}
     >
       <svg
@@ -164,7 +183,15 @@ function TrackThumb({
       </svg>
     </div>
   );
-}
+}, (prev, next) =>
+  prev.selected === next.selected &&
+  prev.color === next.color &&
+  prev.title === next.title &&
+  prev.activity.run_id === next.activity.run_id &&
+  prev.activity.summary_polyline === next.activity.summary_polyline &&
+  prev.activity.distance === next.activity.distance &&
+  prev.activity.name === next.activity.name
+);
 
 function TrackMap({
   activity,
@@ -189,6 +216,8 @@ function TrackMap({
   const chaseRef = useRef(createMapChaseController());
   const orbitRef = useRef(createMapOrbitController());
   const selectedCoordsRef = useRef<Coordinate[] | null>(null);
+  /** Last activities array baked into all-routes; skip full rebuild on select. */
+  const overviewActsRef = useRef<Activity[] | null>(null);
   const styleIdleRef = useRef(false);
   const refitViewRef = useRef<() => void>(() => {});
   const [needsRecenter, setNeedsRecenter] = useState(false);
@@ -366,7 +395,13 @@ function TrackMap({
         }
 
         stopAnimations();
-        removeRouteLayers(m);
+        // Keep overview layer across selection switches; only rebuild when
+        // activities identity changed or the source is missing.
+        for (const id of ['selected', 'animated-run', 'highlight-run']) {
+          if (m.getLayer(id)) m.removeLayer(id);
+          if (m.getSource(id)) m.removeSource(id);
+        }
+        removeChaseHighlight(m);
 
         const coords = polyline
           .decode(act.summary_polyline)
@@ -375,33 +410,39 @@ function TrackMap({
         animKeyRef.current = animKey;
         selectedCoordsRef.current = coords;
 
-        const features = acts
-          .filter((a) => a.summary_polyline)
-          .map((a) => ({
-            type: 'Feature' as const,
-            properties: { type: a.type, color: getColor(a) },
-            geometry: {
-              type: 'LineString' as const,
-              coordinates: polyline
-                .decode(a.summary_polyline!)
-                .map(([lat, lng]) => [lng, lat]),
-            },
-          }));
-        if (features.length) {
-          m.addSource('all-routes', {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features },
-          });
-          m.addLayer({
-            id: 'all-routes',
-            type: 'line',
-            source: 'all-routes',
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': privacy ? 2 : 1.2,
-              'line-opacity': privacy ? 0.35 : 0.2,
-            },
-          });
+        const actsChanged = overviewActsRef.current !== acts;
+        overviewActsRef.current = acts;
+        if (actsChanged || !m.getSource('all-routes')) {
+          if (m.getLayer('all-routes')) m.removeLayer('all-routes');
+          if (m.getSource('all-routes')) m.removeSource('all-routes');
+          const features = acts
+            .filter((a) => a.summary_polyline)
+            .map((a) => ({
+              type: 'Feature' as const,
+              properties: { type: a.type, color: getColor(a) },
+              geometry: {
+                type: 'LineString' as const,
+                coordinates: polyline
+                  .decode(a.summary_polyline!)
+                  .map(([lat, lng]) => [lng, lat]),
+              },
+            }));
+          if (features.length) {
+            m.addSource('all-routes', {
+              type: 'geojson',
+              data: { type: 'FeatureCollection', features },
+            });
+            m.addLayer({
+              id: 'all-routes',
+              type: 'line',
+              source: 'all-routes',
+              paint: {
+                'line-color': ['get', 'color'],
+                'line-width': privacy ? 2 : 1.2,
+                'line-opacity': privacy ? 0.35 : 0.2,
+              },
+            });
+          }
         }
 
         setChaseHighlightLine(m, coords, color);
@@ -421,6 +462,7 @@ function TrackMap({
       selectedCoordsRef.current = null;
       stopAnimations();
       removeRouteLayers(m);
+      overviewActsRef.current = acts;
 
       const features = acts
         .filter((a) => a.summary_polyline)
@@ -1131,7 +1173,11 @@ function TrackMap({
     // Do not wait for map 'idle': 3D orbit jumpTo keeps the map busy forever,
     // so a styleIdle gate would drop activity switches after 3D is enabled.
     if (!mapReady.current || !m?.isStyleLoaded()) return;
-    updateRoutesRef.current();
+    // Yield a frame so the thumb selection ring paints before decode/flyTo.
+    const raf = window.requestAnimationFrame(() => {
+      updateRoutesRef.current();
+    });
+    return () => window.cancelAnimationFrame(raf);
   }, [activity, activities]);
 
   useEffect(() => {
@@ -1417,10 +1463,28 @@ export function TracksPage({
     return () => clearTimeout(id);
   }, [withPolyline.length, selectedYear, sportFilter]);
 
-  const handleSelectTrack = (a: Activity) => {
+  const sortedClusteredTracks = useMemo(() => {
+    const list = [...clusteredTracks];
+    list.sort((a, b) =>
+      sortBy === 'distance'
+        ? b.representative.distance - a.representative.distance
+        : new Date(b.representative.start_date_local).getTime() -
+          new Date(a.representative.start_date_local).getTime()
+    );
+    return list;
+  }, [clusteredTracks, sortBy]);
+
+  const onSelectActivityRef = useRef(onSelectActivity);
+  useEffect(() => {
+    onSelectActivityRef.current = onSelectActivity;
+  }, [onSelectActivity]);
+  const handleSelectTrack = useCallback((a: Activity) => {
     setSelectedActivity((prev) => (prev?.run_id === a.run_id ? null : a));
-    onSelectActivity?.(a);
-  };
+    // Parent setState can re-render the shell; defer so local ring commits first.
+    const notify = onSelectActivityRef.current;
+    if (!notify) return;
+    window.setTimeout(() => notify(a), 0);
+  }, []);
 
   const allSportTabs: { label: string; value: SportType; color: string }[] = [
     { label: locale === 'zh' ? '跑步' : 'Run', value: 'Run', color: '#c45c26' },
@@ -1429,9 +1493,9 @@ export function TracksPage({
   const showSportFilter = availableSportTabs.length > 1;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col overflow-y-auto overscroll-contain px-4 py-6 md:px-6 lg:overflow-hidden">
       {/* Top bar: back + title */}
-      <div className="mb-5 flex items-center gap-4">
+      <div className="mb-5 flex shrink-0 items-center gap-4">
         <button
           onClick={onBack}
           className="flex shrink-0 items-center gap-1.5 text-sm text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
@@ -1456,7 +1520,7 @@ export function TracksPage({
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr] lg:items-stretch lg:overflow-hidden">
         {/* Mobile: contents so map can sticky while track wall scrolls.
             Desktop: stacked left column. */}
         <div className="contents lg:flex lg:flex-col lg:gap-4">
@@ -1678,12 +1742,19 @@ export function TracksPage({
         </div>
 
         {/* Right: track grid with year filter inside */}
-        <div className="order-4 min-w-0 lg:order-none">
-          <div ref={captureRef} className="card p-4">
+        <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:overflow-hidden">
+          <div
+            ref={captureRef}
+            className="card flex min-h-0 flex-1 flex-col p-4 lg:overflow-hidden"
+          >
             {/* Year pills (scroll) + export; sport filter only when multiple sports */}
-            <div className="mb-4 space-y-2.5 border-b border-[var(--color-border)] pb-3">
+            <div className="mb-4 shrink-0 space-y-2.5 border-b border-[var(--color-border)] pb-3">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="-mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <ChipScrollRow
+                  className="min-w-0 flex-1"
+                  contentClassName="gap-1.5"
+                  fadeFrom="var(--color-card)"
+                >
                   {totalYearPages > 1 && (
                     <button
                       type="button"
@@ -1725,15 +1796,20 @@ export function TracksPage({
                       ›
                     </button>
                   )}
-                </div>
+                </ChipScrollRow>
                 <button
                   onClick={async () => {
                     if (!captureRef.current || exporting) return;
                     setExporting(true);
+                    const el = captureRef.current;
+                    const wallScroll = el.querySelector(
+                      '[data-tracks-wall-scroll]'
+                    ) as HTMLElement | null;
+                    const prevOverflow = el.style.overflow;
+                    const prevWallOverflow = wallScroll?.style.overflow ?? '';
                     try {
-                      const el = captureRef.current;
-                      const prevOverflow = el.style.overflow;
                       el.style.overflow = 'visible';
+                      if (wallScroll) wallScroll.style.overflow = 'visible';
                       await new Promise((resolve) =>
                         requestAnimationFrame(resolve)
                       );
@@ -1741,7 +1817,6 @@ export function TracksPage({
                         pixelRatio: 2,
                         cacheBust: true,
                       });
-                      el.style.overflow = prevOverflow;
                       const link = document.createElement('a');
                       const label = selectedYear ?? 'all';
                       link.download = `tracks-${label}.png`;
@@ -1750,6 +1825,9 @@ export function TracksPage({
                     } catch (err) {
                       console.error('Export failed:', err);
                     } finally {
+                      el.style.overflow = prevOverflow;
+                      if (wallScroll)
+                        wallScroll.style.overflow = prevWallOverflow;
                       setExporting(false);
                     }
                   }}
@@ -1816,55 +1894,55 @@ export function TracksPage({
               ) : null}
             </div>
 
-            {clustering ? (
-              <div className="flex flex-wrap gap-1">
-                {Array.from({ length: 40 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-[72px] w-[72px] animate-pulse rounded bg-[var(--color-sunken)] md:h-[80px] md:w-[80px]"
-                    style={{ animationDelay: `${i * 20}ms` }}
-                  />
-                ))}
-              </div>
-            ) : clusteredTracks.length === 0 ? (
-              <p className="py-8 text-center text-sm text-[var(--color-muted)]">
-                {locale === 'zh' ? '暂无轨迹数据' : 'No tracks found'}
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1">
-                {[...clusteredTracks]
-                  .sort((a, b) =>
-                    sortBy === 'distance'
-                      ? b.representative.distance - a.representative.distance
-                      : new Date(b.representative.start_date_local).getTime() -
-                        new Date(a.representative.start_date_local).getTime()
-                  )
-                  .map(({ representative: a, count, color }) => (
-                    <div key={a.run_id} className="relative">
-                      <TrackThumb
-                        activity={a}
-                        color={color}
-                        selected={selectedActivity?.run_id === a.run_id}
-                        onClick={() => handleSelectTrack(a)}
-                        title={
-                          getTitle
-                            ? `${getTitle(a)} — ${(a.distance / 1000).toFixed(1)} km`
-                            : undefined
-                        }
-                      />
-                      {count > 1 && (
-                        <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-[var(--color-bg)]/80 px-1 py-0.5 text-[9px] leading-none font-bold text-[var(--color-muted)]">
-                          ×{count}
-                        </span>
-                      )}
-                    </div>
+            <div
+              data-tracks-wall-scroll
+              className="min-h-0 p-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+            >
+              {clustering ? (
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 40 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-[72px] w-[72px] animate-pulse rounded bg-[var(--color-sunken)] md:h-[80px] md:w-[80px]"
+                      style={{ animationDelay: `${i * 20}ms` }}
+                    />
                   ))}
-              </div>
-            )}
+                </div>
+              ) : clusteredTracks.length === 0 ? (
+                <p className="py-8 text-center text-sm text-[var(--color-muted)]">
+                  {locale === 'zh' ? '暂无轨迹数据' : 'No tracks found'}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {sortedClusteredTracks.map(
+                    ({ representative: a, count, color }) => (
+                      <div key={a.run_id} className="relative">
+                        <TrackThumb
+                          activity={a}
+                          color={color}
+                          selected={selectedActivity?.run_id === a.run_id}
+                          onSelect={handleSelectTrack}
+                          title={
+                            getTitle
+                              ? `${getTitle(a)} — ${(a.distance / 1000).toFixed(1)} km`
+                              : undefined
+                          }
+                        />
+                        {count > 1 && (
+                          <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-[var(--color-bg)]/80 px-1 py-0.5 text-[9px] leading-none font-bold text-[var(--color-muted)]">
+                            ×{count}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Legend + sort */}
             {!clustering && clusteredTracks.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-muted)]">
+              <div className="mt-4 flex shrink-0 flex-wrap items-center gap-4 border-t border-[var(--color-border)] pt-3 text-xs text-[var(--color-muted)]">
                 {sportFilter === null || sportFilter === 'Run' ? (
                   <>
                     <span className="flex items-center gap-1.5">
@@ -1911,4 +1989,3 @@ export function TracksPage({
     </div>
   );
 }
-

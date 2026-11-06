@@ -14,6 +14,7 @@ import {
   type SplitRow,
 } from '@/core/splits';
 import { ChartStack } from './runAnalysis/AnalysisCharts';
+import { ChipScrollRow } from './ChipScrollRow';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -472,7 +473,7 @@ function AnalysisBody({ data }: { data: RunSplits }) {
   return (
     <div>
       <div className="ra-anchor-bar sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 md:-mx-6 md:px-6">
-        <div className="scrollbar-none flex gap-1.5 overflow-x-auto">
+        <ChipScrollRow contentClassName="gap-1.5" fadeFrom="var(--color-card)">
           {anchors.map((a) => (
             <button
               key={a.id}
@@ -483,7 +484,7 @@ function AnalysisBody({ data }: { data: RunSplits }) {
               {a.label}
             </button>
           ))}
-        </div>
+        </ChipScrollRow>
       </div>
 
       <div className="space-y-4 pt-3">
@@ -765,10 +766,10 @@ function LauncherButton({
   const ids = use(index);
   const tr = useTr();
   if (!ids.has(activity.run_id)) return null;
-  // Portal past sticky map / overflow ancestors so the FAB stays visible on
-  // mobile (fixed + z-50 inside the page stack was easy to bury).
-  // Mobile (<=1023px, same as map dock): bookmark edge-peek on the right.
-  // Desktop (lg+): centered pill FAB (master look).
+  // Selected-state primary entry (not a map control). Portal past sticky map
+  // / overflow ancestors so the FAB stays visible on mobile.
+  // Mobile (<=1023px): bookmark edge-peek, bottom-right.
+  // Desktop (lg+): centered pill FAB (same semantics).
   const label = (
     <>
       <svg
