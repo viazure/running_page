@@ -345,16 +345,21 @@ function DashboardProContent({
       >
         {/* Left: stats + heatmap, plus the log when every year is shown */}
         <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
-          <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
-            <StatsCards
-              activities={filtered}
-              allActivities={activities}
-              year={year}
-              filter={filter}
-              onSelectActivity={setSelectedActivity}
-              compact
-            />
-          </div>
+          {modules.weekly ||
+          modules.yearly_goal ||
+          modules.monthly_goal ||
+          modules.streak ? (
+            <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
+              <StatsCards
+                activities={filtered}
+                allActivities={activities}
+                year={year}
+                filter={filter}
+                onSelectActivity={setSelectedActivity}
+                compact
+              />
+            </div>
+          ) : null}
           {modules.heatmap ? (
             <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
               <ContributionHeatmap

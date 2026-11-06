@@ -230,6 +230,7 @@ export function ProgressQuestions({
       const pace = paceSecFromSpeed(a.average_speed);
       if (pace == null || !Number.isFinite(pace)) continue;
       if (a.distance < 500) continue;
+      // Run pace band ~3:00–10:00 min/km (exclude GPS spikes / walks).
       if (pace < 180 || pace > 600) continue;
       pts.push({
         id: a.run_id,
