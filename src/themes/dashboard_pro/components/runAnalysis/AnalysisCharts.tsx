@@ -104,7 +104,6 @@ function smooth(values: (number | null)[], window = 5): (number | null)[] {
   });
 }
 
-
 type HoverStore = {
   getSnapshot: () => number | null;
   set: (i: number | null) => void;
@@ -155,7 +154,6 @@ function indexNearTarget(xs: number[], target: number): number {
   return Math.abs(xs[hi] - target) < Math.abs(xs[lo] - target) ? hi : lo;
 }
 
-
 function domain(
   values: number[],
   robust = true,
@@ -194,7 +192,11 @@ function domain(
 }
 
 /** True when robust domain dropped material outliers vs raw min/max. */
-function domainClippedOutliers(values: number[], lo: number, hi: number): boolean {
+function domainClippedOutliers(
+  values: number[],
+  lo: number,
+  hi: number
+): boolean {
   if (values.length < 8) return false;
   const rawLo = Math.min(...values);
   const rawHi = Math.max(...values);
@@ -205,14 +207,16 @@ function domainClippedOutliers(values: number[], lo: number, hi: number): boolea
 function domainOptsFor(
   key: string,
   _unit?: string
-): {
-  floor?: number;
-  ceil?: number;
-  hardMin?: number;
-  hardMax?: number;
-  /** Fixed Y domain (APP-style). Skips adaptive zoom. */
-  fixed?: [number, number];
-} | undefined {
+):
+  | {
+      floor?: number;
+      ceil?: number;
+      hardMin?: number;
+      hardMax?: number;
+      /** Fixed Y domain (APP-style). Skips adaptive zoom. */
+      fixed?: [number, number];
+    }
+  | undefined {
   switch (key) {
     case 'stride':
       // APP: 0–1.8 m so natural stride (~0.8–1.0) sits as a mid band
@@ -231,7 +235,6 @@ function domainOptsFor(
       return key === 'stride' ? { floor: 0 } : undefined;
   }
 }
-
 
 /** Dynamics charts: full series min/max so peaks are not clipped at the axis. */
 function scatterDomain(
@@ -479,25 +482,24 @@ function ZoneTable({
   // Zones not configured on the device (HR % of max, chart-derived pace).
   const estimated = /estimated|derived/.test(zone.calc_type ?? '');
   const hb = zone.high_boundary ?? [];
-  const rows = secs
-    .map((sec, i) => {
-      const lo = i === 0 ? null : hb[i - 1];
-      const hi = hb[i];
-      const range =
-        unit === '/km'
-          ? formatPaceZoneRange(lo, hi, i)
-          : formatZoneRange(unit, lo, hi, i);
-      const name = labels?.[i] ?? (i === 0 ? '<Z1' : `Z${i}`);
-      return {
-        i,
-        sec,
-        pct: (sec / total) * 100,
-        range,
-        name,
-        color: colors[Math.min(i, colors.length - 1)],
-      };
-    })
-    // keep near-zero rows → show as 未进入
+  const rows = secs.map((sec, i) => {
+    const lo = i === 0 ? null : hb[i - 1];
+    const hi = hb[i];
+    const range =
+      unit === '/km'
+        ? formatPaceZoneRange(lo, hi, i)
+        : formatZoneRange(unit, lo, hi, i);
+    const name = labels?.[i] ?? (i === 0 ? '<Z1' : `Z${i}`);
+    return {
+      i,
+      sec,
+      pct: (sec / total) * 100,
+      range,
+      name,
+      color: colors[Math.min(i, colors.length - 1)],
+    };
+  });
+  // keep near-zero rows → show as 未进入
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -888,7 +890,6 @@ interface TrendDef {
   meanColor?: string | null;
 }
 
-
 function HoverReadout({
   hoverStore,
   ys,
@@ -1172,7 +1173,11 @@ const MetricCard = memo(function MetricCard({
     if (!overlay || !oys || ovalid.length < 2 || !geom) return null;
     const [lo, hi] =
       overlay.kind === 'scatter'
-        ? scatterDomain(ovalid, overlay.avg ?? null, domainOptsFor(overlay.key, overlay.unit))
+        ? scatterDomain(
+            ovalid,
+            overlay.avg ?? null,
+            domainOptsFor(overlay.key, overlay.unit)
+          )
         : domain(ovalid, true, domainOptsFor(overlay.key, overlay.unit));
     const ih = CHART_H - PAD.t - PAD.b;
     const py = (v: number) => {
@@ -1206,7 +1211,10 @@ const MetricCard = memo(function MetricCard({
     };
     if (!geom) return empty;
 
-    const buildLine = (series: (number | null)[], py: (v: number) => number) => {
+    const buildLine = (
+      series: (number | null)[],
+      py: (v: number) => number
+    ) => {
       let d = '';
       let pen = false;
       series.forEach((v, i) => {
@@ -1837,7 +1845,6 @@ const MetricCard = memo(function MetricCard({
                 vectorEffect="non-scaling-stroke"
               />
             ) : null}
-
           </svg>
           {/* HTML dots stay circular under preserveAspectRatio=none; x uses same viewBox fraction as SVG. */}
           {def.kind === 'scatter'

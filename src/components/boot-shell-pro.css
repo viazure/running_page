@@ -10,20 +10,16 @@
 }
 #boot-shell {
   min-height: 100dvh;
-  background: var(--color-bg, var(--boot-bg, #0b0d10));
-  color: var(--color-muted, #8b949e);
+  background: var(--boot-bg, #0b0d10);
+  color: var(--boot-muted, #8b949e);
 }
 #boot-shell .sk-header {
   position: sticky;
   top: 0;
   z-index: 50;
   border-bottom: 1px solid
-    color-mix(in srgb, var(--color-border, #23272e) 55%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--color-bg, var(--boot-bg, #0b0d10)) 78%,
-    transparent
-  );
+    color-mix(in srgb, var(--boot-border, #23272e) 55%, transparent);
+  background: color-mix(in srgb, var(--boot-bg, #0b0d10) 78%, transparent);
   padding: 0.75rem 1rem;
 }
 #boot-shell .sk-header-inner {
@@ -37,10 +33,10 @@
 #boot-shell .sk-logo {
   font-size: 1.05rem;
   font-weight: 650;
-  color: color-mix(in srgb, var(--color-text, #e6edf3) 72%, transparent);
+  color: color-mix(in srgb, var(--boot-text, #e6edf3) 72%, transparent);
 }
 #boot-shell .sk-logo-dot {
-  color: color-mix(in srgb, var(--color-run, #f97316) 70%, transparent);
+  color: color-mix(in srgb, var(--boot-run, #f97316) 70%, transparent);
 }
 #boot-shell .sk-header-mist {
   height: 1.35rem;
@@ -48,8 +44,8 @@
   border-radius: 999px;
   background: color-mix(
     in srgb,
-    var(--color-card, #14171c) 55%,
-    var(--color-bg, #0b0d10)
+    var(--boot-card, #14171c) 55%,
+    var(--boot-bg, #0b0d10)
   );
   animation: sk-breathe 3.2s ease-in-out infinite;
 }
@@ -63,8 +59,8 @@
   border: none;
   background: color-mix(
     in srgb,
-    var(--color-card, #14171c) 58%,
-    var(--color-bg, #0b0d10)
+    var(--boot-card, #14171c) 58%,
+    var(--boot-bg, #0b0d10)
   );
   animation: sk-breathe 3.2s ease-in-out infinite;
 }
@@ -134,7 +130,7 @@
 }
 html.light #boot-shell .sk-logo,
 html[data-theme='light'] #boot-shell .sk-logo {
-  color: color-mix(in srgb, var(--color-text, #1a1a1a) 55%, transparent);
+  color: color-mix(in srgb, var(--boot-text, #1a1a1a) 55%, transparent);
 }
 html.light #boot-shell .sk-mist,
 html.light #boot-shell .sk-header-mist,
@@ -142,15 +138,15 @@ html[data-theme='light'] #boot-shell .sk-mist,
 html[data-theme='light'] #boot-shell .sk-header-mist {
   background: color-mix(
     in srgb,
-    var(--color-card, #ffffff) 70%,
-    var(--color-bg, #f7f6f3)
+    var(--boot-card, #ffffff) 70%,
+    var(--boot-bg, #f7f6f3)
   );
 }
 html.light #boot-shell .sk-header,
 html[data-theme='light'] #boot-shell .sk-header {
   border-bottom-color: color-mix(
     in srgb,
-    var(--color-border, #e8e4de) 50%,
+    var(--boot-border, #e8e4de) 50%,
     transparent
   );
 }

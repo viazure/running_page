@@ -106,9 +106,7 @@ export function SvgTitleTipHost({
         return;
       }
       e.stopPropagation();
-      setPinned((prev) =>
-        prev?.raw === raw ? null : placeFromEvent(e, raw)
-      );
+      setPinned((prev) => (prev?.raw === raw ? null : placeFromEvent(e, raw)));
     },
     [placeFromEvent]
   );

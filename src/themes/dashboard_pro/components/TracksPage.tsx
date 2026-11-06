@@ -140,57 +140,59 @@ function renderTrackSVG(summaryPolyline: string, size = 80): string {
   }
 }
 
-const TrackThumb = memo(function TrackThumb({
-  activity,
-  color,
-  selected,
-  onSelect,
-  title,
-}: {
-  activity: Activity;
-  color: string;
-  selected: boolean;
-  onSelect: (a: Activity) => void;
-  title?: string;
-}) {
-  const size = 80;
-  const points = activity.summary_polyline
-    ? renderTrackSVG(activity.summary_polyline, size)
-    : '';
-  if (!points) return null;
-  const label =
-    title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
-  return (
-    <div
-      className={`group relative h-[72px] w-[72px] cursor-pointer rounded md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
-      onClick={() => onSelect(activity)}
-      title={label}
-    >
-      <svg
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${size} ${size}`}
-        className={`transition-opacity ${selected ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
+const TrackThumb = memo(
+  function TrackThumb({
+    activity,
+    color,
+    selected,
+    onSelect,
+    title,
+  }: {
+    activity: Activity;
+    color: string;
+    selected: boolean;
+    onSelect: (a: Activity) => void;
+    title?: string;
+  }) {
+    const size = 80;
+    const points = activity.summary_polyline
+      ? renderTrackSVG(activity.summary_polyline, size)
+      : '';
+    if (!points) return null;
+    const label =
+      title ?? `${activity.name} — ${(activity.distance / 1000).toFixed(1)} km`;
+    return (
+      <div
+        className={`group relative h-[72px] w-[72px] cursor-pointer rounded md:h-[80px] md:w-[80px] ${selected ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-bg)]' : ''}`}
+        onClick={() => onSelect(activity)}
+        title={label}
       >
-        <polyline
-          points={points}
-          fill="none"
-          stroke={color}
-          strokeWidth={selected ? '2' : '1.5'}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-  );
-}, (prev, next) =>
-  prev.selected === next.selected &&
-  prev.color === next.color &&
-  prev.title === next.title &&
-  prev.activity.run_id === next.activity.run_id &&
-  prev.activity.summary_polyline === next.activity.summary_polyline &&
-  prev.activity.distance === next.activity.distance &&
-  prev.activity.name === next.activity.name
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${size} ${size}`}
+          className={`transition-opacity ${selected ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
+        >
+          <polyline
+            points={points}
+            fill="none"
+            stroke={color}
+            strokeWidth={selected ? '2' : '1.5'}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+    );
+  },
+  (prev, next) =>
+    prev.selected === next.selected &&
+    prev.color === next.color &&
+    prev.title === next.title &&
+    prev.activity.run_id === next.activity.run_id &&
+    prev.activity.summary_polyline === next.activity.summary_polyline &&
+    prev.activity.distance === next.activity.distance &&
+    prev.activity.name === next.activity.name
 );
 
 function TrackMap({

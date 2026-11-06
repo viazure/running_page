@@ -36,36 +36,37 @@
       })();
     </script>
     <style>
-      /* Minimal boot tokens for all themes. Pro shell CSS is injected by Vite
-         only when config.yml theme_preset === dashboard_pro. */
-      :root,
-      html.dark,
-      html[data-theme='dark'] {
-        --boot-bg: #0b0d10;
-        --color-bg: #0b0d10;
-        --color-card: #14171c;
-        --color-border: #23272e;
-        --color-text: #e6edf3;
-        --color-muted: #8b949e;
-        --color-run: #f97316;
-      }
-      html.light,
-      html[data-theme='light'] {
-        --boot-bg: #f7f6f3;
-        --color-bg: #f7f6f3;
-        --color-card: #ffffff;
-        --color-border: #e8e4de;
-        --color-text: #1a1a1a;
-        --color-muted: #6b6560;
-        --color-run: #f97316;
-      }
-      html,
-      body {
-        margin: 0;
-        min-height: 100%;
-        background: var(--boot-bg);
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      /* Boot-only tokens (do NOT set --color-* — those collide with classic).
+         Pro shell CSS is injected by Vite only when theme_preset === dashboard_pro.
+         @layer boot stays below theme @layer base so classic/dashboard can win. */
+      @layer boot {
+        :root,
+        html.dark,
+        html[data-theme='dark'] {
+          --boot-bg: #0b0d10;
+          --boot-card: #14171c;
+          --boot-border: #23272e;
+          --boot-text: #e6edf3;
+          --boot-muted: #8b949e;
+          --boot-run: #f97316;
+        }
+        html.light,
+        html[data-theme='light'] {
+          --boot-bg: #f7f6f3;
+          --boot-card: #ffffff;
+          --boot-border: #e8e4de;
+          --boot-text: #1a1a1a;
+          --boot-muted: #6b6560;
+          --boot-run: #f97316;
+        }
+        html,
+        body {
+          margin: 0;
+          min-height: 100%;
+          background: var(--boot-bg);
+          font-family:
+            -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
       }
     </style>
     <!--boot-shell-pro-style-->
