@@ -219,8 +219,8 @@ function domainOptsFor(
   | undefined {
   switch (key) {
     case 'stride':
-      // APP: 0–1.8 m so natural stride (~0.8–1.0) sits as a mid band
-      return { floor: 0, fixed: [0, 1.8] };
+      // Design handoff: lock stride Y domain to 0.6–1.1 m.
+      return { floor: 0.6, fixed: [0.6, 1.1] };
     case 'cad':
       // APP: ~90–190 spm so cadence cloud sits around the mean line
       return { fixed: [90, 190] };
@@ -499,7 +499,7 @@ function ZoneTable({
       color: colors[Math.min(i, colors.length - 1)],
     };
   });
-  // keep near-zero rows → show as 未进入
+  // Keep near-zero rows collapsed: zero is None, nonzero is Trace.
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -562,7 +562,7 @@ function ZoneTable({
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]/50" />
                 <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
-                  {tr('未进入', 'None')}
+                  {r.sec > 0 ? tr('少量', 'Trace') : tr('未进入', 'None')}
                 </div>
               </div>
             );
