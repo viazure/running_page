@@ -110,6 +110,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     longestStreak: '最长连续',
     routeFallback: '此活动没有可用的 GPS 轨迹，现显示 {date} 的路线。',
     routeFallbackNone: '此活动没有可用的 GPS 轨迹。',
+    mapBasemapFailed: '底图加载失败',
+    mapNoGeometry: '暂无 GPS 轨迹可显示',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -220,5 +222,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     longestStreak: 'Longest streak',
     routeFallback: 'No GPS on this activity. Showing the route from {date}.',
     routeFallbackNone: 'This activity has no usable GPS route.',
+    mapBasemapFailed: 'Basemap failed to load',
+    mapNoGeometry: 'No GPS route to show',
   },
 };

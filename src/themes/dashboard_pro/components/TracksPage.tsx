@@ -240,6 +240,10 @@ function TrackMap({
   const [exportEnding, setExportEnding] = useState(false);
   const [exportConverting, setExportConverting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  /** Basemap/script load: quiet empty when error; ready on style.load. */
+  const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading'
+  );
   const fsRootRef = useRef<HTMLDivElement>(null);
   const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
   const bindFsRoot = useCallback((el: HTMLDivElement | null) => {
@@ -298,6 +302,8 @@ function TrackMap({
   const hasOwnGps = Boolean(
     activity?.summary_polyline && activity.summary_polyline.length > 20
   );
+  const hasGeometry =
+    hasOwnGps || activities.some((a) => Boolean(a.summary_polyline));
   /** 3D stays available in overview; only privacy blanks it. */
   const canOffer3d = can3d;
   /** Chase playback works on the blank privacy basemap; 3D does not. */
@@ -972,23 +978,31 @@ function TrackMap({
     mapReady.current = false;
     styleIdleRef.current = false;
     animKeyRef.current = null;
+    setMapStatus('loading');
     videoCaptureRef.current?.abort();
     videoCaptureRef.current = null;
     setExporting(false);
     chaseRef.current.stop({ silent: true });
-    const mapInstance = new mapboxgl.Map({
-      container: mapContainer.current,
-      style,
-      center: [108, 35],
-      zoom: 3,
-      pitch: 0,
-      maxPitch: 85,
-      attributionControl: false,
-      /** Needed so WebGL frames remain readable for MediaRecorder export. */
-      preserveDrawingBuffer: true,
-      language: mapLabelLanguage(locale),
-      locale: mapboxControlLocale(t),
-    });
+    let mapInstance: mapboxgl.Map;
+    try {
+      mapInstance = new mapboxgl.Map({
+        container: mapContainer.current,
+        style,
+        center: [108, 35],
+        zoom: 3,
+        pitch: 0,
+        maxPitch: 85,
+        attributionControl: false,
+        /** Needed so WebGL frames remain readable for MediaRecorder export. */
+        preserveDrawingBuffer: true,
+        language: mapLabelLanguage(locale),
+        locale: mapboxControlLocale(t),
+      });
+    } catch (err) {
+      console.warn('Track map failed to initialize', err);
+      setMapStatus('error');
+      return;
+    }
     map.current = mapInstance;
 
     if (!useBlank) {
@@ -1043,7 +1057,10 @@ function TrackMap({
     const fallBackBasemap = (reason: string) => {
       if (settled || lightsOff) return;
       const next = nextBasemapProvider(provider);
-      if (!next) return;
+      if (!next) {
+        setMapStatus('error');
+        return;
+      }
       settled = true;
       console.warn(reason);
       setProvider(next);
@@ -1069,6 +1086,7 @@ function TrackMap({
           console.warn(
             'Track map style load timed out; no further free basemap fallback'
           );
+          setMapStatus('error');
         }
       }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
@@ -1106,6 +1124,7 @@ function TrackMap({
         window.clearTimeout(timer);
       }
       mapReady.current = true;
+      setMapStatus('ready');
       styleIdleRef.current = false;
       // Blank privacy styles can already be idle inside this event, so draw now.
       updateRoutesRef.current();
@@ -1115,6 +1134,11 @@ function TrackMap({
         updateRoutesRef.current();
       });
     });
+    if (mapInstance.isStyleLoaded()) {
+      setMapStatus('ready');
+      mapReady.current = true;
+      updateRoutesRef.current();
+    }
     mapInstance.on('dragend', onUserCameraChange);
     mapInstance.on('zoomend', onUserCameraChange);
     mapInstance.on('rotateend', onUserCameraChange);
@@ -1255,6 +1279,15 @@ function TrackMap({
         </div>
       ) : null}
       <div ref={mapContainer} className="h-full w-full" />
+      {mapStatus === 'error' ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapBasemapFailed')}
+        </div>
+      ) : mapStatus === 'ready' && !hasGeometry ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapNoGeometry')}
+        </div>
+      ) : null}
       {chasing && playbackSnap ? (
         <PlaybackHudView
           snap={playbackSnap}
