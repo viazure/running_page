@@ -296,11 +296,11 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
 
       {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
       <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
-        <div className="mb-3 space-y-1 @min-[48rem]:mb-0">
-          {/* Match table thead height so bar #1 aligns with first data row on wide layout. */}
+        <div className="mb-3 space-y-1 @min-[48rem]:mb-0 @min-[48rem]:space-y-0">
+          {/* Shared h-8 row box with table so data rows stay vertically aligned. */}
           <div
             aria-hidden
-            className="hidden border-b border-[var(--color-border)] py-2 @min-[48rem]:block"
+            className="hidden h-8 box-border items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
           >
             <span className="invisible text-[12px] font-medium">#</span>
           </div>
@@ -315,12 +315,12 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
               return (
                 <div
                   key={`bar-${mode}-${r.index}`}
-                  className={`flex items-center gap-2 text-[12px] ${tiny ? 'opacity-50' : ''}`}
+                  className={`flex h-8 box-border items-center gap-2 border-b border-transparent text-[12px] @min-[48rem]:border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
                 >
                   <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
                     {r.index}
                   </span>
-                  <div className="h-5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                  <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
                     <div
                       className="h-full rounded-sm"
                       style={{
@@ -341,20 +341,20 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
         </div>
 
         <div className="-mx-0.5 overflow-x-auto">
-          <table className="w-full min-w-0 text-[12px]">
+          <table className="w-full min-w-0 border-collapse text-[12px]">
             <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-                <th className="py-2 pr-2 font-medium">#</th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+              <tr className="h-8 box-border border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                <th className="h-8 py-0 pr-2 align-middle font-medium">#</th>
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('距离', 'Dist')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('时间', 'Time')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('配速', 'Pace')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('心率', 'HR')}
                 </th>
               </tr>
@@ -369,24 +369,24 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                 return (
                   <tr
                     key={`${mode}-${r.index}`}
-                    className={`border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+                    className={`h-8 box-border border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
                   >
-                    <td className="metric py-2 pr-2 text-[var(--color-muted)]">
+                    <td className="metric h-8 py-0 pr-2 align-middle text-[var(--color-muted)]">
                       {r.index}
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {((r.distance ?? 0) / 1000).toFixed(2)}
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {formatClock(r.time)}
                     </td>
                     <td
-                      className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
+                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
                     >
                       {formatPaceSeconds(r.pace)}
                       <Delta cur={r.pace} prev={prev?.pace} invert />
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {fmt(r.hr_avg)}
                       <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
                     </td>
