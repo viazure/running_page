@@ -11,6 +11,7 @@ import {
 import { formatPaceSeconds } from '@/core/splits';
 import ActivityList from '@/themes/classic/components/ActivityList';
 import { ChipScrollRow } from './ChipScrollRow';
+import { ProgressQuestions } from './ProgressQuestions';
 import './SummaryPage.css';
 
 interface SummaryPageProps {
@@ -331,6 +332,15 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 </>
               ) : null}
             </section>
+
+            {period === 'year' || period === 'month' || period === 'week' ? (
+              <ProgressQuestions
+                activities={periodActivities}
+                period={period}
+                periodKey={activeKey}
+                locale={locale}
+              />
+            ) : null}
 
             <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
               <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">

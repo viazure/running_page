@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
-import { GOALS, DEFAULT_GOAL } from '@/config';
+import { GOALS, DEFAULT_GOAL, DASHBOARD_PRO_MODULES } from '@/config';
 /** Soften large year-over-year drops so the card does not feel punitive. */
 function formatYearYoY(
   yearDiff: number,
@@ -398,608 +398,289 @@ export function StatsCards({
 
   const unit = filter === 'Run' ? t('runs') : t('activities');
 
-  if (!compact) {
-    return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_1fr_1.6fr]">
-        {/* Yearly Goal */}
-        <div className="card p-5">
-          <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-            {t('yearlyGoal')}
-          </p>
-          <p className="metric text-3xl font-semibold whitespace-nowrap">
-            {goal.unit === 'time'
-              ? formatHours(yearSeconds)
-              : formatDistance(yearDistance)}
-            <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
-              /{' '}
-              {goal.unit === 'time'
-                ? `${Math.round(yearGoalMins / 60)}h`
-                : `${goal.yearly} km`}
-            </span>
-          </p>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / yearGoalMeters) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {yearCount} {unit}
-            </span>
-            <span>{formatHours(yearSeconds)}</span>
-          </div>
-          <p
-            className={`mt-1.5 text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {formatYearYoY(
-              yearDiff,
-              goal.unit,
-              locale,
-              formatHours,
-              t('vsLastYear')
-            )}
-          </p>
-        </div>
+  const showWeekly = DASHBOARD_PRO_MODULES.weekly;
+  const showYearly = DASHBOARD_PRO_MODULES.yearly_goal;
+  const showMonthly = DASHBOARD_PRO_MODULES.monthly_goal;
+  const showStreak = DASHBOARD_PRO_MODULES.streak;
+  const goalCardCount =
+    Number(showYearly) + Number(showMonthly) + Number(showStreak);
+  const goalGridClass =
+    goalCardCount <= 1
+      ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:gap-3'
+      : goalCardCount === 2
+        ? 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:gap-3'
+        : 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3';
 
-        {/* Monthly Goal */}
-        <div className="card p-5">
-          <GoalHeading
-            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
-            label={t('monthlyGoal')}
-            hint={monthHint}
-            icon={
-              <svg
-                className="h-3.5 w-3.5 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            }
-          />
-          <p className="metric text-3xl font-semibold whitespace-nowrap">
-            {goal.unit === 'time'
-              ? formatHours(monthSeconds)
-              : formatDistance(monthDistance)}
-            <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
-              /{' '}
-              {goal.unit === 'time'
-                ? `${Math.round(monthGoalMins / 60)}h`
-                : `${goal.monthly} km`}
-            </span>
-          </p>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / monthGoalMeters) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {monthCount} {unit}
-            </span>
-            <span>{formatHours(monthSeconds)}</span>
-          </div>
-          <p
-            className={`mt-1.5 text-xs ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {monthDiff >= 0 ? '↗' : '↘'}{' '}
-            {goal.unit === 'time'
-              ? formatHours(Math.abs(monthDiff))
-              : `${formatDistance(Math.abs(monthDiff))} km`}{' '}
-            {t('vsLastMonth')}
-          </p>
-        </div>
+  const ncCount =
+    Number(showWeekly) +
+    Number(showYearly) +
+    Number(showMonthly) +
+    Number(showStreak);
+  const ncGridClass =
+    ncCount <= 1
+      ? 'grid grid-cols-1 gap-4'
+      : ncCount === 2
+        ? 'grid grid-cols-1 gap-4 md:grid-cols-2'
+        : ncCount === 3
+          ? 'grid grid-cols-1 gap-4 md:grid-cols-3'
+          : 'grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_1fr_1.6fr]';
 
-        {/* Weekly Goal */}
-        <div className="card p-5">
-          <GoalHeading
-            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
-            label={t('weeklyGoal')}
-            hint={weekHint}
-            icon={
-              <svg
-                className="h-3.5 w-3.5 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            }
-          />
-          <p className="metric text-3xl font-semibold whitespace-nowrap">
-            {goal.unit === 'time'
-              ? formatHours(weekSeconds)
-              : formatDistance(weekDistance)}
-            <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
-              /{' '}
-              {goal.unit === 'time' ? `${weekGoalMins}m` : `${goal.weekly} km`}
-            </span>
-          </p>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60)) * 100 : (weekDistance / weekGoalMeters) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {weekCount} {unit}
-            </span>
-            <span>{formatHours(weekSeconds)}</span>
-          </div>
-          <p
-            className={`mt-1.5 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {weekDiff >= 0 ? '↗' : '↘'}{' '}
-            {goal.unit === 'time'
-              ? formatHours(Math.abs(weekDiff))
-              : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
-            {t('vsLastWeek')}
-          </p>
-        </div>
-
-        {/* Streak */}
-        <div className="card p-5">
-          <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
-              />
-            </svg>
-            {streakTitle}
-          </p>
-          <div className="flex items-baseline gap-3">
-            <p className="metric text-3xl font-semibold">
-              {shownStreakDays}
-              <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
-                {t('days')}
-              </span>
-            </p>
-          </div>
-
-          {/* Week days visual */}
-          {(() => {
-            const todayIdx = (calendarAnchor.getDay() + 6) % 7; // Mon=0 … Sun=6
-            const weekStart = new Date(
-              calendarAnchor.getTime() - todayIdx * 86400000
-            );
-            const weekLabels =
-              locale === 'zh'
-                ? ['一', '二', '三', '四', '五', '六', '日']
-                : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-            function dayColor(acts: Activity[]): string {
-              if (acts.length === 0) return '';
-              const sorted = [...acts].sort((a, b) => b.distance - a.distance);
-              const type = sorted[0].type;
-              if (type === 'Run') return 'var(--color-amber)';
-              return 'var(--color-text)';
-            }
-
-            const weekDays = Array.from({ length: 7 }, (_, i) => {
-              const date = new Date(weekStart.getTime() + i * 86400000);
-              const key = toLocalDateStr(date);
-              const dayActs = calendarActivities.filter(
-                (a) => a.start_date_local.slice(0, 10) === key
-              );
-              return {
-                day: date.getDate(),
-                hasActivity: dayActs.length > 0,
-                isToday: key === calendarHighlight,
-                acts: dayActs,
-              };
-            });
-            return (
-              <div className="mt-3 flex items-center gap-2">
-                <div className="flex shrink-0 flex-col items-center gap-0">
-                  <div className="relative h-9 w-9">
-                    <svg
-                      className="h-9 w-9 text-[var(--color-amber)]"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M12 23c-3.866 0-7-3.134-7-7 0-2.468 1.5-5.093 3.03-6.97.44-.54 1.47-.36 1.64.3.17.66.54 1.44 1.13 2.07.26-.94.76-2.06 1.57-3.04.81-.98 1.49-2.09 1.78-3.36.12-.53.71-.78 1.15-.46C17.09 6.46 19 9.58 19 13.5c0 5.247-3.134 9.5-7 9.5z" />
-                    </svg>
-                    <span className="absolute right-0 bottom-[18%] left-0 flex items-center justify-center text-[9px] leading-none font-bold text-white">
-                      {shownWeekStreak}
-                    </span>
-                  </div>
-                  <span className="-mt-0.5 text-[11px] font-medium text-[var(--color-muted)]">
-                    {t('weeks')}
-                  </span>
-                </div>
-                <div className="flex flex-1 items-center gap-1.5">
-                  {weekDays.map((wd, i) => {
-                    const isPast =
-                      new Date(weekStart.getTime() + i * 86400000) <=
-                      calendarAnchor;
-                    const color = dayColor(wd.acts);
-                    return (
-                      <div
-                        key={i}
-                        className={`flex flex-col items-center gap-0.5 ${wd.hasActivity ? 'cursor-pointer' : ''}`}
-                        onClick={() => {
-                          if (wd.acts.length > 0) onSelectActivity(wd.acts[0]);
-                        }}
-                      >
-                        <span className="text-[9px] text-[var(--color-muted)]">
-                          {weekLabels[i]}
-                        </span>
-                        <div
-                          className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-medium transition-opacity lg:h-6 lg:w-6 lg:text-[10px] ${
-                            wd.hasActivity
-                              ? 'text-white hover:opacity-70'
-                              : wd.isToday
-                                ? 'text-[var(--color-text)] ring-1 ring-[var(--color-text)]'
-                                : isPast
-                                  ? 'bg-[var(--color-sunken)] text-[var(--color-muted)]'
-                                  : 'text-[var(--color-muted)]'
-                          }`}
-                          style={
-                            wd.hasActivity ? { backgroundColor: color } : {}
-                          }
-                        >
-                          {wd.day}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-          {streakFootnote ? (
-            <div className="mt-3 flex items-center gap-2 text-sm text-[var(--color-muted)]">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                />
-              </svg>
-              {streakFootnote}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
+  if (!showWeekly && !showYearly && !showMonthly && !showStreak) {
+    return null;
   }
 
-  return (
-    <div className="flex flex-col gap-2 md:gap-3">
-      {/* Weekly Goal */}
-      <div className="card min-w-0 p-4 md:p-5">
-        <GoalHeading
-          className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-[11px] tracking-[1.2px] text-[var(--color-muted)] md:text-xs"
-          label={t('weeklyGoal')}
-          hint={weekHint}
-          icon={
-            <svg
-              className="hidden h-3.5 w-3.5 shrink-0 md:block"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          }
-        />
-        <p className="metric text-[40px] leading-none font-bold whitespace-nowrap md:text-[52px]">
-          {goal.unit === 'time'
-            ? formatHours(weekSeconds)
-            : formatDistance(weekDistance)}
-          <span className="ml-2 text-base font-medium text-[var(--color-muted)] md:text-xl">
-            / {goal.unit === 'time' ? `${weekGoalMins}m` : `${goal.weekly} km`}
-          </span>
-        </p>
-        <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-[#EFECE7] md:mt-4">
-          <div
-            className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-            style={{
-              width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60 || 1)) * 100 : (weekDistance / (weekGoalMeters || 1)) * 100, 100)}%`,
-            }}
-          />
-        </div>
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-          <span className="flex items-center gap-1.5">
-            <svg
-              className="h-3.5 w-3.5 text-[var(--color-accent)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-            {weekCount} {unit}
-          </span>
-          <span>{formatHours(weekSeconds)}</span>
-        </div>
-        <p
-          className={`mt-2 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-        >
-          {weekDiff >= 0 ? '↗' : '↘'}{' '}
-          {goal.unit === 'time'
-            ? formatHours(Math.abs(weekDiff))
-            : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
-          <span className="hidden sm:inline">{t('vsLastWeek')}</span>
-        </p>
-      </div>
-
-      <div className="grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3">
+  if (!compact) {
+    return (
+      <div className={ncGridClass}>
         {/* Yearly Goal */}
-        <div className="card min-w-0 p-2 md:p-4">
-          <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
-            <svg
-              className="hidden h-3.5 w-3.5 md:block"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-            <span className="truncate">{t('yearlyGoal')}</span>
-          </p>
-          <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
-            {goal.unit === 'time'
-              ? formatHours(yearSeconds)
-              : formatDistance(yearDistance)}
-            <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
-              /{' '}
+        {showYearly ? (
+          <div className="card p-5">
+            <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              {t('yearlyGoal')}
+            </p>
+            <p className="metric text-3xl font-semibold whitespace-nowrap">
               {goal.unit === 'time'
-                ? `${Math.round(yearGoalMins / 60)}h`
-                : `${goal.yearly} km`}
-            </span>
-          </p>
-          <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / yearGoalMeters) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {yearCount} {unit}
-            </span>
-            <span>{formatHours(yearSeconds)}</span>
-          </div>
-          <p
-            className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {formatYearYoY(
-              yearDiff,
-              goal.unit,
-              locale,
-              formatHours,
-              t('vsLastYear')
-            )}
-          </p>
-        </div>
-
-        {/* Monthly Goal */}
-        <div className="card min-w-0 p-2 md:p-4">
-          <GoalHeading
-            className="eyebrow mb-1 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs"
-            label={t('monthlyGoal')}
-            hint={monthHint}
-            icon={
-              <svg
-                className="hidden h-3.5 w-3.5 shrink-0 md:block"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-            }
-          />
-          <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
-            {goal.unit === 'time'
-              ? formatHours(monthSeconds)
-              : formatDistance(monthDistance)}
-            <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
-              /{' '}
-              {goal.unit === 'time'
-                ? `${Math.round(monthGoalMins / 60)}h`
-                : `${goal.monthly} km`}
-            </span>
-          </p>
-          <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
-            <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / monthGoalMeters) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {monthCount} {unit}
-            </span>
-            <span>{formatHours(monthSeconds)}</span>
-          </div>
-          <p
-            className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {monthDiff >= 0 ? '↗' : '↘'}{' '}
-            {goal.unit === 'time'
-              ? formatHours(Math.abs(monthDiff))
-              : `${formatDistance(Math.abs(monthDiff))} km`}{' '}
-            <span className="hidden sm:inline">{t('vsLastMonth')}</span>
-          </p>
-        </div>
-
-        {/* Streak */}
-        <div className="card col-span-2 min-w-0 overflow-hidden p-2 md:col-span-1 md:p-4">
-          <p className="eyebrow mb-1.5 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
-            <svg
-              className="h-3.5 w-3.5 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
-              />
-            </svg>
-            <span className="truncate">{streakTitle}</span>
-          </p>
-
-          {/* Mobile: stack (handoff-like); desktop: number then week row */}
-          <div className="flex min-w-0 flex-col gap-2 lg:block lg:gap-3">
-            <p className="metric text-xl font-semibold lg:text-3xl">
-              {shownStreakDays}
-              <span className="ml-1 text-xs font-normal text-[var(--color-muted)] lg:text-base">
-                {t('days')}
+                ? formatHours(yearSeconds)
+                : formatDistance(yearDistance)}
+              <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+                /{' '}
+                {goal.unit === 'time'
+                  ? `${Math.round(yearGoalMins / 60)}h`
+                  : `${goal.yearly} km`}
               </span>
             </p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+              <div
+                className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                style={{
+                  width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / yearGoalMeters) * 100, 100)}%`,
+                }}
+              />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+              <span className="flex items-center gap-1.5">
+                <svg
+                  className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                {yearCount} {unit}
+              </span>
+              <span>{formatHours(yearSeconds)}</span>
+            </div>
+            <p
+              className={`mt-1.5 text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+            >
+              {formatYearYoY(
+                yearDiff,
+                goal.unit,
+                locale,
+                formatHours,
+                t('vsLastYear')
+              )}
+            </p>
+          </div>
+        ) : null}
+
+        {/* Monthly Goal */}
+        {showMonthly ? (
+          <div className="card p-5">
+            <GoalHeading
+              className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
+              label={t('monthlyGoal')}
+              hint={monthHint}
+              icon={
+                <svg
+                  className="h-3.5 w-3.5 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+              }
+            />
+            <p className="metric text-3xl font-semibold whitespace-nowrap">
+              {goal.unit === 'time'
+                ? formatHours(monthSeconds)
+                : formatDistance(monthDistance)}
+              <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+                /{' '}
+                {goal.unit === 'time'
+                  ? `${Math.round(monthGoalMins / 60)}h`
+                  : `${goal.monthly} km`}
+              </span>
+            </p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+              <div
+                className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                style={{
+                  width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / monthGoalMeters) * 100, 100)}%`,
+                }}
+              />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+              <span className="flex items-center gap-1.5">
+                <svg
+                  className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                {monthCount} {unit}
+              </span>
+              <span>{formatHours(monthSeconds)}</span>
+            </div>
+            <p
+              className={`mt-1.5 text-xs ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+            >
+              {monthDiff >= 0 ? '↗' : '↘'}{' '}
+              {goal.unit === 'time'
+                ? formatHours(Math.abs(monthDiff))
+                : `${formatDistance(Math.abs(monthDiff))} km`}{' '}
+              {t('vsLastMonth')}
+            </p>
+          </div>
+        ) : null}
+
+        {/* Weekly Goal */}
+        {showWeekly ? (
+          <div className="card p-5">
+            <GoalHeading
+              className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)]"
+              label={t('weeklyGoal')}
+              hint={weekHint}
+              icon={
+                <svg
+                  className="h-3.5 w-3.5 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              }
+            />
+            <p className="metric text-3xl font-semibold whitespace-nowrap">
+              {goal.unit === 'time'
+                ? formatHours(weekSeconds)
+                : formatDistance(weekDistance)}
+              <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+                /{' '}
+                {goal.unit === 'time'
+                  ? `${weekGoalMins}m`
+                  : `${goal.weekly} km`}
+              </span>
+            </p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+              <div
+                className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                style={{
+                  width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60)) * 100 : (weekDistance / weekGoalMeters) * 100, 100)}%`,
+                }}
+              />
+            </div>
+            <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+              <span className="flex items-center gap-1.5">
+                <svg
+                  className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                {weekCount} {unit}
+              </span>
+              <span>{formatHours(weekSeconds)}</span>
+            </div>
+            <p
+              className={`mt-1.5 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+            >
+              {weekDiff >= 0 ? '↗' : '↘'}{' '}
+              {goal.unit === 'time'
+                ? formatHours(Math.abs(weekDiff))
+                : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
+              {t('vsLastWeek')}
+            </p>
+          </div>
+        ) : null}
+
+        {/* Streak */}
+        {showStreak ? (
+          <div className="card p-5">
+            <p className="eyebrow mb-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
+                />
+              </svg>
+              {streakTitle}
+            </p>
+            <div className="flex items-baseline gap-3">
+              <p className="metric text-3xl font-semibold">
+                {shownStreakDays}
+                <span className="ml-1 text-base font-normal text-[var(--color-muted)]">
+                  {t('days')}
+                </span>
+              </p>
+            </div>
 
             {/* Week days visual */}
             {(() => {
@@ -1036,11 +717,11 @@ export function StatsCards({
                 };
               });
               return (
-                <div className="flex w-full min-w-0 items-center gap-1 lg:mt-3 lg:gap-1.5">
+                <div className="mt-3 flex items-center gap-2">
                   <div className="flex shrink-0 flex-col items-center gap-0">
-                    <div className="relative h-7 w-7 lg:h-9 lg:w-9">
+                    <div className="relative h-9 w-9">
                       <svg
-                        className="h-full w-full text-[var(--color-amber)]"
+                        className="h-9 w-9 text-[var(--color-amber)]"
                         viewBox="0 0 24 24"
                         fill="currentColor"
                       >
@@ -1050,12 +731,11 @@ export function StatsCards({
                         {shownWeekStreak}
                       </span>
                     </div>
-                    <span className="-mt-0.5 text-[10px] font-medium text-[var(--color-muted)] lg:text-[11px]">
+                    <span className="-mt-0.5 text-[11px] font-medium text-[var(--color-muted)]">
                       {t('weeks')}
                     </span>
                   </div>
-                  {/* Centered cluster (not edge-stretched) so days stay inset from card sides */}
-                  <div className="flex min-w-0 flex-1 items-center justify-between gap-0 px-0">
+                  <div className="flex flex-1 items-center gap-1.5">
                     {weekDays.map((wd, i) => {
                       const isPast =
                         new Date(weekStart.getTime() + i * 86400000) <=
@@ -1074,7 +754,7 @@ export function StatsCards({
                             {weekLabels[i]}
                           </span>
                           <div
-                            className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-opacity ${
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-medium transition-opacity lg:h-6 lg:w-6 lg:text-[10px] ${
                               wd.hasActivity
                                 ? 'text-white hover:opacity-70'
                                 : wd.isToday
@@ -1096,18 +776,75 @@ export function StatsCards({
                 </div>
               );
             })()}
+
+            {streakFootnote ? (
+              <div className="mt-3 flex items-center gap-2 text-sm text-[var(--color-muted)]">
+                <svg
+                  className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                  />
+                </svg>
+                {streakFootnote}
+              </div>
+            ) : null}
           </div>
+        ) : null}
+      </div>
+    );
+  }
 
-          {/* Mobile: short hint under body (no header side-note that blows width) */}
-          <p className="mt-1.5 truncate text-[9px] text-[var(--color-muted)] lg:hidden">
-            {t('weeks')}: {shownWeekStreak}
-            {longestStreak > 0
-              ? ` / ${t('longest')} ${longestStreak}${t('days')}`
-              : ''}
+  return (
+    <div className="flex flex-col gap-2 md:gap-3">
+      {/* Weekly Goal */}
+      {showWeekly ? (
+        <div className="card min-w-0 p-4 md:p-5">
+          <GoalHeading
+            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-[11px] tracking-[1.2px] text-[var(--color-muted)] md:text-xs"
+            label={t('weeklyGoal')}
+            hint={weekHint}
+            icon={
+              <svg
+                className="hidden h-3.5 w-3.5 shrink-0 md:block"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            }
+          />
+          <p className="metric text-[40px] leading-none font-bold whitespace-nowrap md:text-[52px]">
+            {goal.unit === 'time'
+              ? formatHours(weekSeconds)
+              : formatDistance(weekDistance)}
+            <span className="ml-2 text-base font-medium text-[var(--color-muted)] md:text-xl">
+              /{' '}
+              {goal.unit === 'time' ? `${weekGoalMins}m` : `${goal.weekly} km`}
+            </span>
           </p>
-
-          {streakFootnote ? (
-            <div className="mt-3 hidden items-center gap-2 text-sm text-[var(--color-muted)] lg:flex">
+          <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-[#EFECE7] md:mt-4">
+            <div
+              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+              style={{
+                width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60 || 1)) * 100 : (weekDistance / (weekGoalMeters || 1)) * 100, 100)}%`,
+              }}
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+            <span className="flex items-center gap-1.5">
               <svg
                 className="h-3.5 w-3.5 text-[var(--color-accent)]"
                 fill="none"
@@ -1118,14 +855,333 @@ export function StatsCards({
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-              {streakFootnote}
+              {weekCount} {unit}
+            </span>
+            <span>{formatHours(weekSeconds)}</span>
+          </div>
+          <p
+            className={`mt-2 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+          >
+            {weekDiff >= 0 ? '↗' : '↘'}{' '}
+            {goal.unit === 'time'
+              ? formatHours(Math.abs(weekDiff))
+              : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
+            <span className="hidden sm:inline">{t('vsLastWeek')}</span>
+          </p>
+        </div>
+      ) : null}
+
+      {goalCardCount > 0 ? (
+        <div className={goalGridClass}>
+          {/* Yearly Goal */}
+          {showYearly ? (
+            <div className="card min-w-0 p-2 md:p-4">
+              <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
+                <svg
+                  className="hidden h-3.5 w-3.5 md:block"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                <span className="truncate">{t('yearlyGoal')}</span>
+              </p>
+              <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
+                {goal.unit === 'time'
+                  ? formatHours(yearSeconds)
+                  : formatDistance(yearDistance)}
+                <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
+                  /{' '}
+                  {goal.unit === 'time'
+                    ? `${Math.round(yearGoalMins / 60)}h`
+                    : `${goal.yearly} km`}
+                </span>
+              </p>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
+                <div
+                  className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                  style={{
+                    width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / yearGoalMeters) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
+                <span className="flex items-center gap-1.5">
+                  <svg
+                    className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  {yearCount} {unit}
+                </span>
+                <span>{formatHours(yearSeconds)}</span>
+              </div>
+              <p
+                className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+              >
+                {formatYearYoY(
+                  yearDiff,
+                  goal.unit,
+                  locale,
+                  formatHours,
+                  t('vsLastYear')
+                )}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Monthly Goal */}
+          {showMonthly ? (
+            <div className="card min-w-0 p-2 md:p-4">
+              <GoalHeading
+                className="eyebrow mb-1 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs"
+                label={t('monthlyGoal')}
+                hint={monthHint}
+                icon={
+                  <svg
+                    className="hidden h-3.5 w-3.5 shrink-0 md:block"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                }
+              />
+              <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
+                {goal.unit === 'time'
+                  ? formatHours(monthSeconds)
+                  : formatDistance(monthDistance)}
+                <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
+                  /{' '}
+                  {goal.unit === 'time'
+                    ? `${Math.round(monthGoalMins / 60)}h`
+                    : `${goal.monthly} km`}
+                </span>
+              </p>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
+                <div
+                  className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                  style={{
+                    width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / monthGoalMeters) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
+                <span className="flex items-center gap-1.5">
+                  <svg
+                    className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  {monthCount} {unit}
+                </span>
+                <span>{formatHours(monthSeconds)}</span>
+              </div>
+              <p
+                className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+              >
+                {monthDiff >= 0 ? '↗' : '↘'}{' '}
+                {goal.unit === 'time'
+                  ? formatHours(Math.abs(monthDiff))
+                  : `${formatDistance(Math.abs(monthDiff))} km`}{' '}
+                <span className="hidden sm:inline">{t('vsLastMonth')}</span>
+              </p>
+            </div>
+          ) : null}
+
+          {showStreak ? (
+            <div className="card col-span-2 min-w-0 overflow-hidden p-2 md:col-span-1 md:p-4">
+              <p className="eyebrow mb-1.5 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
+                <svg
+                  className="h-3.5 w-3.5 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"
+                  />
+                </svg>
+                <span className="truncate">{streakTitle}</span>
+              </p>
+
+              {/* Mobile: stack (handoff-like); desktop: number then week row */}
+              <div className="flex min-w-0 flex-col gap-2 lg:block lg:gap-3">
+                <p className="metric text-xl font-semibold lg:text-3xl">
+                  {shownStreakDays}
+                  <span className="ml-1 text-xs font-normal text-[var(--color-muted)] lg:text-base">
+                    {t('days')}
+                  </span>
+                </p>
+
+                {/* Week days visual */}
+                {(() => {
+                  const todayIdx = (calendarAnchor.getDay() + 6) % 7; // Mon=0 … Sun=6
+                  const weekStart = new Date(
+                    calendarAnchor.getTime() - todayIdx * 86400000
+                  );
+                  const weekLabels =
+                    locale === 'zh'
+                      ? ['一', '二', '三', '四', '五', '六', '日']
+                      : ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+                  function dayColor(acts: Activity[]): string {
+                    if (acts.length === 0) return '';
+                    const sorted = [...acts].sort(
+                      (a, b) => b.distance - a.distance
+                    );
+                    const type = sorted[0].type;
+                    if (type === 'Run') return 'var(--color-amber)';
+                    return 'var(--color-text)';
+                  }
+
+                  const weekDays = Array.from({ length: 7 }, (_, i) => {
+                    const date = new Date(weekStart.getTime() + i * 86400000);
+                    const key = toLocalDateStr(date);
+                    const dayActs = calendarActivities.filter(
+                      (a) => a.start_date_local.slice(0, 10) === key
+                    );
+                    return {
+                      day: date.getDate(),
+                      hasActivity: dayActs.length > 0,
+                      isToday: key === calendarHighlight,
+                      acts: dayActs,
+                    };
+                  });
+                  return (
+                    <div className="flex w-full min-w-0 items-center gap-1 lg:mt-3 lg:gap-1.5">
+                      <div className="flex shrink-0 flex-col items-center gap-0">
+                        <div className="relative h-7 w-7 lg:h-9 lg:w-9">
+                          <svg
+                            className="h-full w-full text-[var(--color-amber)]"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                          >
+                            <path d="M12 23c-3.866 0-7-3.134-7-7 0-2.468 1.5-5.093 3.03-6.97.44-.54 1.47-.36 1.64.3.17.66.54 1.44 1.13 2.07.26-.94.76-2.06 1.57-3.04.81-.98 1.49-2.09 1.78-3.36.12-.53.71-.78 1.15-.46C17.09 6.46 19 9.58 19 13.5c0 5.247-3.134 9.5-7 9.5z" />
+                          </svg>
+                          <span className="absolute right-0 bottom-[18%] left-0 flex items-center justify-center text-[9px] leading-none font-bold text-white">
+                            {shownWeekStreak}
+                          </span>
+                        </div>
+                        <span className="-mt-0.5 text-[10px] font-medium text-[var(--color-muted)] lg:text-[11px]">
+                          {t('weeks')}
+                        </span>
+                      </div>
+                      {/* Centered cluster (not edge-stretched) so days stay inset from card sides */}
+                      <div className="flex min-w-0 flex-1 items-center justify-between gap-0 px-0">
+                        {weekDays.map((wd, i) => {
+                          const isPast =
+                            new Date(weekStart.getTime() + i * 86400000) <=
+                            calendarAnchor;
+                          const color = dayColor(wd.acts);
+                          return (
+                            <div
+                              key={i}
+                              className={`flex flex-col items-center gap-0.5 ${wd.hasActivity ? 'cursor-pointer' : ''}`}
+                              onClick={() => {
+                                if (wd.acts.length > 0)
+                                  onSelectActivity(wd.acts[0]);
+                              }}
+                            >
+                              <span className="text-[9px] text-[var(--color-muted)]">
+                                {weekLabels[i]}
+                              </span>
+                              <div
+                                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-opacity ${
+                                  wd.hasActivity
+                                    ? 'text-white hover:opacity-70'
+                                    : wd.isToday
+                                      ? 'text-[var(--color-text)] ring-1 ring-[var(--color-text)]'
+                                      : isPast
+                                        ? 'bg-[var(--color-sunken)] text-[var(--color-muted)]'
+                                        : 'text-[var(--color-muted)]'
+                                }`}
+                                style={
+                                  wd.hasActivity
+                                    ? { backgroundColor: color }
+                                    : {}
+                                }
+                              >
+                                {wd.day}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Mobile: short hint under body (no header side-note that blows width) */}
+              <p className="mt-1.5 truncate text-[9px] text-[var(--color-muted)] lg:hidden">
+                {t('weeks')}: {shownWeekStreak}
+                {longestStreak > 0
+                  ? ` / ${t('longest')} ${longestStreak}${t('days')}`
+                  : ''}
+              </p>
+
+              {streakFootnote ? (
+                <div className="mt-3 hidden items-center gap-2 text-sm text-[var(--color-muted)] lg:flex">
+                  <svg
+                    className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                    />
+                  </svg>
+                  {streakFootnote}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
