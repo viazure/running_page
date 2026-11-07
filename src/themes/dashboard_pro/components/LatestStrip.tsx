@@ -117,6 +117,7 @@ export function LatestStrip({
               key={a.run_id}
               type="button"
               className="latest-strip-item card"
+              aria-label={`${when} ${title}`}
               onClick={() => onSelectActivity?.(a)}
             >
               <div

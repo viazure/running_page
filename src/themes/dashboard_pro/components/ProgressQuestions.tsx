@@ -404,7 +404,7 @@ export function ProgressQuestions({
           <div className="progress-q-stat">
             {tr('活跃日', 'Active days')} <strong>{activeDays}</strong>
             {' \u00b7 '}
-            {tr('本期连续', 'period streak')} <strong>{streak}</strong>{' '}
+            {tr('本期连续', 'Period streak')} <strong>{streak}</strong>{' '}
             {tr('天', 'd')}
           </div>
         </div>
