@@ -4,6 +4,8 @@ import {
   AreaChart,
   CartesianGrid,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
@@ -42,14 +44,6 @@ function sportColor(type: string): string {
   if (type === 'Ride') return '#4f7ce0';
   if (type === 'Hike') return '#c98500';
   return 'var(--color-accent)';
-}
-
-function sportLabel(type: string, locale: string): string {
-  if (locale !== 'zh') return type;
-  if (type === 'Run') return '跑步';
-  if (type === 'Ride') return '骑行';
-  if (type === 'Hike') return '徒步';
-  return type;
 }
 
 function currentStreakDays(activities: Activity[]): number {
@@ -252,13 +246,17 @@ export function ProgressQuestions({
   const maxAttend = Math.max(1, ...attendance.map((a) => a.count));
   const maxHours = Math.max(0.1, ...volumeSeries.map((v) => v.hours));
 
-  // Scatter plot geometry
-  const maxKm = Math.max(5, ...scatter.map((p) => p.km), 1);
-  const minPace = Math.min(...scatter.map((p) => p.pace), 270);
-  const maxPace = Math.max(...scatter.map((p) => p.pace), 450);
-  const paceLo = Math.max(180, Math.floor(minPace / 30) * 30 - 30);
-  const paceHi = Math.min(720, Math.ceil(maxPace / 30) * 30 + 30);
-
+  // Fit the actual pace range, including slow runs; retain 30s padding for
+  // single/identical points instead of forcing a broad or clipped domain.
+  const maxKm = Math.max(1, ...scatter.map((p) => p.km)) * 1.05;
+  const minPace = scatter.length
+    ? Math.min(...scatter.map((p) => p.pace))
+    : 300;
+  const maxPace = scatter.length
+    ? Math.max(...scatter.map((p) => p.pace))
+    : 360;
+  const paceLo = Math.max(0, Math.floor(minPace / 30) * 30 - 30);
+  const paceHi = Math.ceil(maxPace / 30) * 30 + 30;
   if (period === 'day' || period === 'life') return null;
   if (!activities.length && !volumeSeries.length) return null;
 
@@ -442,108 +440,74 @@ export function ProgressQuestions({
             {tr('本期暂无跑步配速数据', 'No paced runs in this period')}
           </p>
         ) : (
-          <div className="progress-scatter-wrap">
-            <svg
-              className="progress-scatter"
-              viewBox="0 0 640 260"
-              role="img"
-              aria-label={tr(
-                `跑步距离与配速散点（min/km），共 ${runCount} 场；无配速场次已排除`,
-                `Run distance vs pace (min/km), ${runCount} activities; runs without pace excluded`
-              )}
-            >
-              <g stroke="var(--color-border)" strokeWidth="1">
-                <line x1="56" y1="20" x2="56" y2="210" />
-                <line x1="56" y1="210" x2="610" y2="210" />
-              </g>
-              <text
-                x="48"
-                y="28"
-                textAnchor="end"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                {formatPaceSeconds(paceLo)}
-              </text>
-              <text
-                x="48"
-                y="120"
-                textAnchor="end"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                {formatPaceSeconds((paceLo + paceHi) / 2)}
-              </text>
-              <text
-                x="48"
-                y="210"
-                textAnchor="end"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                {formatPaceSeconds(paceHi)}
-              </text>
-              <text
-                x="56"
-                y="232"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                0 km
-              </text>
-              <text
-                x="333"
-                y="232"
-                textAnchor="middle"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                {(maxKm / 2).toFixed(0)} km
-              </text>
-              <text
-                x="610"
-                y="232"
-                textAnchor="end"
-                fill="var(--color-muted)"
-                fontSize="10"
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-              >
-                {maxKm.toFixed(0)} km
-              </text>
-              {scatter.map((p) => {
-                const x = 56 + (p.km / maxKm) * 540;
-                const y =
-                  20 + ((p.pace - paceLo) / Math.max(1, paceHi - paceLo)) * 190;
-                return (
-                  <circle
-                    key={p.id}
-                    cx={x.toFixed(1)}
-                    cy={y.toFixed(1)}
-                    r="4.5"
-                    fill={sportColor(p.type)}
-                    opacity="0.85"
-                  >
-                    <title>
-                      {`${p.name}: ${p.km} km \u00b7 ${formatPaceSeconds(p.pace)}`}
-                    </title>
-                  </circle>
-                );
-              })}
-              <g
-                fontFamily="var(--font-mono, ui-monospace, monospace)"
-                fontSize="11"
-              >
-                <circle cx="530" cy="36" r="4.5" fill={sportColor('Run')} />
-                <text x="542" y="40" fill="var(--color-muted)">
-                  {sportLabel('Run', locale)}
-                </text>
-              </g>
-            </svg>
+          <div
+            className="progress-scatter-wrap"
+            role="img"
+            aria-label={tr(
+              `跑步距离与配速散点（min/km），共 ${runCount} 场；无配速场次已排除`,
+              `Run distance vs pace (min/km), ${runCount} activities; runs without pace excluded`
+            )}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 4"
+                />
+                <XAxis
+                  type="number"
+                  dataKey="km"
+                  domain={[0, maxKm]}
+                  tick={{ fill: 'var(--color-muted)', fontSize: 10 }}
+                  tickFormatter={(v) => `${Number(v.toFixed(1))} km`}
+                  tickCount={4}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="pace"
+                  domain={[paceLo, paceHi]}
+                  tickFormatter={formatPaceSeconds}
+                  tick={{ fill: 'var(--color-muted)', fontSize: 10 }}
+                  tickCount={4}
+                  width={44}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    const point = payload?.[0]?.payload as
+                      (typeof scatter)[number] | undefined;
+                    if (!active || !point) return null;
+                    return (
+                      <div className="progress-scatter-tip">
+                        <strong>{point.name}</strong>
+                        <div>
+                          {point.km.toFixed(2)} km ·{' '}
+                          {formatPaceSeconds(point.pace)} /km
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Scatter
+                  data={scatter}
+                  fill={sportColor('Run')}
+                  fillOpacity={0.8}
+                  isAnimationActive={false}
+                  shape={({ cx, cy }) => (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={4}
+                      fill={sportColor('Run')}
+                      fillOpacity={0.8}
+                    />
+                  )}
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
           </div>
         )}
       </div>
