@@ -333,14 +333,6 @@ function SummaryInner({ onBack }: SummaryPageProps) {
               ) : null}
             </section>
 
-            {period === 'year' || period === 'month' || period === 'week' ? (
-              <ProgressQuestions
-                activities={periodActivities}
-                period={period}
-                periodKey={activeKey}
-                locale={locale}
-              />
-            ) : null}
 
             <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
               <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
@@ -403,6 +395,14 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 </table>
               </div>
             </section>
+            {period === 'year' || period === 'month' || period === 'week' ? (
+              <ProgressQuestions
+                activities={periodActivities}
+                period={period}
+                periodKey={activeKey}
+                locale={locale}
+              />
+            ) : null}
           </div>
         </>
       )}
