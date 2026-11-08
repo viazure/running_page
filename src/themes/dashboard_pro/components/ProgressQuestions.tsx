@@ -262,13 +262,6 @@ export function ProgressQuestions({
   if (period === 'day' || period === 'life') return null;
   if (!activities.length && !volumeSeries.length) return null;
 
-  const volumeCaption =
-    period === 'year'
-      ? tr('月训练小时曲线', 'Monthly training hours')
-      : period === 'month'
-        ? tr('日训练小时', 'Daily training hours')
-        : tr('本周训练小时', 'Weekly training hours');
-
   const volumeAria =
     period === 'year'
       ? tr(
@@ -285,28 +278,18 @@ export function ProgressQuestions({
             `Week total ${formatHours(totalSeconds)}, hours by day`
           );
 
-  const attendCaption =
-    period === 'year'
-      ? tr('各月活跃天数', 'Active days by month')
-      : period === 'month'
-        ? tr('各周活跃天数', 'Active days by week')
-        : tr('本期出勤', 'Attendance this period');
-
   const trainedMonths = volumeSeries.filter((v) => v.hours > 0).length;
 
   return (
     <section
       className="progress-questions"
-      aria-label={tr('Progress 三问', 'Progress')}
+      aria-label={tr('进展', 'Progress')}
     >
       <div className="progress-q card">
-        <div className="progress-q-num">{tr('问一', 'Q1')}</div>
         <div className="progress-q-head">
-          <h2 className="progress-q-title">
-            {tr('做得更多？', 'Doing more?')}
-          </h2>
+          <h2 className="progress-q-title">{tr('训练量', 'Volume')}</h2>
           <div className="progress-q-stat">
-            {tr('累计', 'Total')} <strong>{formatHours(totalSeconds)}</strong>
+            <strong>{formatHours(totalSeconds)}</strong>
             {period === 'year' ? (
               <>
                 {' \u00b7 '}
@@ -318,7 +301,6 @@ export function ProgressQuestions({
             ) : null}
           </div>
         </div>
-        <p className="progress-q-caption">{volumeCaption}</p>
         <div
           className="progress-chart-surface"
           role="img"
@@ -396,11 +378,8 @@ export function ProgressQuestions({
       </div>
 
       <div className="progress-q card">
-        <div className="progress-q-num">{tr('问二', 'Q2')}</div>
         <div className="progress-q-head">
-          <h2 className="progress-q-title">
-            {tr('坚持出现？', 'Showing up?')}
-          </h2>
+          <h2 className="progress-q-title">{tr('出勤', 'Attendance')}</h2>
           <div className="progress-q-stat">
             {tr('活跃日', 'Active days')} <strong>{activeDays}</strong>
             {' \u00b7 '}
@@ -408,9 +387,16 @@ export function ProgressQuestions({
             {tr('天', 'd')}
           </div>
         </div>
-        <p className="progress-q-caption">{attendCaption}</p>
         <div
           className="progress-attend"
+          role="img"
+          aria-label={
+            period === 'year'
+              ? tr('各月活跃天数', 'Active days by month')
+              : period === 'month'
+                ? tr('各周活跃天数', 'Active days by week')
+                : tr('本期出勤', 'Attendance this period')
+          }
           style={{
             gridTemplateColumns: `repeat(${Math.min(attendance.length || 1, 12)}, minmax(0, 1fr))`,
           }}
@@ -441,13 +427,10 @@ export function ProgressQuestions({
       </div>
 
       <div className="progress-q card">
-        <div className="progress-q-num">{tr('问三', 'Q3')}</div>
         <div className="progress-q-head">
-          <h2 className="progress-q-title">
-            {tr('跑得更快更远？', 'Faster & farther?')}
-          </h2>
+          <h2 className="progress-q-title">{tr('跑步', 'Runs')}</h2>
           <div className="progress-q-stat">
-            {tr('跑步场次', 'runs')} <strong>{runCount}</strong>
+            <strong>{runCount}</strong> {tr('场', 'runs')}
             {avgPace != null ? (
               <>
                 {' \u00b7 '}
@@ -457,12 +440,6 @@ export function ProgressQuestions({
             ) : null}
           </div>
         </div>
-        <p className="progress-q-caption">
-          {tr(
-            '距离 × 配速散点（跑步，min/km）',
-            'Distance × pace (Run, min/km)'
-          )}
-        </p>
         {scatter.length === 0 ? (
           <p className="progress-empty">
             {tr('本期暂无跑步配速数据', 'No paced runs in this period')}
@@ -474,8 +451,8 @@ export function ProgressQuestions({
               viewBox="0 0 640 260"
               role="img"
               aria-label={tr(
-                `跑步距离与配速散点，共 ${runCount} 场`,
-                `Run distance vs pace, ${runCount} activities`
+                `跑步距离与配速散点（min/km），共 ${runCount} 场；无配速场次已排除`,
+                `Run distance vs pace (min/km), ${runCount} activities; runs without pace excluded`
               )}
             >
               <g stroke="var(--color-border)" strokeWidth="1">
@@ -572,12 +549,6 @@ export function ProgressQuestions({
             </svg>
           </div>
         )}
-        <p className="progress-note">
-          {tr(
-            '※ 仅展示跑步；无配速场次已排除',
-            '※ Runs only; activities without pace are excluded'
-          )}
-        </p>
       </div>
     </section>
   );
