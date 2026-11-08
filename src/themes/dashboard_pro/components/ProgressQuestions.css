@@ -125,8 +125,9 @@
 }
 
 @media (min-width: 900px) {
+  /* Sit under hero in left column: stack cards vertically, never full-bleed */
   .progress-questions {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
     gap: 16px;
     margin-top: 0;
   }

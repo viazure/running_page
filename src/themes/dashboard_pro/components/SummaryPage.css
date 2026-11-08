@@ -60,29 +60,23 @@
     align-items: start;
   }
 
-  /* Row1: hero | list (same height; list scrolls inside card);
-   * Row2: Progress full-width three cards.
-   * height:0 + min-height:100% keeps list out of row sizing so hero sets height. */
+  /* Left: hero + Progress stacked; right: Activities spanning both rows */
   .summary-layout > .summary-hero {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .summary-layout > .summary-list {
-    grid-column: 2;
-    grid-row: 1;
-    margin-top: 0 !important;
-    align-self: stretch;
-    height: 0;
-    min-height: 100%;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-  }
-
   .summary-layout > .progress-questions {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     margin-top: 0;
+  }
+
+  .summary-layout > .summary-list {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 0 !important;
+    align-self: stretch;
   }
 }
 
