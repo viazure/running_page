@@ -216,6 +216,7 @@ function SummaryInner({ onBack }: SummaryPageProps) {
           ) : null}
 
           <div className="summary-layout min-h-0 flex-auto overflow-y-auto overscroll-contain pb-6">
+            <div className="summary-main">
             <section className="card summary-hero p-5 md:p-5">
               <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
                 {periodLabel(period, activeKey, locale) || '—'}
@@ -332,6 +333,15 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 </>
               ) : null}
             </section>
+            {period === 'year' || period === 'month' || period === 'week' ? (
+              <ProgressQuestions
+                activities={periodActivities}
+                period={period}
+                periodKey={activeKey}
+                locale={locale}
+              />
+            ) : null}
+            </div>
 
 
             <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
@@ -395,14 +405,6 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 </table>
               </div>
             </section>
-            {period === 'year' || period === 'month' || period === 'week' ? (
-              <ProgressQuestions
-                activities={periodActivities}
-                period={period}
-                periodKey={activeKey}
-                locale={locale}
-              />
-            ) : null}
           </div>
         </>
       )}

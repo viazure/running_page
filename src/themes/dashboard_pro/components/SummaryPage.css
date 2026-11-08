@@ -52,6 +52,25 @@
   gap: 0;
 }
 
+/* Mobile: flatten .summary-main so order can be hero → list → Progress */
+@media (max-width: 899px) {
+  .summary-main {
+    display: contents;
+  }
+
+  .summary-main > .summary-hero {
+    order: 1;
+  }
+
+  .summary-layout > .summary-list {
+    order: 2;
+  }
+
+  .summary-main > .progress-questions {
+    order: 3;
+  }
+}
+
 @media (min-width: 900px) {
   .summary-layout {
     display: grid;
@@ -60,23 +79,28 @@
     align-items: start;
   }
 
-  /* Left: hero + Progress stacked; right: Activities spanning both rows */
-  .summary-layout > .summary-hero {
+  /* Left column: hero + Progress tight stack (no multi-row grid gap) */
+  .summary-main {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     grid-column: 1;
     grid-row: 1;
+    min-width: 0;
   }
 
-  .summary-layout > .progress-questions {
-    grid-column: 1;
-    grid-row: 2;
+  .summary-main > .progress-questions {
     margin-top: 0;
   }
 
   .summary-layout > .summary-list {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     margin-top: 0 !important;
-    align-self: stretch;
+    align-self: start;
+    max-height: calc(100dvh - 11rem);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 }
 
