@@ -300,50 +300,50 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
           {/* Shared h-8 row box with table so data rows stay vertically aligned. */}
           <div
             aria-hidden
-            className="hidden h-8 box-border items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
+            className="box-border hidden h-8 items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
           >
             <span className="invisible text-[12px] font-medium">#</span>
           </div>
           {rows.map((r) => {
-              const p = r.pace ?? 0;
-              const tiny = (r.distance ?? 0) < 200;
-              const ratio =
-                slow > fast && has(r.pace)
-                  ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
-                  : 0.5;
-              const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
-              return (
-                <div
-                  key={`bar-${mode}-${r.index}`}
-                  className={`flex h-8 box-border items-center gap-2 border-b border-transparent text-[12px] @min-[48rem]:border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
-                >
-                  <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
-                    {r.index}
-                  </span>
-                  <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
-                    <div
-                      className="h-full rounded-sm"
-                      style={{
-                        width: `${25 + ratio * 75}%`,
-                        backgroundColor: 'var(--color-accent)',
-                        opacity: 0.35 + ratio * 0.55,
-                      }}
-                    />
-                  </div>
-                  <span
-                    className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
-                  >
-                    {formatPaceSeconds(r.pace)}
-                  </span>
+            const p = r.pace ?? 0;
+            const tiny = (r.distance ?? 0) < 200;
+            const ratio =
+              slow > fast && has(r.pace)
+                ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
+                : 0.5;
+            const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
+            return (
+              <div
+                key={`bar-${mode}-${r.index}`}
+                className={`box-border flex h-8 items-center gap-2 border-b border-transparent text-[12px] @min-[48rem]:border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+              >
+                <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
+                  {r.index}
+                </span>
+                <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: `${25 + ratio * 75}%`,
+                      backgroundColor: 'var(--color-accent)',
+                      opacity: 0.35 + ratio * 0.55,
+                    }}
+                  />
                 </div>
-              );
-            })}
+                <span
+                  className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                >
+                  {formatPaceSeconds(r.pace)}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="-mx-0.5 overflow-x-auto">
           <table className="w-full min-w-0 border-collapse text-[12px]">
             <thead>
-              <tr className="h-8 box-border border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+              <tr className="box-border h-8 border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
                 <th className="h-8 py-0 pr-2 align-middle font-medium">#</th>
                 <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('距离', 'Dist')}
@@ -369,7 +369,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                 return (
                   <tr
                     key={`${mode}-${r.index}`}
-                    className={`h-8 box-border border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+                    className={`box-border h-8 border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
                   >
                     <td className="metric h-8 py-0 pr-2 align-middle text-[var(--color-muted)]">
                       {r.index}
@@ -475,10 +475,10 @@ function AnalysisBody({ data }: { data: RunSplits }) {
       // Derived stride (same as AnalysisCharts enrichChart).
       Boolean(
         chart?.pace &&
-          chart?.cad &&
-          chart.pace.some(
-            (p, i) => has(p) && has(chart.cad![i]) && p > 0 && chart.cad![i]! > 0
-          )
+        chart?.cad &&
+        chart.pace.some(
+          (p, i) => has(p) && has(chart.cad![i]) && p > 0 && chart.cad![i]! > 0
+        )
       ));
   const anchors: { id: string; label: string; show?: boolean }[] = [
     { id: 'ra-overview', label: tr('概览', 'Overview') },

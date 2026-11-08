@@ -281,10 +281,7 @@ export function ProgressQuestions({
   const trainedMonths = volumeSeries.filter((v) => v.hours > 0).length;
 
   return (
-    <section
-      className="progress-questions"
-      aria-label={tr('进展', 'Progress')}
-    >
+    <section className="progress-questions" aria-label={tr('进展', 'Progress')}>
       <div className="progress-q card">
         <div className="progress-q-head">
           <h2 className="progress-q-title">{tr('训练量', 'Volume')}</h2>

@@ -217,132 +217,132 @@ function SummaryInner({ onBack }: SummaryPageProps) {
 
           <div className="summary-layout min-h-0 flex-auto overflow-y-auto overscroll-contain pb-6">
             <div className="summary-main">
-            <section className="card summary-hero p-5 md:p-5">
-              <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
-                {periodLabel(period, activeKey, locale) || '—'}
-              </div>
-              <div className="mt-1">
-                <span className="metric text-[40px] leading-none font-bold tracking-tight md:text-[48px]">
-                  {formatKm(stats.distance)}
-                </span>
-                <span className="ml-1.5 text-lg font-medium text-[var(--color-muted)]">
-                  km
-                </span>
-              </div>
-              <div className="mt-2 text-[13px] text-[var(--color-muted)]">
-                {formatHours(stats.seconds)} · {stats.count} {tr('次', 'runs')}
-              </div>
+              <section className="card summary-hero p-5 md:p-5">
+                <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
+                  {periodLabel(period, activeKey, locale) || '—'}
+                </div>
+                <div className="mt-1">
+                  <span className="metric text-[40px] leading-none font-bold tracking-tight md:text-[48px]">
+                    {formatKm(stats.distance)}
+                  </span>
+                  <span className="ml-1.5 text-lg font-medium text-[var(--color-muted)]">
+                    km
+                  </span>
+                </div>
+                <div className="mt-2 text-[13px] text-[var(--color-muted)]">
+                  {formatHours(stats.seconds)} · {stats.count}{' '}
+                  {tr('次', 'runs')}
+                </div>
 
-              <div className="summary-stat-grid mt-[18px] grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-2.5">
-                {(
-                  [
-                    [tr('均配速', 'Avg pace'), paceFromSpeed(stats.speed)],
+                <div className="summary-stat-grid mt-[18px] grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-2.5">
+                  {(
                     [
-                      tr('均心率', 'Avg HR'),
-                      stats.heartRate != null
-                        ? `${Math.round(stats.heartRate)} bpm`
-                        : '--',
-                    ],
-                    [
-                      tr('最远', 'Longest'),
-                      `${formatKm(stats.maxDistance)} km`,
-                    ],
-                    [
-                      tr('最快配速', 'Best pace'),
-                      paceFromSpeed(stats.maxSpeed),
-                    ],
-                    [tr('均距', 'Avg dist'), `${formatKm(avgDistance)} km`],
-                    [
-                      tr('爬升', 'Elevation'),
-                      `${Math.round(stats.elevation).toLocaleString()} m`,
-                    ],
-                  ] as [string, string][]
-                ).map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="rounded-[6px] bg-[var(--color-bg)] px-3 py-3.5"
-                  >
-                    <div className="mb-1.5 text-[11px] tracking-[0.8px] text-[var(--color-muted)]">
-                      {k}
+                      [tr('均配速', 'Avg pace'), paceFromSpeed(stats.speed)],
+                      [
+                        tr('均心率', 'Avg HR'),
+                        stats.heartRate != null
+                          ? `${Math.round(stats.heartRate)} bpm`
+                          : '--',
+                      ],
+                      [
+                        tr('最远', 'Longest'),
+                        `${formatKm(stats.maxDistance)} km`,
+                      ],
+                      [
+                        tr('最快配速', 'Best pace'),
+                        paceFromSpeed(stats.maxSpeed),
+                      ],
+                      [tr('均距', 'Avg dist'), `${formatKm(avgDistance)} km`],
+                      [
+                        tr('爬升', 'Elevation'),
+                        `${Math.round(stats.elevation).toLocaleString()} m`,
+                      ],
+                    ] as [string, string][]
+                  ).map(([k, v]) => (
+                    <div
+                      key={k}
+                      className="rounded-[6px] bg-[var(--color-bg)] px-3 py-3.5"
+                    >
+                      <div className="mb-1.5 text-[11px] tracking-[0.8px] text-[var(--color-muted)]">
+                        {k}
+                      </div>
+                      <div className="metric text-base font-semibold text-[var(--color-text)]">
+                        {v}
+                      </div>
                     </div>
-                    <div className="metric text-base font-semibold text-[var(--color-text)]">
-                      {v}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {bars.length > 0 ? (
-                <>
-                  <div className="summary-chart scrollbar-none mt-4 flex h-36 items-stretch gap-1.5 overflow-x-auto rounded-[8px] bg-[var(--color-bg)] px-4 pt-5 pb-4 md:h-40">
-                    {bars.map((b, i) => {
-                      const h = Math.max(4, (b.km / maxBar) * 100);
-                      const peak = b.km === maxBar && b.km > 0;
-                      const on = focusBar === i;
-                      return (
-                        <button
-                          key={`${b.label}-${i}`}
-                          type="button"
-                          title={`${b.label}: ${b.km} km`}
-                          aria-pressed={on}
-                          onPointerEnter={(e) => {
-                            if (e.pointerType === 'mouse') setHoverBar(i);
-                          }}
-                          onPointerLeave={(e) => {
-                            if (e.pointerType === 'mouse') {
-                              setHoverBar((cur) => (cur === i ? null : cur));
-                            }
-                          }}
-                          onFocus={() => setHoverBar(i)}
-                          onBlur={() =>
-                            setHoverBar((cur) => (cur === i ? null : cur))
-                          }
-                          onPointerDown={(e) => {
-                            // Touch: pin readout (mouse keeps hover-only).
-                            if (e.pointerType === 'mouse') return;
-                            setPinnedBar((cur) => (cur === i ? null : i));
-                          }}
-                          className="flex h-full min-w-[14px] flex-1 cursor-pointer touch-manipulation flex-col justify-end border-0 bg-transparent p-0 md:min-w-0"
-                        >
-                          <span
-                            aria-hidden
-                            className="block w-full rounded-t-md rounded-b-sm bg-[var(--color-accent)] transition-opacity"
-                            style={{
-                              height: `${h}%`,
-                              minHeight: 4,
-                              opacity: on
-                                ? 1
-                                : peak
-                                  ? 0.92
-                                  : 0.35 + Math.min(0.5, b.km / maxBar) * 0.5,
+                {bars.length > 0 ? (
+                  <>
+                    <div className="summary-chart scrollbar-none mt-4 flex h-36 items-stretch gap-1.5 overflow-x-auto rounded-[8px] bg-[var(--color-bg)] px-4 pt-5 pb-4 md:h-40">
+                      {bars.map((b, i) => {
+                        const h = Math.max(4, (b.km / maxBar) * 100);
+                        const peak = b.km === maxBar && b.km > 0;
+                        const on = focusBar === i;
+                        return (
+                          <button
+                            key={`${b.label}-${i}`}
+                            type="button"
+                            title={`${b.label}: ${b.km} km`}
+                            aria-pressed={on}
+                            onPointerEnter={(e) => {
+                              if (e.pointerType === 'mouse') setHoverBar(i);
                             }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-2 flex min-h-[1.25rem] items-center justify-between gap-2 text-[11px] text-[var(--color-muted)]">
-                    {focusBar != null && bars[focusBar] ? (
-                      <span className="metric text-[12px] font-semibold text-[var(--color-text)]">
-                        {bars[focusBar].label}: {bars[focusBar].km} km
-                      </span>
-                    ) : (
-                      edges.map((e) => <span key={e}>{e}</span>)
-                    )}
-                  </div>
-                </>
+                            onPointerLeave={(e) => {
+                              if (e.pointerType === 'mouse') {
+                                setHoverBar((cur) => (cur === i ? null : cur));
+                              }
+                            }}
+                            onFocus={() => setHoverBar(i)}
+                            onBlur={() =>
+                              setHoverBar((cur) => (cur === i ? null : cur))
+                            }
+                            onPointerDown={(e) => {
+                              // Touch: pin readout (mouse keeps hover-only).
+                              if (e.pointerType === 'mouse') return;
+                              setPinnedBar((cur) => (cur === i ? null : i));
+                            }}
+                            className="flex h-full min-w-[14px] flex-1 cursor-pointer touch-manipulation flex-col justify-end border-0 bg-transparent p-0 md:min-w-0"
+                          >
+                            <span
+                              aria-hidden
+                              className="block w-full rounded-t-md rounded-b-sm bg-[var(--color-accent)] transition-opacity"
+                              style={{
+                                height: `${h}%`,
+                                minHeight: 4,
+                                opacity: on
+                                  ? 1
+                                  : peak
+                                    ? 0.92
+                                    : 0.35 + Math.min(0.5, b.km / maxBar) * 0.5,
+                              }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2 flex min-h-[1.25rem] items-center justify-between gap-2 text-[11px] text-[var(--color-muted)]">
+                      {focusBar != null && bars[focusBar] ? (
+                        <span className="metric text-[12px] font-semibold text-[var(--color-text)]">
+                          {bars[focusBar].label}: {bars[focusBar].km} km
+                        </span>
+                      ) : (
+                        edges.map((e) => <span key={e}>{e}</span>)
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </section>
+              {period === 'year' || period === 'month' || period === 'week' ? (
+                <ProgressQuestions
+                  activities={periodActivities}
+                  period={period}
+                  periodKey={activeKey}
+                  locale={locale}
+                />
               ) : null}
-            </section>
-            {period === 'year' || period === 'month' || period === 'week' ? (
-              <ProgressQuestions
-                activities={periodActivities}
-                period={period}
-                periodKey={activeKey}
-                locale={locale}
-              />
-            ) : null}
             </div>
-
 
             <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
               <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
