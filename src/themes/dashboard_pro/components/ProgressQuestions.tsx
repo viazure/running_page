@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -63,6 +63,15 @@ function currentStreakDays(activities: Activity[]): number {
   return streak;
 }
 
+type HeatCell = {
+  date: string;
+  dow: number;
+  week: number;
+  km: number;
+  count: number;
+  empty: boolean;
+};
+
 export function ProgressQuestions({
   activities,
   period,
@@ -71,6 +80,7 @@ export function ProgressQuestions({
 }: ProgressQuestionsProps) {
   const tr = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   const gradId = useId().replace(/:/g, '');
+  const [attendFocus, setAttendFocus] = useState<string | null>(null);
 
   const volumeSeries = useMemo(() => {
     if (period === 'year') {
@@ -140,65 +150,80 @@ export function ProgressQuestions({
     return [];
   }, [activities, period, periodKey, locale]);
 
-  const attendance = useMemo(() => {
-    if (period === 'year') {
-      const months = Array.from({ length: 12 }, (_, i) => ({
-        label: locale === 'zh' ? `${i + 1}月` : String(i + 1),
-        days: new Set<string>(),
-      }));
-      for (const a of activities) {
-        const m = Number(a.start_date_local.slice(5, 7)) - 1;
-        if (m < 0 || m > 11) continue;
-        months[m].days.add(a.start_date_local.slice(0, 10));
-      }
-      return months.map((m) => ({
-        label: m.label,
-        count: m.days.size,
-        aria:
-          locale === 'zh'
-            ? `${m.label} · ${m.days.size} 活跃日`
-            : `${m.label}: ${m.days.size} active days`,
-      }));
+  const heatCalendar = useMemo(() => {
+    const empty = {
+      cells: [] as HeatCell[],
+      weekCount: 0,
+      maxKm: 1,
+      monthMarks: [] as { label: string; week: number }[],
+    };
+    if (period !== 'year') return empty;
+    const year = Number(periodKey.slice(0, 4));
+    if (!Number.isFinite(year)) return empty;
+
+    const byDay = new Map<string, { km: number; count: number }>();
+    for (const a of activities) {
+      const key = a.start_date_local.slice(0, 10);
+      if (!key.startsWith(String(year))) continue;
+      const cur = byDay.get(key) ?? { km: 0, count: 0 };
+      cur.km += a.distance / 1000;
+      cur.count += 1;
+      byDay.set(key, cur);
     }
-    if (period === 'month') {
-      // Aggregate active days by week-of-month (days 1–7 → W1, …) so the
-      // chart stays ~4–5 readable columns instead of 28–31 binary stubs.
-      const y = Number(periodKey.slice(0, 4));
-      const m = Number(periodKey.slice(5, 7));
-      const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-      const weekCount = Math.max(1, Math.ceil(daysInMonth / 7));
-      const weeks = Array.from({ length: weekCount }, (_, i) => ({
-        label: locale === 'zh' ? `第${i + 1}周` : `W${i + 1}`,
-        days: new Set<string>(),
-      }));
-      for (const a of activities) {
-        const d = Number(a.start_date_local.slice(8, 10));
-        if (!Number.isFinite(d) || d < 1 || d > daysInMonth) continue;
-        const wi = Math.min(weekCount - 1, Math.floor((d - 1) / 7));
-        weeks[wi].days.add(a.start_date_local.slice(0, 10));
-      }
-      return weeks.map((w) => ({
-        label: w.label,
-        count: w.days.size,
-        aria:
-          locale === 'zh'
-            ? `${w.label} · ${w.days.size} 活跃日`
-            : `${w.label}: ${w.days.size} active days`,
-      }));
+
+    const cells: HeatCell[] = [];
+    const start = new Date(year, 0, 1, 12, 0, 0);
+    const end = new Date(year, 11, 31, 12, 0, 0);
+    const startDow = (start.getDay() + 6) % 7;
+    for (let i = 0; i < startDow; i++) {
+      cells.push({ date: '', dow: i, week: 0, km: 0, count: 0, empty: true });
     }
-    // week: keep 7 day-level presence bars
-    return volumeSeries.map((b) => {
-      const on = b.hours > 0 || b.km > 0;
-      return {
-        label: b.label,
-        count: on ? 1 : 0,
-        aria:
-          locale === 'zh'
-            ? `${b.label} · ${on ? '有训' : '无训'}`
-            : `${b.label}: ${on ? 'active' : 'rest'}`,
-      };
-    });
-  }, [activities, period, periodKey, locale, volumeSeries]);
+
+    for (let t = start.getTime(); t <= end.getTime(); t += 86400000) {
+      const d = new Date(t);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dow = (d.getDay() + 6) % 7;
+      const week = Math.floor(cells.length / 7);
+      const info = byDay.get(key) ?? { km: 0, count: 0 };
+      cells.push({
+        date: key,
+        dow,
+        week,
+        km: Math.round(info.km * 100) / 100,
+        count: info.count,
+        empty: false,
+      });
+    }
+
+    while (cells.length % 7 !== 0) {
+      const week = Math.floor(cells.length / 7);
+      cells.push({
+        date: '',
+        dow: cells.length % 7,
+        week,
+        km: 0,
+        count: 0,
+        empty: true,
+      });
+    }
+
+    const weekCount = cells.length / 7;
+    const maxKm = Math.max(1, ...cells.map((c) => c.km));
+    const monthMarks: { label: string; week: number }[] = [];
+    let lastMonth = -1;
+    for (const c of cells) {
+      if (!c.date) continue;
+      const m = Number(c.date.slice(5, 7)) - 1;
+      if (m === lastMonth) continue;
+      lastMonth = m;
+      monthMarks.push({
+        label: String(m + 1), // 1–12; avoid "10月" truncating to "1…"
+        week: c.week,
+      });
+    }
+
+    return { cells, weekCount, maxKm, monthMarks };
+  }, [activities, period, periodKey]);
 
   const totalSeconds = useMemo(
     () => activities.reduce((s, a) => s + parseMovingTime(a.moving_time), 0),
@@ -238,12 +263,27 @@ export function ProgressQuestions({
   }, [activities]);
 
   const runCount = scatter.length;
+  // Weighted avg pace (total distance / total moving_time), same idea as
+  // Summary hero paceFromSpeed(summarize(...).speed). Keep the scatter Run
+  // filters so the label matches the points shown — not arithmetic mean.
   const avgPace = useMemo(() => {
-    if (!scatter.length) return null;
-    return scatter.reduce((s, p) => s + p.pace, 0) / scatter.length;
-  }, [scatter]);
+    let totalDist = 0;
+    let totalTime = 0;
+    for (const a of activities) {
+      if (a.type !== 'Run') continue;
+      const pace = paceSecFromSpeed(a.average_speed);
+      if (pace == null || !Number.isFinite(pace)) continue;
+      if (a.distance < 500) continue;
+      if (pace < 180 || pace > 600) continue;
+      const secs = parseMovingTime(a.moving_time);
+      if (secs <= 0) continue;
+      totalDist += a.distance;
+      totalTime += secs;
+    }
+    if (totalDist <= 0 || totalTime <= 0) return null;
+    return (totalTime / totalDist) * 1000;
+  }, [activities]);
 
-  const maxAttend = Math.max(1, ...attendance.map((a) => a.count));
   const maxHours = Math.max(0.1, ...volumeSeries.map((v) => v.hours));
 
   // Fit the actual pace range, including slow runs; retain 30s padding for
@@ -372,7 +412,9 @@ export function ProgressQuestions({
         </div>
       </div>
 
-      <div className="progress-q card">
+      {period === 'year' ? (
+        <>
+            <div className="progress-q card">
         <div className="progress-q-head">
           <h2 className="progress-q-title">{tr('出勤', 'Attendance')}</h2>
           <div className="progress-q-stat">
@@ -383,47 +425,105 @@ export function ProgressQuestions({
           </div>
         </div>
         <div
-          className="progress-attend"
+          className="progress-heat"
           role="img"
-          aria-label={
-            period === 'year'
-              ? tr('各月活跃天数', 'Active days by month')
-              : period === 'month'
-                ? tr('各周活跃天数', 'Active days by week')
-                : tr('本期出勤', 'Attendance this period')
-          }
-          style={{
-            gridTemplateColumns: `repeat(${Math.min(attendance.length || 1, 12)}, minmax(0, 1fr))`,
-          }}
+          aria-label={tr('本年出勤日历热力', 'Year attendance calendar heatmap')}
         >
-          {attendance.map((m) => {
-            const h = Math.round((m.count / maxAttend) * 100);
-            return (
-              <div
-                key={m.label}
-                className="progress-attend-mon"
-                title={m.aria}
-                aria-label={m.aria}
+          <div className="progress-heat-months" aria-hidden>
+            {heatCalendar.monthMarks.map((m) => (
+              <span
+                key={`${m.label}-${m.week}`}
+                className="progress-heat-month"
+                style={{
+                  left: `${(m.week / Math.max(1, heatCalendar.weekCount)) * 100}%`,
+                }}
               >
-                <div className="progress-attend-lab">{m.label}</div>
-                <div className="progress-attend-bar">
-                  <div
-                    className="progress-attend-fill"
-                    style={{ height: `${Math.max(m.count ? 6 : 0, h)}%` }}
+                {m.label}
+              </span>
+            ))}
+          </div>
+          <div
+            className="progress-heat-grid"
+            style={{
+              gridTemplateColumns: `repeat(${heatCalendar.weekCount}, minmax(0, 1fr))`,
+            }}
+          >
+            {heatCalendar.cells.map((cell) => {
+              if (cell.empty || !cell.date) {
+                return (
+                  <span
+                    key={`pad-${cell.week}-${cell.dow}`}
+                    className="progress-heat-cell is-pad"
+                    aria-hidden
                   />
-                </div>
-                <div className="progress-attend-n">
-                  {m.count > 0 ? m.count : '—'}
-                </div>
-              </div>
-            );
-          })}
+                );
+              }
+              const ratio = cell.km / heatCalendar.maxKm;
+              const level =
+                cell.km <= 0 ? 0 : ratio < 0.33 ? 1 : ratio < 0.66 ? 2 : 3;
+              const on = attendFocus === cell.date;
+              const aria =
+                locale === 'zh'
+                  ? `${cell.date} · ${
+                      cell.count
+                        ? `${cell.count} 次 · ${cell.km.toFixed(1)} km`
+                        : '休息'
+                    }`
+                  : `${cell.date}: ${
+                      cell.count
+                        ? `${cell.count} · ${cell.km.toFixed(1)} km`
+                        : 'rest'
+                    }`;
+              return (
+                <button
+                  key={cell.date}
+                  type="button"
+                  className={`progress-heat-cell level-${level}${on ? ' is-active' : ''}`}
+                  title={aria}
+                  aria-label={aria}
+                  aria-pressed={on}
+                  onClick={() =>
+                    setAttendFocus((cur) =>
+                      cur === cell.date ? null : cell.date
+                    )
+                  }
+                />
+              );
+            })}
+          </div>
+          <div className="progress-heat-legend" aria-hidden>
+            <span>{tr('少', 'Less')}</span>
+            <span className="progress-heat-cell level-0" />
+            <span className="progress-heat-cell level-1" />
+            <span className="progress-heat-cell level-2" />
+            <span className="progress-heat-cell level-3" />
+            <span>{tr('多', 'More')}</span>
+          </div>
         </div>
+        {attendFocus ? (
+          <div className="progress-attend-readout" aria-live="polite">
+            {(() => {
+              const cell = heatCalendar.cells.find((c) => c.date === attendFocus);
+              if (!cell) return attendFocus;
+              return locale === 'zh'
+                ? `${cell.date} · ${
+                    cell.count
+                      ? `${cell.count} 次 · ${cell.km.toFixed(1)} km`
+                      : '休息'
+                  }`
+                : `${cell.date}: ${
+                    cell.count
+                      ? `${cell.count} · ${cell.km.toFixed(1)} km`
+                      : 'rest'
+                  }`;
+            })()}
+          </div>
+        ) : null}
       </div>
 
-      <div className="progress-q card">
+<div className="progress-q card">
         <div className="progress-q-head">
-          <h2 className="progress-q-title">{tr('跑步', 'Runs')}</h2>
+          <h2 className="progress-q-title">{tr('配速', 'Pace')}</h2>
           <div className="progress-q-stat">
             <strong>{runCount}</strong> {tr('场', 'runs')}
             {avgPace != null ? (
@@ -468,6 +568,7 @@ export function ProgressQuestions({
                   type="number"
                   dataKey="pace"
                   domain={[paceLo, paceHi]}
+                  reversed
                   tickFormatter={formatPaceSeconds}
                   tick={{ fill: 'var(--color-muted)', fontSize: 10 }}
                   tickCount={4}
@@ -511,6 +612,8 @@ export function ProgressQuestions({
           </div>
         )}
       </div>
+        </>
+      ) : null}
     </section>
   );
 }

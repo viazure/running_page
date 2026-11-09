@@ -52,52 +52,116 @@
   padding: 6px 4px 0;
 }
 
-.progress-attend {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: clamp(4px, 1vw, 10px);
-  margin-top: 4px;
-}
-
-.progress-attend-mon {
+/* Year attendance: calendar heatmap */
+.progress-heat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
   min-width: 0;
 }
 
-.progress-attend-lab {
+.progress-heat-months {
+  position: relative;
+  height: 14px;
+  margin-bottom: 2px;
   font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--color-muted);
+}
+
+.progress-heat-month {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.progress-heat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+}
+
+.progress-heat-cell {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: var(--color-cell, var(--color-sunken));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.progress-heat-cell.is-pad {
+  visibility: hidden;
+  pointer-events: none;
+  cursor: default;
+}
+
+.progress-heat-cell.level-0 {
+  background: var(--color-cell, var(--color-sunken));
+}
+
+.progress-heat-cell.level-1 {
+  background: var(--color-amber-soft, #e8a87c);
+}
+
+.progress-heat-cell.level-2 {
+  background: color-mix(
+    in srgb,
+    var(--color-amber, #c45c26) 72%,
+    var(--color-amber-soft, #e8a87c)
+  );
+}
+
+.progress-heat-cell.level-3 {
+  background: var(--color-amber, #c45c26);
+}
+
+.progress-heat-cell.is-active {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.progress-heat-cell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-amber) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.progress-heat-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
   font-size: 10px;
   color: var(--color-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
 
-.progress-attend-bar {
-  width: 100%;
-  /* Fill each period slot, including month/week views with fewer bars. */
-  height: 72px;
-  background: var(--color-border);
-  border-radius: 6px;
-  display: flex;
-  align-items: flex-end;
-  overflow: hidden;
+.progress-heat-legend .progress-heat-cell {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  cursor: default;
+  pointer-events: none;
 }
 
-.progress-attend-fill {
-  width: 100%;
-  background: var(--color-accent);
-  border-radius: 6px 6px 0 0;
-  min-height: 0;
-}
-
-.progress-attend-n {
+.progress-attend-readout {
+  margin-top: 10px;
+  font-size: 12px;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 10px;
   color: var(--color-text);
 }
 
@@ -142,10 +206,22 @@
   .progress-q {
     padding: 16px;
   }
-  .progress-attend {
-    gap: 4px;
-  }
   .progress-chart-surface {
     height: 140px;
   }
+}
+
+/* Recharts: no system black focus ring on tap */
+.progress-chart-surface,
+.progress-scatter-wrap {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.progress-chart-surface svg,
+.progress-scatter-wrap svg,
+.progress-chart-surface svg:focus,
+.progress-scatter-wrap svg:focus,
+.progress-chart-surface svg *:focus,
+.progress-scatter-wrap svg *:focus {
+  outline: none !important;
 }

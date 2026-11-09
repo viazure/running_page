@@ -1079,18 +1079,16 @@ const ActivityListInner: React.FC<
   const [daySelectedYear, setDaySelectedYear] = useState<string | null>(() =>
     defaultSelectedYear(getAvailableActivityYears(activityData))
   );
-  const [lifeSelectedYear, setLifeSelectedYear] = useState<string | null>(() =>
-    defaultSelectedYear(getAvailableActivityYears(activityData))
-  );
+  // Life = full career by default; year chips opt-in (no auto calendar/newest year).
+  const [lifeSelectedYear, setLifeSelectedYear] = useState<string | null>(null);
   const [otherSelectedYear, setOtherSelectedYear] = useState<string | null>(
     null
   );
   const dayYearSeededRef = useRef(
     defaultSelectedYear(getAvailableActivityYears(activityData)) != null
   );
-  const lifeYearSeededRef = useRef(
-    defaultSelectedYear(getAvailableActivityYears(activityData)) != null
-  );
+  // Already decided: stay on null unless user picks a year chip.
+  const lifeYearSeededRef = useRef(true);
   const lifeCaptureRef = useRef<HTMLDivElement>(null);
   const [lifeExporting, setLifeExporting] = useState(false);
   const lifeExportingRef = useRef(false);
@@ -1112,8 +1110,8 @@ const ActivityListInner: React.FC<
     [activityData]
   );
 
-  // Seed defaults once per mode: calendar year if present, else newest with data.
-  // Prevents first Day/Life visit from rendering the unfiltered full set / full Life SVG.
+  // Seed Day default once: calendar year if present, else newest with data.
+  // Life stays null (full career) until the user picks a year chip.
   useEffect(() => {
     if (!availableYears.length) return;
     const def = defaultSelectedYear(availableYears);
@@ -1121,10 +1119,6 @@ const ActivityListInner: React.FC<
     if (!dayYearSeededRef.current) {
       dayYearSeededRef.current = true;
       setDaySelectedYear(def);
-    }
-    if (!lifeYearSeededRef.current) {
-      lifeYearSeededRef.current = true;
-      setLifeSelectedYear(def);
     }
   }, [availableYears]);
 

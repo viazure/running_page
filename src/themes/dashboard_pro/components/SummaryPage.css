@@ -52,7 +52,7 @@
   gap: 0;
 }
 
-/* Mobile: flatten .summary-main so order can be hero → list → Progress */
+/* Mobile: flatten .summary-main so order is hero → Progress → 本期活动 */
 @media (max-width: 899px) {
   .summary-main {
     display: contents;
@@ -62,13 +62,23 @@
     order: 1;
   }
 
-  .summary-layout > .summary-list {
+  .summary-main > .progress-questions {
     order: 2;
   }
 
-  .summary-main > .progress-questions {
+  .summary-layout > .summary-list {
     order: 3;
   }
+}
+
+/* Mobile: page scrolls as one; list does not create a second bar */
+.summary-layout {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.summary-list-scroll {
+  overflow-x: auto;
 }
 
 @media (min-width: 900px) {
@@ -76,7 +86,10 @@
     display: grid;
     grid-template-columns: 1fr 380px;
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden; /* only inner panes scroll — no page + list double bars */
   }
 
   /* Left column: hero + Progress tight stack (no multi-row grid gap) */
@@ -87,6 +100,10 @@
     grid-column: 1;
     grid-row: 1;
     min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
   .summary-main > .progress-questions {
@@ -97,8 +114,23 @@
     grid-column: 2;
     grid-row: 1;
     margin-top: 0 !important;
-    align-self: start;
-    max-height: calc(100dvh - 11rem);
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    overflow: hidden; /* card chrome fixed; body scrolls */
+  }
+
+  .summary-list-head {
+    flex: 0 0 auto;
+  }
+
+  .summary-list-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
@@ -188,13 +220,161 @@
   }
 }
 
+/* Period toolbar: granularity pills only (period value uses ◀ label ▶) */
+.summary-period-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 10px;
+}
+
 /* Top period tabs (年/月/周/日/Life) — single selected language */
 .summary-period-tabs {
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
   gap: 6px;
-  padding-bottom: 12px;
+  padding-bottom: 0;
+}
+
+/* Unified period navigator: thin ◀ label ▶ (year/month/week/day; hidden on Life) */
+.summary-period-nav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+}
+
+.summary-period-nav-arrow {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  color: var(--color-muted);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.summary-period-nav-chevron {
+  display: inline-flex;
+  line-height: 0;
+  opacity: 0.85;
+}
+
+.summary-period-nav-arrow:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.summary-period-nav-arrow:hover:not(:disabled) .summary-period-nav-chevron {
+  opacity: 1;
+}
+
+.summary-period-nav-arrow:disabled {
+  cursor: default;
+  opacity: 0.28;
+  color: var(--color-muted);
+}
+
+.summary-period-nav-arrow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.summary-period-nav-label {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(100%, 16rem);
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-muted);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.summary-period-nav-label:hover,
+.summary-period-nav-label.is-open {
+  color: var(--color-text);
+  background: var(--color-sunken, var(--color-bg));
+}
+
+.summary-period-nav-label:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.summary-period-nav-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 10rem;
+  max-width: min(100vw - 2rem, 18rem);
+  max-height: min(280px, 50vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-card, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.summary-period-nav-option {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--color-text);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-period-nav-option:hover {
+  background: var(--color-sunken, var(--color-bg));
+}
+
+.summary-period-nav-option.is-active {
+  color: #fff;
+  background: var(--color-accent);
+}
+
+.summary-period-nav-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 1px;
 }
 
 .summary-period-tab {
@@ -225,42 +405,6 @@
   color: #fff;
 }
 
-/* Month/week period chips: same selected fill as 日/Life tabs + year chips */
-.summary-period-chip {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  cursor: pointer;
-  border: none;
-  border-radius: 9999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-  background: transparent;
-  color: var(--color-muted);
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.summary-period-chip:hover {
-  color: var(--color-text);
-}
-
-.summary-period-chip.is-active {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.summary-period-chip.is-active:hover {
-  color: #fff;
-}
-
-/* Period chips row chrome lives in ChipScrollRow (hidden scrollbar + edge fades).
- * `.summary-period-chips` remains as a root hook class for spacing utilities. */
-
 /* In-panel wait for day/Life embed — never covers page chrome / period tabs */
 .summary-embed-pending {
   display: flex;
@@ -271,4 +415,26 @@
   padding: 1.5rem;
   color: var(--color-muted);
   font-size: 13px;
+}
+
+/* Kill native black focus / tap flash on charts & bars */
+.summary-page-root .progress-chart-surface,
+.summary-page-root .progress-scatter-wrap,
+.summary-page-root .progress-attend,
+.summary-page-root .summary-chart {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-page-root .progress-chart-surface *,
+.summary-page-root .progress-scatter-wrap *,
+.summary-page-root .progress-attend-mon,
+.summary-page-root .summary-chart button {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.summary-page-root .progress-attend-mon:focus-visible,
+.summary-page-root .summary-chart button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
 }

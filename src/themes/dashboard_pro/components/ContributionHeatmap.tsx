@@ -571,7 +571,7 @@ export function ContributionHeatmap({
                     return (
                       <div
                         key={di}
-                        className="aspect-square min-h-0 w-full cursor-pointer rounded-[1px] transition-colors hover:ring-1 hover:ring-[var(--color-muted)] sm:rounded-sm"
+                        className="aspect-square min-h-0 w-full cursor-pointer rounded-[2px] transition-colors hover:ring-1 hover:ring-[var(--color-muted)]"
                         style={{ backgroundColor: bgColor }}
                         title={titleText}
                         onClick={() => {
@@ -600,7 +600,7 @@ export function ContributionHeatmap({
                 {TYPE_PALETTES[tp].map((c, i) => (
                   <span
                     key={i}
-                    className="inline-block h-2.5 w-2.5 rounded-sm"
+                    className="inline-block h-2.5 w-2.5 rounded-[2px]"
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -616,7 +616,7 @@ export function ContributionHeatmap({
             {[0.1, 0.35, 0.6, 0.82, 1].map((ratio, i) => (
               <div
                 key={i}
-                className="h-3 w-3 rounded-sm"
+                className="h-3 w-3 rounded-[2px]"
                 style={{
                   backgroundColor: getColor(
                     ratio * (yearData[0]?.max || 1),

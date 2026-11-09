@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { Activity } from '@/types';
 import { getActivityData, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
@@ -10,7 +10,6 @@ import {
 } from '@/utils/summary';
 import { formatPaceSeconds } from '@/core/splits';
 import ActivityList from '@/themes/classic/components/ActivityList';
-import { ChipScrollRow } from './ChipScrollRow';
 import { ProgressQuestions } from './ProgressQuestions';
 import './SummaryPage.css';
 
@@ -57,6 +56,12 @@ function periodLabel(
     const [y, w] = key.split('-W');
     return locale === 'zh' ? `${y} 第 ${Number(w)} 周` : `${y} W${w}`;
   }
+  if (period === 'day' && key.length >= 10) {
+    const [y, m, d] = key.slice(0, 10).split('-');
+    return locale === 'zh'
+      ? `${y} 年 ${Number(m)} 月 ${Number(d)} 日`
+      : key.slice(0, 10);
+  }
   return key;
 }
 
@@ -76,6 +81,141 @@ function chartEdgeLabels(
     return [bars[0].label, bars[bars.length - 1].label];
   }
   return [bars[0].label, bars[bars.length - 1].label];
+}
+
+function PeriodNavigator({
+  period,
+  periodKeys,
+  activeKey,
+  locale,
+  onChange,
+  tr,
+}: {
+  period: SummaryPeriod;
+  periodKeys: string[];
+  activeKey: string;
+  locale: string;
+  onChange: (key: string) => void;
+  tr: (zh: string, en: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const idx = periodKeys.indexOf(activeKey);
+  const canOlder = idx >= 0 && idx < periodKeys.length - 1;
+  const canNewer = idx > 0;
+  const label = periodLabel(period, activeKey, locale) || '—';
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const selectAria =
+    period === 'year'
+      ? tr('选择年份', 'Select year')
+      : period === 'month'
+        ? tr('选择月份', 'Select month')
+        : period === 'week'
+          ? tr('选择周', 'Select week')
+          : tr('选择日期', 'Select day');
+
+  return (
+    <div className="summary-period-nav" ref={rootRef}>
+      <button
+        type="button"
+        className="summary-period-nav-arrow"
+        aria-label={tr('上一期（更早）', 'Previous period')}
+        disabled={!canOlder}
+        onClick={() => {
+          if (!canOlder) return;
+          setOpen(false);
+          onChange(periodKeys[idx + 1]);
+        }}
+      >
+        <span className="summary-period-nav-chevron" aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path
+              d="M6.5 1.5L3 5l3.5 3.5"
+              stroke="currentColor"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </button>
+      <button
+        type="button"
+        className={`summary-period-nav-label ${open ? 'is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={selectAria}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label}
+      </button>
+      <button
+        type="button"
+        className="summary-period-nav-arrow"
+        aria-label={tr('下一期（更新）', 'Next period')}
+        disabled={!canNewer}
+        onClick={() => {
+          if (!canNewer) return;
+          setOpen(false);
+          onChange(periodKeys[idx - 1]);
+        }}
+      >
+        <span className="summary-period-nav-chevron" aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path
+              d="M3.5 1.5L7 5l-3.5 3.5"
+              stroke="currentColor"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </button>
+      {open && periodKeys.length > 0 ? (
+        <div
+          className="summary-period-nav-menu"
+          role="listbox"
+          aria-label={selectAria}
+        >
+          {periodKeys.map((k) => {
+            const on = k === activeKey;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="option"
+                aria-selected={on}
+                className={`summary-period-nav-option ${on ? 'is-active' : ''}`}
+                onClick={() => {
+                  onChange(k);
+                  setOpen(false);
+                }}
+              >
+                {periodLabel(period, k, locale)}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function SummaryInner({ onBack }: SummaryPageProps) {
@@ -124,6 +264,13 @@ function SummaryInner({ onBack }: SummaryPageProps) {
   const edges = chartEdgeLabels(period, bars, locale);
   const avgDistance = stats.count ? stats.distance / stats.count : 0;
   const periodKeys = groups.map(([k]) => k);
+
+
+  const onPeriodKeyChange = (key: string) => {
+    setSelectedKey(key);
+    clearBarFocus();
+  };
+
   return (
     <div className="summary-page-root mx-auto flex h-full min-h-0 w-full max-w-[1400px] flex-col overflow-hidden px-4 pt-3 md:px-6 md:pt-4">
       <div className="flex shrink-0 items-center gap-3.5 pb-3">
@@ -139,30 +286,32 @@ function SummaryInner({ onBack }: SummaryPageProps) {
         <h1 className="text-lg font-bold">{tr('汇总', 'Summary')}</h1>
       </div>
 
-      <div
-        className="summary-period-tabs"
-        role="tablist"
-        aria-label={tr('汇总周期', 'Summary period')}
-      >
-        {PERIODS.map((p) => {
-          const on = period === p.id;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => {
-                setPeriod(p.id);
-                setSelectedKey(null);
-                clearBarFocus();
-              }}
-              className={`summary-period-tab ${on ? 'is-active' : ''}`}
-            >
-              {locale === 'zh' ? p.zh : p.en}
-            </button>
-          );
-        })}
+      <div className="summary-period-toolbar">
+        <div
+          className="summary-period-tabs"
+          role="tablist"
+          aria-label={tr('汇总周期', 'Summary period')}
+        >
+          {PERIODS.map((p) => {
+            const on = period === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => {
+                  setPeriod(p.id);
+                  setSelectedKey(null);
+                  clearBarFocus();
+                }}
+                className={`summary-period-tab ${on ? 'is-active' : ''}`}
+              >
+                {locale === 'zh' ? p.zh : p.en}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {period === 'life' || period === 'day' ? (
@@ -188,225 +337,203 @@ function SummaryInner({ onBack }: SummaryPageProps) {
           </Suspense>
         </div>
       ) : (
-        <>
-          {periodKeys.length > 1 ? (
-            <ChipScrollRow
-              className="summary-period-chips mb-3 shrink-0 pb-1.5"
-              contentClassName="gap-1.5"
-              fadeFrom="var(--color-bg)"
-            >
-              {periodKeys.map((k) => {
-                const on = k === activeKey;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => {
-                      setSelectedKey(k);
-                      clearBarFocus();
-                    }}
-                    className={`summary-period-chip ${on ? 'is-active' : ''}`}
-                  >
-                    {periodLabel(period, k, locale)}
-                  </button>
-                );
-              })}
-            </ChipScrollRow>
-          ) : null}
+        <div className="summary-layout min-h-0 flex-auto overscroll-contain pb-6">
+          <div className="summary-main">
+            <section className="card summary-hero p-5 md:p-5">
+              <PeriodNavigator
+                key={period}
+                period={period}
+                periodKeys={periodKeys}
+                activeKey={activeKey}
+                locale={locale}
+                onChange={onPeriodKeyChange}
+                tr={tr}
+              />
+              <div className="mt-1">
+                <span className="metric text-[40px] leading-none font-bold tracking-tight md:text-[48px]">
+                  {formatKm(stats.distance)}
+                </span>
+                <span className="ml-1.5 text-lg font-medium text-[var(--color-muted)]">
+                  km
+                </span>
+              </div>
+              <div className="mt-2 text-[13px] text-[var(--color-muted)]">
+                {formatHours(stats.seconds)} · {stats.count}{' '}
+                {tr('次', 'runs')}
+              </div>
 
-          <div className="summary-layout min-h-0 flex-auto overflow-y-auto overscroll-contain pb-6">
-            <div className="summary-main">
-              <section className="card summary-hero p-5 md:p-5">
-                <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
-                  {periodLabel(period, activeKey, locale) || '—'}
-                </div>
-                <div className="mt-1">
-                  <span className="metric text-[40px] leading-none font-bold tracking-tight md:text-[48px]">
-                    {formatKm(stats.distance)}
-                  </span>
-                  <span className="ml-1.5 text-lg font-medium text-[var(--color-muted)]">
-                    km
-                  </span>
-                </div>
-                <div className="mt-2 text-[13px] text-[var(--color-muted)]">
-                  {formatHours(stats.seconds)} · {stats.count}{' '}
-                  {tr('次', 'runs')}
-                </div>
-
-                <div className="summary-stat-grid mt-[18px] grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-2.5">
-                  {(
+              <div className="summary-stat-grid mt-[18px] grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-2.5">
+                {(
+                  [
+                    [tr('均配速', 'Avg pace'), paceFromSpeed(stats.speed)],
                     [
-                      [tr('均配速', 'Avg pace'), paceFromSpeed(stats.speed)],
-                      [
-                        tr('均心率', 'Avg HR'),
-                        stats.heartRate != null
-                          ? `${Math.round(stats.heartRate)} bpm`
-                          : '--',
-                      ],
-                      [
-                        tr('最远', 'Longest'),
-                        `${formatKm(stats.maxDistance)} km`,
-                      ],
-                      [
-                        tr('最快配速', 'Best pace'),
-                        paceFromSpeed(stats.maxSpeed),
-                      ],
-                      [tr('均距', 'Avg dist'), `${formatKm(avgDistance)} km`],
-                      [
-                        tr('爬升', 'Elevation'),
-                        `${Math.round(stats.elevation).toLocaleString()} m`,
-                      ],
-                    ] as [string, string][]
-                  ).map(([k, v]) => (
-                    <div
-                      key={k}
-                      className="rounded-[6px] bg-[var(--color-bg)] px-3 py-3.5"
-                    >
-                      <div className="mb-1.5 text-[11px] tracking-[0.8px] text-[var(--color-muted)]">
-                        {k}
-                      </div>
-                      <div className="metric text-base font-semibold text-[var(--color-text)]">
-                        {v}
-                      </div>
+                      tr('均心率', 'Avg HR'),
+                      stats.heartRate != null
+                        ? `${Math.round(stats.heartRate)} bpm`
+                        : '--',
+                    ],
+                    [
+                      tr('最远', 'Longest'),
+                      `${formatKm(stats.maxDistance)} km`,
+                    ],
+                    [
+                      tr('最快配速', 'Best pace'),
+                      paceFromSpeed(stats.maxSpeed),
+                    ],
+                    [tr('均距', 'Avg dist'), `${formatKm(avgDistance)} km`],
+                    [
+                      tr('爬升', 'Elevation'),
+                      `${Math.round(stats.elevation).toLocaleString()} m`,
+                    ],
+                  ] as [string, string][]
+                ).map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="rounded-[6px] bg-[var(--color-bg)] px-3 py-3.5"
+                  >
+                    <div className="mb-1.5 text-[11px] tracking-[0.8px] text-[var(--color-muted)]">
+                      {k}
                     </div>
-                  ))}
-                </div>
+                    <div className="metric text-base font-semibold text-[var(--color-text)]">
+                      {v}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                {bars.length > 0 ? (
-                  <>
-                    <div className="summary-chart scrollbar-none mt-4 flex h-36 items-stretch gap-1.5 overflow-x-auto rounded-[8px] bg-[var(--color-bg)] px-4 pt-5 pb-4 md:h-40">
-                      {bars.map((b, i) => {
-                        const h = Math.max(4, (b.km / maxBar) * 100);
-                        const peak = b.km === maxBar && b.km > 0;
-                        const on = focusBar === i;
-                        return (
-                          <button
-                            key={`${b.label}-${i}`}
-                            type="button"
-                            title={`${b.label}: ${b.km} km`}
-                            aria-pressed={on}
-                            onPointerEnter={(e) => {
-                              if (e.pointerType === 'mouse') setHoverBar(i);
-                            }}
-                            onPointerLeave={(e) => {
-                              if (e.pointerType === 'mouse') {
-                                setHoverBar((cur) => (cur === i ? null : cur));
-                              }
-                            }}
-                            onFocus={() => setHoverBar(i)}
-                            onBlur={() =>
-                              setHoverBar((cur) => (cur === i ? null : cur))
+              {bars.length > 0 ? (
+                <>
+                  <div className="summary-chart scrollbar-none mt-4 flex h-36 items-stretch gap-1.5 overflow-x-auto rounded-[8px] bg-[var(--color-bg)] px-4 pt-5 pb-4 md:h-40">
+                    {bars.map((b, i) => {
+                      const h = Math.max(4, (b.km / maxBar) * 100);
+                      const peak = b.km === maxBar && b.km > 0;
+                      const on = focusBar === i;
+                      return (
+                        <button
+                          key={`${b.label}-${i}`}
+                          type="button"
+                          title={`${b.label}: ${b.km} km`}
+                          aria-pressed={on}
+                          onPointerEnter={(e) => {
+                            if (e.pointerType === 'mouse') setHoverBar(i);
+                          }}
+                          onPointerLeave={(e) => {
+                            if (e.pointerType === 'mouse') {
+                              setHoverBar((cur) => (cur === i ? null : cur));
                             }
-                            onPointerDown={(e) => {
-                              // Touch: pin readout (mouse keeps hover-only).
-                              if (e.pointerType === 'mouse') return;
-                              setPinnedBar((cur) => (cur === i ? null : i));
-                            }}
-                            className="flex h-full min-w-[14px] flex-1 cursor-pointer touch-manipulation flex-col justify-end border-0 bg-transparent p-0 md:min-w-0"
-                          >
-                            <span
-                              aria-hidden
-                              className="block w-full rounded-t-md rounded-b-sm bg-[var(--color-accent)] transition-opacity"
-                              style={{
-                                height: `${h}%`,
-                                minHeight: 4,
-                                opacity: on
-                                  ? 1
-                                  : peak
-                                    ? 0.92
-                                    : 0.35 + Math.min(0.5, b.km / maxBar) * 0.5,
-                              }}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-2 flex min-h-[1.25rem] items-center justify-between gap-2 text-[11px] text-[var(--color-muted)]">
-                      {focusBar != null && bars[focusBar] ? (
-                        <span className="metric text-[12px] font-semibold text-[var(--color-text)]">
-                          {bars[focusBar].label}: {bars[focusBar].km} km
-                        </span>
-                      ) : (
-                        edges.map((e) => <span key={e}>{e}</span>)
-                      )}
-                    </div>
-                  </>
-                ) : null}
-              </section>
-              {period === 'year' || period === 'month' || period === 'week' ? (
-                <ProgressQuestions
-                  activities={periodActivities}
-                  period={period}
-                  periodKey={activeKey}
-                  locale={locale}
-                />
-              ) : null}
-            </div>
-
-            <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
-              <div className="text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
-                {tr('本期活动', 'Activities')}
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full border-collapse text-[13px]">
-                  <thead>
-                    <tr className="text-left text-[11px] font-normal text-[var(--color-muted)]">
-                      <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
-                        {tr('日期', 'Date')}
-                      </th>
-                      <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
-                        {tr('距离', 'Dist')}
-                      </th>
-                      <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
-                        {tr('配速', 'Pace')}
-                      </th>
-                      <th className="hidden border-b border-[var(--color-border)] pb-2.5 text-right font-normal md:table-cell">
-                        {tr('时间', 'Time')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {periodActivities.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="pt-3 text-[var(--color-muted)]"
+                          }}
+                          onFocus={() => setHoverBar(i)}
+                          onBlur={() =>
+                            setHoverBar((cur) => (cur === i ? null : cur))
+                          }
+                          onPointerDown={(e) => {
+                            // Touch: pin readout (mouse keeps hover-only).
+                            if (e.pointerType === 'mouse') return;
+                            setPinnedBar((cur) => (cur === i ? null : i));
+                          }}
+                          className="flex h-full min-w-[14px] flex-1 cursor-pointer touch-manipulation flex-col justify-end border-0 bg-transparent p-0 md:min-w-0"
                         >
-                          {tr('本期暂无活动', 'No activities in this period')}
-                        </td>
-                      </tr>
+                          <span
+                            aria-hidden
+                            className="block w-full rounded-t-[4px] bg-[var(--color-accent)] transition-opacity"
+                            style={{
+                              height: `${h}%`,
+                              minHeight: 4,
+                              opacity: on
+                                ? 1
+                                : peak
+                                  ? 0.92
+                                  : 0.35 + Math.min(0.5, b.km / maxBar) * 0.5,
+                            }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex min-h-[1.25rem] items-center justify-between gap-2 text-[11px] text-[var(--color-muted)]">
+                    {focusBar != null && bars[focusBar] ? (
+                      <span className="metric text-[12px] font-semibold text-[var(--color-text)]">
+                        {bars[focusBar].label}: {bars[focusBar].km} km
+                      </span>
                     ) : (
-                      periodActivities.map((a) => {
-                        const date = a.start_date_local.slice(5, 10);
-                        const secs = parseMovingTime(a.moving_time);
-                        return (
-                          <tr
-                            key={a.run_id}
-                            className="text-[var(--color-text)]/80"
-                          >
-                            <td className="pt-3 pr-2 whitespace-nowrap">
-                              {date}
-                            </td>
-                            <td className="metric pt-3 pr-2 font-medium whitespace-nowrap text-[var(--color-text)]">
-                              {formatKm(a.distance)} km
-                            </td>
-                            <td className="metric pt-3 pr-2 whitespace-nowrap">
-                              {paceFromSpeed(a.average_speed)}
-                            </td>
-                            <td className="metric hidden pt-3 text-right whitespace-nowrap md:table-cell">
-                              {formatHours(secs)}
-                            </td>
-                          </tr>
-                        );
-                      })
+                      edges.map((e) => <span key={e}>{e}</span>)
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </>
+              ) : null}
             </section>
+            {period === 'year' || period === 'month' || period === 'week' ? (
+              <ProgressQuestions
+                activities={periodActivities}
+                period={period}
+                periodKey={activeKey}
+                locale={locale}
+              />
+            ) : null}
           </div>
-        </>
+
+          <section className="card summary-list mt-3 p-5 md:mt-0 md:p-5">
+            <div className="summary-list-head text-[11px] tracking-[1.2px] text-[var(--color-muted)]">
+              {tr('本期活动', 'Activities')}
+            </div>
+            <div className="summary-list-scroll mt-3">
+              <table className="w-full border-collapse text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] font-normal text-[var(--color-muted)]">
+                    <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
+                      {tr('日期', 'Date')}
+                    </th>
+                    <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
+                      {tr('距离', 'Dist')}
+                    </th>
+                    <th className="border-b border-[var(--color-border)] pr-2 pb-2.5 font-normal">
+                      {tr('配速', 'Pace')}
+                    </th>
+                    <th className="hidden border-b border-[var(--color-border)] pb-2.5 text-right font-normal md:table-cell">
+                      {tr('时间', 'Time')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodActivities.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        className="pt-3 text-[var(--color-muted)]"
+                      >
+                        {tr('本期暂无活动', 'No activities in this period')}
+                      </td>
+                    </tr>
+                  ) : (
+                    periodActivities.map((a) => {
+                      const date = a.start_date_local.slice(5, 10);
+                      const secs = parseMovingTime(a.moving_time);
+                      return (
+                        <tr
+                          key={a.run_id}
+                          className="text-[var(--color-text)]/80"
+                        >
+                          <td className="pt-3 pr-2 whitespace-nowrap">
+                            {date}
+                          </td>
+                          <td className="metric pt-3 pr-2 font-medium whitespace-nowrap text-[var(--color-text)]">
+                            {formatKm(a.distance)} km
+                          </td>
+                          <td className="metric pt-3 pr-2 whitespace-nowrap">
+                            {paceFromSpeed(a.average_speed)}
+                          </td>
+                          <td className="metric hidden pt-3 text-right whitespace-nowrap md:table-cell">
+                            {formatHours(secs)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
