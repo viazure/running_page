@@ -44,24 +44,384 @@
   --svg-color-active-cell: var(--color-accent);
   --svg-special-color: var(--color-run);
   --svg-special-color2: var(--color-accent);
+
+  /* Shared bar family — medium-thick, same look across year/month/week */
+  --summary-bar-ratio: 70%;
+  --summary-bar-min: 12px;
+  --summary-bar-max: 36px;
+  --summary-year-bar-max: 32px;
+  /* Toolbar → first content pixel (all five periods share this) */
+  --summary-panel-pad-top: 0px;
+
+  /* Card heading scale — every summary card title uses these two. */
+  --summary-card-title-size: 13px;
+  --summary-card-title-weight: 600;
+  --summary-card-title-tracking: 0.2px;
+  --summary-card-label-size: 11px;
+
+  /* Intensity mix — warm-paper triptych (no teal / traffic-light) */
+  --intensity-easy: #9a92c9;
+  --intensity-moderate: #c4a882;
+  --intensity-hard: #c45c26;
 }
 
+:is(.dark, [data-theme='dark']) .summary-page-root {
+  --intensity-easy: #a89fe0;
+  --intensity-moderate: #cdb892;
+  --intensity-hard: #e0a07a;
+}
+
+/* Year view: monthly bars + cross-year lines share one card (no full-bleed row) */
+.summary-year-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .summary-year-pair-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 22px;
+  }
+}
+
+.summary-year-pair-side {
+  min-width: 0;
+}
+
+/* `.progress-chart-surface` pins margin-top: 0, which silently ate the title →
+   chart gap here. Re-assert it for both halves of the pair card. */
+.summary-year-pair-side .progress-chart-surface {
+  margin-top: 12px;
+}
+
+/* Year cards carry a variable-height last line ("截至…" only on the current
+ * year), which pushed the row to the height of the tallest card. Reserve the
+ * line so every card is the same height and the row stops feeling airy. */
+.summary-compare-grid {
+  align-items: stretch;
+}
+
+.summary-year-chip {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.summary-year-chip > div:last-child {
+  min-height: 13px;
+}
+
+/* X labels under the year pair bars — the card used to end in blank space. */
+.summary-year-pair-axis {
+  display: flex;
+  align-items: center;
+  gap: 1.5px;
+  margin-top: 6px;
+  padding-inline: 10px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+}
+
+.summary-year-pair-axis > span {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Monthly bars inside the pair card: shorter, thicker, no horizontal scroll */
+.summary-year-pair-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 1.5px;
+  height: 132px;
+  margin-top: 12px;
+  padding: 14px 10px 10px;
+  border-radius: 8px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.summary-year-pair-bars > button {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* Single-column shell: hero → cross-year → Progress, page scrolls as one */
 .summary-layout {
   display: flex;
   flex-direction: column;
   gap: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Shared top edge under toolbar — year / month-week / day-life */
+.summary-panel {
+  padding-top: var(--summary-panel-pad-top);
+  box-sizing: border-box;
+}
+
+.summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* Hero + multi-year: primary visual weight */
+.summary-hero-primary {
+  padding-bottom: 1.35rem;
+}
+
+.summary-main > .summary-hero-primary {
+  margin-bottom: 2px;
+}
+
+.summary-section-compact.card {
+  padding: 14px 16px;
+}
+
+.summary-period-card.card {
+  padding: 18px 18px 14px;
+}
+
+.summary-period-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.summary-period-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-muted);
+}
+
+.summary-period-km {
+  margin: 2px 0 0;
+  font-size: clamp(2rem, 5.2vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-period-km-unit {
+  margin-left: 0.35rem;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-muted);
+  vertical-align: 0.12em;
+}
+
+.summary-period-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.summary-period-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.summary-period-tile {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-bg);
+}
+
+.summary-period-tile dt {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--color-muted);
+}
+
+.summary-period-tile dd {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-period-chart {
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.summary-period-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 1.5px;
+  height: 132px;
+  padding: 18px 12px 12px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--color-bg);
+  scrollbar-width: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-period-bars::-webkit-scrollbar {
+  display: none;
+}
+
+.summary-period-bar-slot {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 12px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.summary-period-bar {
+  display: block;
+  width: var(--summary-bar-ratio);
+  min-width: var(--summary-bar-min);
+  max-width: var(--summary-bar-max);
+  min-height: 6px;
+  border-radius: 2px 2px 0 0;
+  background: var(--color-accent);
+  opacity: 0.42;
+  transition: opacity 0.12s ease;
+}
+
+.summary-period-bar.is-peak {
+  opacity: 0.92;
+}
+
+.summary-period-bar.is-on {
+  opacity: 1;
+}
+
+.summary-period-bar-empty {
+  display: block;
+  width: var(--summary-bar-ratio);
+  min-width: var(--summary-bar-min);
+  max-width: var(--summary-bar-max);
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--color-muted) 42%, transparent);
+  opacity: 0.65;
+  margin-bottom: 1px;
+}
+
+.summary-period-chart-edge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 1.15rem;
+  margin-top: 6px;
+  padding-inline: 2px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.summary-period-chart-focus {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.summary-year-bar {
+  width: var(--summary-bar-ratio);
+  min-width: var(--summary-bar-min);
+  max-width: var(--summary-year-bar-max);
+}
+
+@media (max-width: 420px) {
+  .summary-period-card.card {
+    padding: 16px 14px 12px;
+  }
+
+  .summary-period-km {
+    font-size: 2rem;
+  }
+
+  .summary-period-tiles {
+    gap: 7px;
+  }
+
+  .summary-period-tile {
+    padding: 9px 10px;
+  }
+
+  .summary-period-tile dd {
+    font-size: 14px;
+  }
+
+  .summary-period-bars {
+    height: 118px;
+    padding: 14px 10px 10px;
+    gap: 1.5px;
+  }
+}
+
+/* Month/week tiles: keep 3-up even at 420px — the labels are 2–3 chars and the
+ * previous 2-up grid left each tile half empty. */
+@media (max-width: 420px) {
+  .summary-period-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-period-tile {
+    padding: 8px 7px;
+  }
+
+  .summary-period-tile dt {
+    font-size: 10px;
+  }
+
+  .summary-period-tile dd {
+    font-size: 13px;
+  }
+}
+
+.summary-stat-secondary {
+  opacity: 0.92;
+}
+
+.summary-list-scroll {
+  overflow-x: auto;
 }
 
 @media (min-width: 900px) {
-  .summary-layout {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 16px;
-    align-items: start;
-  }
-
-  .summary-list {
-    margin-top: 0 !important;
+  .summary-main > .progress-questions {
+    margin-top: 0;
   }
 }
 
@@ -99,10 +459,7 @@
 .summary-life-classic svg [fill='#444'] {
   fill: var(--color-border);
 }
-.summary-life-classic .svg-color-active-cell,
-.summary-life-classic svg [fill='#4dd2ff'] {
-  fill: var(--color-accent);
-}
+/* Keep MoL data-dot fills as authored (pink / cyan / green). */
 .summary-life-classic .svg-color-text,
 .summary-life-classic .github-svg text,
 .summary-life-classic .grid-svg text,
@@ -149,20 +506,180 @@
   }
 }
 
+/* Period toolbar: tabs + shared year navigator (sticky above scroll body) */
+.summary-period-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding-bottom: 8px;
+}
+
 /* Top period tabs (年/月/周/日/Life) — single selected language */
 .summary-period-tabs {
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-bottom: 12px;
+  gap: 4px;
+  padding-bottom: 0;
+}
+
+/* Unified period navigator: thin ◀ label ▶ (year/month/week/day; hidden on Life) */
+.summary-period-nav {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+}
+
+.summary-period-nav-arrow {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  color: var(--color-muted);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.summary-period-nav-chevron {
+  display: inline-flex;
+  line-height: 0;
+  opacity: 0.85;
+}
+
+.summary-period-nav-arrow:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.summary-period-nav-arrow:hover:not(:disabled) .summary-period-nav-chevron {
+  opacity: 1;
+}
+
+.summary-period-nav-arrow:disabled {
+  cursor: default;
+  opacity: 0.28;
+  color: var(--color-muted);
+}
+
+.summary-period-nav-arrow:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.summary-period-nav-label {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(100%, 16rem);
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-muted);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.summary-period-nav-label:hover,
+.summary-period-nav-label.is-open {
+  color: var(--color-text);
+  background: var(--color-sunken, var(--color-bg));
+}
+
+.summary-period-nav-label:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.summary-period-nav-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  /* The trigger sits at the right end of the toolbar, so a left-anchored panel
+   * would push past the viewport edge on phones. */
+  right: 0;
+  left: auto;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Hug the content: the widest option here is "2026 年" (62px), so a fixed
+   * 10rem floor left more than half the panel empty. `max-content` keeps the
+   * menu as wide as its longest label while the clamp stops it overflowing a
+   * narrow phone. */
+  width: max-content;
+  min-width: 5rem;
+  max-width: min(100vw - 2rem, 18rem);
+  /* Let the list use the available height before scrolling. `50vh` clipped the
+   * last year on short viewports (9 rows need ~307px, 50vh of 574px = 287px),
+   * which made "2018 年" look missing rather than scrollable. */
+  max-height: min(70vh, calc(100vh - 7rem));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-card, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.summary-period-nav-option {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--color-text);
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-period-nav-option:hover {
+  background: var(--color-sunken, var(--color-bg));
+}
+
+.summary-period-nav-option.is-active {
+  color: #fff;
+  background: var(--color-accent);
+}
+
+.summary-period-nav-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 1px;
 }
 
 .summary-period-tab {
   cursor: pointer;
   border: none;
   border-radius: 9999px;
-  padding: 6px 12px;
+  padding: 5px 11px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.25;
@@ -171,6 +688,63 @@
   transition:
     color 0.15s ease,
     background-color 0.15s ease;
+}
+
+@media (max-width: 420px) {
+  /* Keep the period tabs and the year navigator on one row: the five tabs are
+   * 168px and the navigator 116px, so they fit inside 358px. The old
+   * `flex-direction: column` forced the navigator onto its own line and wasted a
+   * whole row for a 116px control. Let it wrap only if it genuinely cannot fit. */
+  .summary-period-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 6px;
+  }
+
+  .summary-period-tabs {
+    flex-wrap: nowrap;
+    gap: 3px;
+  }
+
+  .summary-period-tab {
+    padding: 4px 9px;
+    font-size: 11px;
+  }
+
+  /* Shrinks before the row overflows; the label still ellipsises. */
+  .summary-period-nav {
+    flex-shrink: 1;
+    margin-left: auto;
+  }
+
+  .summary-period-nav-label {
+    min-width: 0;
+    max-width: 5.5rem;
+    font-size: 12px;
+    padding-inline: 6px;
+  }
+
+  .summary-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px 12px !important;
+  }
+
+  .summary-stat-primary {
+    padding-top: 0.85rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .summary-stat-secondary {
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .summary-chart {
+    gap: 0.5rem !important;
+    padding-inline: 0.75rem !important;
+  }
 }
 
 .summary-period-tab:hover {
@@ -186,42 +760,6 @@
   color: #fff;
 }
 
-/* Month/week period chips: same selected fill as 日/Life tabs + year chips */
-.summary-period-chip {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  cursor: pointer;
-  border: none;
-  border-radius: 9999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-  background: transparent;
-  color: var(--color-muted);
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.summary-period-chip:hover {
-  color: var(--color-text);
-}
-
-.summary-period-chip.is-active {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.summary-period-chip.is-active:hover {
-  color: #fff;
-}
-
-/* Period chips row chrome lives in ChipScrollRow (hidden scrollbar + edge fades).
- * `.summary-period-chips` remains as a root hook class for spacing utilities. */
-
 /* In-panel wait for day/Life embed — never covers page chrome / period tabs */
 .summary-embed-pending {
   display: flex;
@@ -232,4 +770,26 @@
   padding: 1.5rem;
   color: var(--color-muted);
   font-size: 13px;
+}
+
+/* Kill native black focus / tap flash on charts & bars */
+.summary-page-root .progress-chart-surface,
+.summary-page-root .progress-scatter-wrap,
+.summary-page-root .progress-attend,
+.summary-page-root .summary-chart {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.summary-page-root .progress-chart-surface *,
+.summary-page-root .progress-scatter-wrap *,
+.summary-page-root .progress-attend-mon,
+.summary-page-root .summary-chart button {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.summary-page-root .progress-attend-mon:focus-visible,
+.summary-page-root .summary-chart button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
 }

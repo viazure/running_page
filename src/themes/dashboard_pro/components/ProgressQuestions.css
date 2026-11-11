@@ -1,0 +1,466 @@
+/* Section spacing in the Progress stack: the default 12px gap plus each card's
+ * own margin made this block look like two separate pages. Tighten to one
+ * rhythm and drop the stray top margin on the first card. */
+.progress-questions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 0;
+}
+
+.progress-questions > * + * {
+  margin-top: 0;
+}
+
+.progress-pace-blocks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (min-width: 640px) {
+  .progress-pace-blocks {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.progress-pace-block {
+  border-radius: 6px;
+  background: var(--color-bg);
+  padding: 10px 12px;
+}
+
+.progress-volume-dist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.progress-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-volume-bar {
+  display: block;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  opacity: 0.75;
+  min-width: 2px;
+  max-width: 100%;
+}
+
+/* Habit: start-hour columns — thin, spaced. Each column is a real button so
+ * touch can pin a bar; the reset styles keep the visual identical to the old
+ * inert <div>. */
+.progress-habit-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 68px;
+}
+
+.progress-habit-col {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.progress-habit-bar {
+  display: block;
+  width: 55%;
+  max-width: 22px;
+  border-radius: 2px 2px 0 0;
+  background: var(--color-accent);
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+
+.progress-habit-bar.is-peak {
+  opacity: 0.85;
+}
+
+.progress-habit-bar.is-on {
+  opacity: 1;
+}
+
+.progress-habit-tick {
+  font-size: 9px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Desktop: 2-up when both cards can draw; auto-fit lets a lone card span the
+ * full width instead of leaving a permanently empty half (e.g. aerobic block
+ * hidden for a year without stream data). */
+.summary-deep-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .summary-deep-grid {
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  }
+
+  .summary-deep-grid > * {
+    height: 100%;
+  }
+}
+
+/* Explanation tooltips: keep long prose out of the default layout */
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.info-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 10px;
+  line-height: 1;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.info-tip-btn:hover,
+.info-tip:focus-within .info-tip-btn {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.info-tip-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(22rem, 80vw);
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 11px;
+  line-height: 1.55;
+  box-shadow: var(--shadow-card);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.info-tip:hover .info-tip-pop,
+.info-tip:focus-within .info-tip-pop {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 640px) {
+  .info-tip-pop {
+    left: auto;
+    right: 0;
+    max-width: 78vw;
+  }
+}
+
+.progress-q {
+  padding: 20px;
+}
+
+.progress-q-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+
+.progress-q-title {
+  margin: 0;
+  font-size: var(--summary-card-title-size, 13px);
+  font-weight: var(--summary-card-title-weight, 600);
+  font-style: normal;
+  letter-spacing: var(--summary-card-title-tracking, 0.2px);
+  line-height: 1.25;
+  color: var(--color-text);
+}
+.progress-q-stat {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.progress-q-stat strong {
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.progress-chart-surface {
+  width: 100%;
+  height: 136px;
+  margin-top: 0;
+  border-radius: 8px;
+  background: var(
+    --color-sunken,
+    color-mix(in srgb, var(--color-bg) 70%, var(--color-card))
+  );
+  padding: 4px 2px 0;
+}
+
+.summary-section-compact {
+  padding: 14px 16px !important;
+}
+
+/* One card-title scale everywhere: never inherit the hosting card's font-size. */
+.summary-section-compact .progress-q-title {
+  font-size: var(--summary-card-title-size, 13px);
+}
+
+.summary-section-compact .progress-q-stat {
+  font-size: var(--summary-card-label-size, 11px);
+}
+
+.summary-progress-soft {
+  opacity: 0.98;
+}
+
+.summary-progress-soft > .card {
+  border-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+  box-shadow: none;
+}
+
+.summary-progress-pace {
+  border-style: dashed;
+}
+
+/* Year attendance: calendar heatmap */
+.progress-heat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.progress-heat-months {
+  position: relative;
+  height: 14px;
+  margin-bottom: 2px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--color-muted);
+}
+
+.progress-heat-month {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.progress-heat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+}
+
+.progress-heat-cell {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: var(--color-cell, var(--color-sunken));
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.progress-heat-cell.is-pad {
+  visibility: hidden;
+  pointer-events: none;
+  cursor: default;
+}
+
+.progress-heat-cell.level-0 {
+  background: var(--color-cell, var(--color-sunken));
+}
+
+.progress-heat-cell.level-1 {
+  background: var(--color-amber-soft, #e8a87c);
+}
+
+.progress-heat-cell.level-2 {
+  background: color-mix(
+    in srgb,
+    var(--color-amber, #c45c26) 72%,
+    var(--color-amber-soft, #e8a87c)
+  );
+}
+
+.progress-heat-cell.level-3 {
+  background: var(--color-amber, #c45c26);
+}
+
+.progress-heat-cell.is-active {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.progress-heat-cell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-amber) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.progress-heat-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--color-muted);
+}
+
+.progress-heat-legend .progress-heat-cell {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  cursor: default;
+  pointer-events: none;
+}
+
+.progress-attend-readout {
+  margin-top: 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--color-text);
+}
+
+.progress-scatter-wrap {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  margin-top: 0;
+  border-radius: 8px;
+  background: var(
+    --color-sunken,
+    color-mix(in srgb, var(--color-bg) 70%, var(--color-card))
+  );
+  overflow: hidden;
+}
+
+/* Scatter tooltip is a single absolutely-positioned div driven by pointer
+   proximity — it must not capture the pointer or it would flicker itself. */
+.progress-scatter-tip.is-floating {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  transition: none !important;
+  animation: none !important;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 8%);
+}
+
+.progress-scatter-tip {
+  max-width: 240px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  /* Recharts portals the tooltip into a wrapper pinned to the chart edge; the
+     default enter animation made it fly in from the left. */
+  transition: none !important;
+  animation: none !important;
+}
+
+.progress-scatter-tip strong {
+  display: block;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.progress-empty {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+@media (min-width: 900px) {
+  /* Sit under hero in left column: stack cards vertically, never full-bleed */
+  .progress-questions {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .progress-q {
+    padding: 16px;
+  }
+  .progress-chart-surface {
+    height: 140px;
+  }
+}
+
+/* Recharts: no system black focus ring on tap */
+.progress-chart-surface,
+.progress-scatter-wrap {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.progress-chart-surface svg,
+.progress-scatter-wrap svg,
+.progress-chart-surface svg:focus,
+.progress-scatter-wrap svg:focus,
+.progress-chart-surface svg *:focus,
+.progress-scatter-wrap svg *:focus {
+  outline: none !important;
+}

@@ -18,6 +18,14 @@ export function summaryKey(date: string, period: SummaryPeriod): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+/**
+ * Pace guard shared with the UI's `paceFromSpeed`: anything outside this band is
+ * a GPS/clock glitch (a 5 km "run" logged in 21 s is 0:04 /km), not a real best.
+ * Without it one bad row collapses the whole card's fastest-pace cell to "—".
+ */
+const MIN_PACE_SEC_PER_KM = 150;
+const MAX_PACE_SEC_PER_KM = 900;
+
 export function summarize(activities: Activity[]) {
   const distance = activities.reduce((sum, a) => sum + a.distance, 0);
   const seconds = activities.reduce(
@@ -25,17 +33,28 @@ export function summarize(activities: Activity[]) {
     0
   );
   const heartRates = activities.filter((a) => (a.average_heartrate ?? 0) > 0);
-  const speeds = activities.map((a) => {
+  // Fastest valid single run: skip implausible pace rather than letting an
+  // outlier win the max and then get rejected downstream.
+  let maxSpeed = 0;
+  for (const a of activities) {
     const time = parseMovingTime(a.moving_time);
-    return time > 0 ? a.distance / time : 0;
-  });
+    if (!(time > 0) || !(a.distance > 0)) continue;
+    const paceSecPerKm = (time / a.distance) * 1000;
+    if (
+      paceSecPerKm < MIN_PACE_SEC_PER_KM ||
+      paceSecPerKm > MAX_PACE_SEC_PER_KM
+    )
+      continue;
+    const speed = a.distance / time;
+    if (speed > maxSpeed) maxSpeed = speed;
+  }
   return {
     distance,
     seconds,
     count: activities.length,
     speed: seconds > 0 ? distance / seconds : 0,
     maxDistance: Math.max(0, ...activities.map((a) => a.distance)),
-    maxSpeed: Math.max(0, ...speeds),
+    maxSpeed,
     elevation: activities.reduce((sum, a) => sum + (a.elevation_gain ?? 0), 0),
     heartRate: heartRates.length
       ? heartRates.reduce((sum, a) => sum + a.average_heartrate!, 0) /
