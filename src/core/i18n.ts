@@ -121,6 +121,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     routeFallbackNone: '此活动没有可用的 GPS 轨迹。',
     mapBasemapFailed: '底图加载失败',
     mapNoGeometry: '暂无 GPS 轨迹可显示',
+    mapUnavailable: '地图暂时不可用',
+    mapUnavailableHint: '不影响本周进度与记录',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -242,5 +244,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     routeFallbackNone: 'This activity has no usable GPS route.',
     mapBasemapFailed: 'Basemap failed to load',
     mapNoGeometry: 'No GPS route to show',
+    mapUnavailable: 'Map is temporarily unavailable',
+    mapUnavailableHint: 'Your weekly progress and log are unaffected',
   },
 };
