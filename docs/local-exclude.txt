@@ -1,0 +1,55 @@
+# Local-only git excludes for this project.
+#
+# WHY A TEMPLATE INSTEAD OF .gitignore
+# .gitignore is kept identical to upstream on purpose. The upstream workflow
+# commits raw device exports and generated splits with `git add .` when
+# SAVE_DATA_IN_GITHUB_CACHE is false (run_data_sync.yml: "commit FIT/GPX/TCX/
+# splits via git add (do not gitignore them)"), so a repo-wide rule would
+# silently stop every user who keeps data in git from ever committing a run.
+#
+# If this machine keeps data in the Actions cache instead, those folders hold
+# private GPS and health data that should never be pushed, and the generated
+# public/ artifacts are redundant. Copy this list into the clone's own exclude
+# file, which git never commits:
+#
+#     pnpm run setup:exclude
+#
+# That writes everything below into .git/info/exclude between marker lines, so
+# it can be re-run after a pull to pick up changes.
+#
+# Do NOT `git config core.excludesFile` to this file: that setting is global and
+# would leak these rules into every other repository on the machine.
+
+# --- Generated build output ------------------------------------------------
+# Rebuild with `pnpm data:lite` / `pnpm data:summary`; cached in CI.
+public/splits/
+public/data/
+public/summary/
+
+# --- Raw device exports (private GPS + health data) ------------------------
+# The .gitkeep lines keep the folders present so gen_splits.py still finds
+# them after a fresh clone.
+FIT_OUT/*
+!FIT_OUT/.gitkeep
+GPX_OUT/*
+!GPX_OUT/.gitkeep
+TCX_OUT/*
+!TCX_OUT/.gitkeep
+Workouts/*
+!Workouts/.gitkeep
+activities/*
+!activities/.gitkeep
+PNG_OUT/*
+!PNG_OUT/.gitkeep
+
+# --- Local scratch ---------------------------------------------------------
+# Playwright / screenshot previews and activities.json backups taken while
+# iterating on the theme.
+_preview/
+*.bak
+*.bak-*
+
+# --- Machine-specific helpers ---------------------------------------------
+# One-off importer whose default source path only exists on one workstation.
+run_page/import_life_data.py
+

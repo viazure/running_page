@@ -66,6 +66,18 @@ dev = [
     "pytest>=9.0.3",
 ]
 
+# `_preview/` holds local-only scratch scripts and activities backups (excluded
+# per clone via .git/info/exclude, so CI never sees it). Without this, a local
+# `black . --check` reports failures that CI does not, which is misleading.
+[tool.black]
+extend-exclude = '''
+/(
+    _preview
+  | node_modules
+  | \.venv
+)/
+'''
+
 # Keep Ruff aligned with historical CI scope; full default rule set is too noisy for this fork.
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

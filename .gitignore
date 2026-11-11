@@ -26,14 +26,3 @@ route.png
 route.svg
 
 .env
-
-# local preview / Playwright scratch (do not commit)
-_preview/
-
-# Generated per-activity split JSON (local; do not commit)
-public/splits/
-
-# Local activities.json backups (do not commit)
-*.bak
-*.bak-*
-src/static/activities.json.bak*

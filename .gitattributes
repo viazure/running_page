@@ -1,0 +1,32 @@
+# Normalise line endings across platforms.
+#
+# Without this, Windows clones with core.autocrlf=true get CRLF while CI
+# (Linux) checks out LF. Prettier's default endOfLine is "lf", so the same file
+# fails `pnpm run check` locally and passes in CI — local runs report ~78 files
+# while CI reports 16, which makes the check untrustworthy on Windows.
+#
+# Text files are stored as LF in the repository and checked out as LF
+# everywhere. Binary assets are left untouched.
+
+* text=auto eol=lf
+
+# Binary file types: never attempt EOL conversion or diff-as-text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Large generated datasets that may appear in git-mode deployments.
+*.fit binary
+*.tcx binary
+*.gpx binary
