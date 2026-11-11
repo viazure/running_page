@@ -1090,7 +1090,7 @@ export function StatsCards({
                   return (
                     <div className="flex w-full min-w-0 items-center gap-1 lg:mt-3 lg:gap-1.5">
                       <div className="flex shrink-0 flex-col items-center gap-0">
-                        <div className="relative h-7 w-7 lg:h-9 lg:w-9">
+                        <div className="relative h-6 w-6 lg:h-9 lg:w-9">
                           <svg
                             className="h-full w-full text-[var(--color-amber)]"
                             viewBox="0 0 24 24"
@@ -1107,6 +1107,11 @@ export function StatsCards({
                         </span>
                       </div>
                       {/* Centered cluster (not edge-stretched) so days stay inset from card sides */}
+                      {/* Seven day circles plus the flame must fit the narrowest
+                          card width (col-span-2 in a 2-col grid ≈ 161px inside
+                          padding). A fixed 24px circle needed 212px and
+                          overflowed by 51px, jamming the row together; 18px
+                          fits at every width we support. */}
                       <div className="flex min-w-0 flex-1 items-center justify-between gap-0 px-0">
                         {weekDays.map((wd, i) => {
                           const isPast =
@@ -1116,7 +1121,7 @@ export function StatsCards({
                           return (
                             <div
                               key={i}
-                              className={`flex flex-col items-center gap-0.5 ${wd.hasActivity ? 'cursor-pointer' : ''}`}
+                              className={`flex min-w-0 flex-col items-center gap-0.5 ${wd.hasActivity ? 'cursor-pointer' : ''}`}
                               onClick={() => {
                                 if (wd.acts.length > 0)
                                   onSelectActivity(wd.acts[0]);
@@ -1126,7 +1131,7 @@ export function StatsCards({
                                 {weekLabels[i]}
                               </span>
                               <div
-                                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium transition-opacity ${
+                                className={`flex size-[1.125rem] shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-medium transition-opacity ${
                                   wd.hasActivity
                                     ? 'text-white hover:opacity-70'
                                     : wd.isToday
