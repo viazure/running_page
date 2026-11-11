@@ -111,6 +111,8 @@ jobs:
             run_page/data.db
             src/static/activities.json
             public/splits
+            public/data
+            public/summary
             imported.json
           key: ${{ env.DATA_CACHE_PREFIX }}-${{ github.sha }}-${{ github.run_id }}
           restore-keys: |
@@ -252,6 +254,16 @@ jobs:
         continue-on-error: true
         run: |
           python run_page/gen_splits.py --fit-only
+
+      - name: Generate cross-period summary aggregates
+        # Depends on public/splits (above) plus src/static/activities.json, and
+        # produces the deep-analysis payload the Summary page reads. Cached
+        # together with the splits so the Pages build does not have to re-run
+        # Python, but regenerated here so it always tracks the newest data.
+        if: env.RUN_TYPE != 'pass'
+        continue-on-error: true
+        run: |
+          python run_page/gen_summary.py
 
       - name: Make svg GitHub profile
         if: env.RUN_TYPE != 'pass'
