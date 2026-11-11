@@ -793,3 +793,18 @@
 .mapboxgl-ctrl-group button.mapboxgl-ctrl-compass.is-bearing-locked {
   box-shadow: inset 0 0 0 2px var(--color-accent, #f97316);
 }
+
+/* Tracks page · left column: keep its own scroll invisible.
+   The column can scroll when the viewport is too short for stats + map, but a
+   visible bar there reads as "misplaced" — it visually belongs to the track
+   wall on the right. Mobile keeps `display: contents`, so these only apply on
+   the desktop breakpoint where the column is a flex box. */
+@media (min-width: 1024px) {
+  .tracks-left-column {
+    scrollbar-width: none;
+  }
+
+  .tracks-left-column::-webkit-scrollbar {
+    display: none;
+  }
+}

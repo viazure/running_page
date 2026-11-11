@@ -8,6 +8,10 @@ interface DualCalendarWidgetProps {
   activities: Activity[];
   selectedActivity?: Activity | null;
   onSelectActivity: (activity: Activity | null) => void;
+  /** Lifted calendar month — kept in sync with MonthGlance. */
+  viewYear: number;
+  viewMonth: number;
+  onViewChange: (year: number, month: number) => void;
 }
 
 type ViewMode = 'distance' | 'route';
@@ -225,20 +229,31 @@ export function DualCalendarWidget({
   activities,
   selectedActivity,
   onSelectActivity,
+  viewYear,
+  viewMonth,
+  onViewChange,
 }: DualCalendarWidgetProps) {
   const { t, locale } = useLocale();
-  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [viewMode, setViewMode] = useState<ViewMode>('distance');
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Jump calendar to the selected activity's month.
+  // Follow the selected activity's month. Re-runs when the calendar or the
+  // selection changes, so selecting a run while the user is browsing another
+  // month cannot leave the calendar stranded on a month with no selection.
   useEffect(() => {
     if (!selectedActivity) return;
     const d = new Date(selectedActivity.start_date_local);
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
-  }, [selectedActivity?.run_id]);
+    if (Number.isNaN(d.getTime())) return;
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    if (y !== viewYear || m !== viewMonth) onViewChange(y, m);
+  }, [
+    selectedActivity,
+    selectedActivity?.run_id,
+    viewYear,
+    viewMonth,
+    onViewChange,
+  ]);
 
   const selectedDay = useMemo(() => {
     if (!selectedActivity) return null;
@@ -320,20 +335,16 @@ export function DualCalendarWidget({
   const shiftYear = (delta: number) => {
     const next = viewYear + delta;
     if (next < yearBounds.min || next > yearBounds.max) return;
-    setViewYear(next);
+    onViewChange(next, viewMonth);
   };
 
   const prevMonth = () => {
-    if (viewMonth === 0) {
-      setViewYear(viewYear - 1);
-      setViewMonth(11);
-    } else setViewMonth(viewMonth - 1);
+    if (viewMonth === 0) onViewChange(viewYear - 1, 11);
+    else onViewChange(viewYear, viewMonth - 1);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) {
-      setViewYear(viewYear + 1);
-      setViewMonth(0);
-    } else setViewMonth(viewMonth + 1);
+    if (viewMonth === 11) onViewChange(viewYear + 1, 0);
+    else onViewChange(viewYear, viewMonth + 1);
   };
 
   const handleDayClick = (d: DayCell) => {
@@ -368,8 +379,7 @@ export function DualCalendarWidget({
   const viewingCurrentMonth = `${viewYear}-${viewMonth}` === currentMonthKey;
   const goToCurrentMonth = () => {
     const d = new Date();
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
+    onViewChange(d.getFullYear(), d.getMonth());
     setPickerOpen(false);
   };
   // Same breakpoint as map dock / mobile chrome (≤1023px).
@@ -520,7 +530,7 @@ export function DualCalendarWidget({
                   type="button"
                   aria-pressed={selected}
                   onClick={() => {
-                    setViewMonth(month);
+                    onViewChange(viewYear, month);
                     setPickerOpen(false);
                   }}
                   className={`cursor-pointer rounded-md px-2 py-1.5 text-xs tabular-nums ${

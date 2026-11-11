@@ -1,7 +1,7 @@
 import type { Activity } from '@/types';
 import { parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
-import type { Locale } from '@/core/i18n';
+import { hasGeometry, type ProActivity } from '../hooks/proActivity';
 
 export type PersonalBestKey = '5K' | '10K' | 'Half Marathon' | 'Marathon';
 
@@ -9,6 +9,14 @@ export type PersonalBestEntry = {
   key: PersonalBestKey;
   activity: Activity | null;
   time: number;
+};
+
+/** `PersonalBestKey` → i18n key for its display label. */
+const LABEL_KEYS: Record<PersonalBestKey, string> = {
+  '5K': 'dist5k',
+  '10K': 'dist10k',
+  'Half Marathon': 'distHalf',
+  Marathon: 'distFull',
 };
 
 const DISTANCES: {
@@ -32,21 +40,14 @@ export function formatPbTime(seconds: number): string {
 }
 
 export function personalBestLabels(
-  locale: Locale
+  t: (key: string) => string
 ): Record<PersonalBestKey, string> {
-  return locale === 'zh'
-    ? {
-        '5K': '5 公里',
-        '10K': '10 公里',
-        'Half Marathon': '半程马拉松',
-        Marathon: '马拉松',
-      }
-    : {
-        '5K': '5K',
-        '10K': '10K',
-        'Half Marathon': 'Half Marathon',
-        Marathon: 'Marathon',
-      };
+  return {
+    '5K': t(LABEL_KEYS['5K']),
+    '10K': t(LABEL_KEYS['10K']),
+    'Half Marathon': t(LABEL_KEYS['Half Marathon']),
+    Marathon: t(LABEL_KEYS.Marathon),
+  };
 }
 
 /** Outdoor runs with valid GPS + reasonable pace within distance bands */
@@ -55,7 +56,10 @@ export function computePersonalBests(
 ): PersonalBestEntry[] {
   const runs = activities.filter(
     (a) =>
-      a.type === 'Run' && a.summary_polyline && a.summary_polyline.length > 20
+      a.type === 'Run' &&
+      // Geometry-independent: the pro lite payload carries `has_gps` instead of
+      // the polyline, so testing `summary_polyline` here hid every best.
+      hasGeometry(a as ProActivity)
   );
 
   return DISTANCES.map(({ key, min, max }) => {
@@ -111,9 +115,9 @@ export function PersonalBest({
   className = '',
   layout = 'list',
 }: PersonalBestProps) {
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const bests = computePersonalBests(activities);
-  const labels = personalBestLabels(locale);
+  const labels = personalBestLabels(t);
   const hasBests = bests.some((b) => b.activity !== null);
   if (!hasBests) return null;
 

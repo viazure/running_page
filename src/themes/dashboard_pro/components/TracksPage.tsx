@@ -240,6 +240,10 @@ function TrackMap({
   const [exportEnding, setExportEnding] = useState(false);
   const [exportConverting, setExportConverting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  /** Basemap/script load: quiet empty when error; ready on style.load. */
+  const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading'
+  );
   const fsRootRef = useRef<HTMLDivElement>(null);
   const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
   const bindFsRoot = useCallback((el: HTMLDivElement | null) => {
@@ -298,6 +302,8 @@ function TrackMap({
   const hasOwnGps = Boolean(
     activity?.summary_polyline && activity.summary_polyline.length > 20
   );
+  const hasGeometry =
+    hasOwnGps || activities.some((a) => Boolean(a.summary_polyline));
   /** 3D stays available in overview; only privacy blanks it. */
   const canOffer3d = can3d;
   /** Chase playback works on the blank privacy basemap; 3D does not. */
@@ -972,23 +978,31 @@ function TrackMap({
     mapReady.current = false;
     styleIdleRef.current = false;
     animKeyRef.current = null;
+    setMapStatus('loading');
     videoCaptureRef.current?.abort();
     videoCaptureRef.current = null;
     setExporting(false);
     chaseRef.current.stop({ silent: true });
-    const mapInstance = new mapboxgl.Map({
-      container: mapContainer.current,
-      style,
-      center: [108, 35],
-      zoom: 3,
-      pitch: 0,
-      maxPitch: 85,
-      attributionControl: false,
-      /** Needed so WebGL frames remain readable for MediaRecorder export. */
-      preserveDrawingBuffer: true,
-      language: mapLabelLanguage(locale),
-      locale: mapboxControlLocale(t),
-    });
+    let mapInstance: mapboxgl.Map;
+    try {
+      mapInstance = new mapboxgl.Map({
+        container: mapContainer.current,
+        style,
+        center: [108, 35],
+        zoom: 3,
+        pitch: 0,
+        maxPitch: 85,
+        attributionControl: false,
+        /** Needed so WebGL frames remain readable for MediaRecorder export. */
+        preserveDrawingBuffer: true,
+        language: mapLabelLanguage(locale),
+        locale: mapboxControlLocale(t),
+      });
+    } catch (err) {
+      console.warn('Track map failed to initialize', err);
+      setMapStatus('error');
+      return;
+    }
     map.current = mapInstance;
 
     if (!useBlank) {
@@ -1043,7 +1057,10 @@ function TrackMap({
     const fallBackBasemap = (reason: string) => {
       if (settled || lightsOff) return;
       const next = nextBasemapProvider(provider);
-      if (!next) return;
+      if (!next) {
+        setMapStatus('error');
+        return;
+      }
       settled = true;
       console.warn(reason);
       setProvider(next);
@@ -1069,6 +1086,7 @@ function TrackMap({
           console.warn(
             'Track map style load timed out; no further free basemap fallback'
           );
+          setMapStatus('error');
         }
       }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
@@ -1081,8 +1099,13 @@ function TrackMap({
     };
     mapInstance.on('error', onError);
 
-    const onUserCameraChange = (event: { originalEvent?: Event }) => {
-      if (!event.originalEvent) return;
+    // Mapbox declares these payloads as `{ originalEvent? } | void`; `EventOf`
+    // then collapses to `{ type, target }`, so `originalEvent` is absent from
+    // the inferred type. Take `unknown` and read the field defensively.
+    const onUserCameraChange = (payload?: unknown) => {
+      const originalEvent = (payload as { originalEvent?: Event } | undefined)
+        ?.originalEvent;
+      if (!originalEvent) return;
       if (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
         return;
       if (map.current !== mapInstance) return;
@@ -1106,6 +1129,7 @@ function TrackMap({
         window.clearTimeout(timer);
       }
       mapReady.current = true;
+      setMapStatus('ready');
       styleIdleRef.current = false;
       // Blank privacy styles can already be idle inside this event, so draw now.
       updateRoutesRef.current();
@@ -1115,6 +1139,11 @@ function TrackMap({
         updateRoutesRef.current();
       });
     });
+    if (mapInstance.isStyleLoaded()) {
+      setMapStatus('ready');
+      mapReady.current = true;
+      updateRoutesRef.current();
+    }
     mapInstance.on('dragend', onUserCameraChange);
     mapInstance.on('zoomend', onUserCameraChange);
     mapInstance.on('rotateend', onUserCameraChange);
@@ -1255,6 +1284,15 @@ function TrackMap({
         </div>
       ) : null}
       <div ref={mapContainer} className="h-full w-full" />
+      {mapStatus === 'error' ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapBasemapFailed')}
+        </div>
+      ) : mapStatus === 'ready' && !hasGeometry ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapNoGeometry')}
+        </div>
+      ) : null}
       {chasing && playbackSnap ? (
         <PlaybackHudView
           snap={playbackSnap}
@@ -1522,12 +1560,19 @@ export function TracksPage({
         </h1>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr] lg:items-stretch lg:overflow-hidden">
+      {/* Single desktop row must be bounded by the viewport, otherwise the row
+          grows to card content height and the wall gets clipped instead of
+          scrolling (its own scrollbar then has no visible track). */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-[340px_1fr] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden">
         {/* Mobile: contents so map can sticky while track wall scrolls.
-            Desktop: stacked left column. */}
-        <div className="contents lg:flex lg:flex-col lg:gap-4">
+            Desktop: stacked left column pinned to the row height. The map takes
+            whatever is left under the stats card; if the viewport is too short
+            for stats + a usable map, the column scrolls with a hidden bar (a
+            visible scrollbar here reads as misplaced — it looks like it belongs
+            to the track wall on the right). */}
+        <div className="tracks-left-column contents lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:overflow-y-auto lg:overscroll-contain">
           {/* Stats card */}
-          <div className="card order-1 p-4 lg:order-none">
+          <div className="card order-1 p-4 lg:order-none lg:shrink-0">
             <p className="eyebrow mb-3 text-[10px] text-[var(--color-muted)]">
               {selectedYear ?? (locale === 'zh' ? '全部' : 'Total')}
             </p>
@@ -1575,7 +1620,7 @@ export function TracksPage({
 
           {/* Activity detail — hide bulky static summary while playback HUD is up */}
           {selectedActivity && !mapPlaying && (
-            <div className="card order-3 px-4 py-3 lg:order-none">
+            <div className="card order-3 px-4 py-3 lg:order-none lg:shrink-0 lg:overflow-y-auto">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="eyebrow text-[10px] text-[var(--color-muted)]">
                   {locale === 'zh' ? '已选记录' : 'Selected'}
@@ -1686,7 +1731,7 @@ export function TracksPage({
           {/* Map — placeholder slot + pinRef. Expanded = always fixed (Option A). */}
           <div
             ref={mapSlotRef}
-            className="order-2 lg:order-none"
+            className="order-2 lg:order-none lg:min-h-[260px] lg:flex-1"
             style={
               mapDock.lockHeight && mapDock.frame
                 ? { height: mapDock.frame.height }
@@ -1695,7 +1740,7 @@ export function TracksPage({
           >
             <div
               ref={mapPinRef}
-              className={mapDock.fillHeight ? 'h-full' : undefined}
+              className={mapDock.fillHeight ? 'h-full' : 'lg:h-full'}
             >
               <div
                 className={`card overflow-hidden [--card-shadow:var(--shadow-card-hover)] lg:[--card-shadow:var(--shadow-card)] ${
@@ -1709,10 +1754,10 @@ export function TracksPage({
                   mapDock.fillHeight
                     ? 'h-full'
                     : mapPlaying
-                      ? // Mobile/tablet grow (with layoutSettleMs). lg+ keep idle
-                        // height — growing here mid-flyTo drifts the start pin.
-                        'h-[min(70vh,520px)] md:h-[min(65vh,560px)] lg:h-[360px]'
-                      : 'h-[320px] md:h-[360px]'
+                      ? // Mobile/tablet grow (with layoutSettleMs). lg+ keep the
+                        // slot height — growing mid-flyTo drifts the start pin.
+                        'h-[min(70vh,520px)] md:h-[min(65vh,560px)] lg:h-full'
+                      : 'h-[320px] md:h-[360px] lg:h-full'
                 }`}
               >
                 <div
@@ -1744,10 +1789,10 @@ export function TracksPage({
         </div>
 
         {/* Right: track grid with year filter inside */}
-        <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:overflow-hidden">
+        <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:h-full lg:overflow-hidden">
           <div
             ref={captureRef}
-            className="card flex min-h-0 flex-1 flex-col p-4 lg:overflow-hidden"
+            className="card flex min-h-0 flex-1 flex-col p-4 lg:h-full lg:overflow-hidden"
           >
             {/* Year pills (scroll) + export; sport filter only when multiple sports */}
             <div className="mb-4 shrink-0 space-y-2.5 border-b border-[var(--color-border)] pb-3">
@@ -1898,7 +1943,7 @@ export function TracksPage({
 
             <div
               data-tracks-wall-scroll
-              className="min-h-0 p-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+              className="min-h-0 p-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
             >
               {clustering ? (
                 <div className="flex flex-wrap gap-1">

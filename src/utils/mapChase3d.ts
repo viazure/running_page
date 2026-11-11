@@ -217,8 +217,10 @@ export function createMapOrbitController() {
   };
 
   /** Pointer / wheel / drag: cancel orbit (same as before). */
-  const handleUserInput = (event: { originalEvent?: Event }) => {
-    if (!running || !event.originalEvent) return;
+  const handleUserInput = (payload?: unknown) => {
+    if (!running) return;
+    if (!(payload as { originalEvent?: Event } | undefined)?.originalEvent)
+      return;
     stop();
   };
 
@@ -226,9 +228,14 @@ export function createMapOrbitController() {
    * Zoom +/- buttons call map.zoomIn/Out({}, { originalEvent }), which never
    * hits map mousedown/wheel. Listen on zoomstart and soft-stop so the ease
    * continues (wheel already stops via the wheel listener above).
+   *
+   * Mapbox types `zoomstart` as `{ originalEvent? } | void`; `EventOf` collapses
+   * that union to `{ type, target }`, so read the field from `unknown`.
    */
-  const handleUserZoom = (event: { originalEvent?: Event }) => {
-    if (!running || !event.originalEvent) return;
+  const handleUserZoom = (payload?: unknown) => {
+    if (!running) return;
+    if (!(payload as { originalEvent?: Event } | undefined)?.originalEvent)
+      return;
     stop({ keepCameraMotion: true });
   };
 
@@ -563,14 +570,14 @@ type ChaseStartArgs = {
 
 /**
  * Card height ease: 480ms cubic-bezier(0.34, 1.45, 0.64, 1) (see .route-map-play-spring).
- * Hosts keep .route-map-play-surface at play height for the whole grow/shrink clip
- * (overflow:hidden on the outer shell). Resize once on play start, again at settle;
- * on exit, drop play-sizing then resize at PLAYBACK_LAYOUT_EXIT_RESIZE_MS.
- * Mid-animation resize blanks the WebGL canvas.
+ *
+ * Values live in `./playbackLayout` (dependency-free) and are re-exported here so
+ * existing map-side imports keep working without pulling that module elsewhere.
  */
-export const PLAYBACK_LAYOUT_SETTLE_MS = 520;
-/** After exit height clip: surface unsize + one resize (settle + React/layout slack). */
-export const PLAYBACK_LAYOUT_EXIT_RESIZE_MS = PLAYBACK_LAYOUT_SETTLE_MS + 80;
+export {
+  PLAYBACK_LAYOUT_SETTLE_MS,
+  PLAYBACK_LAYOUT_EXIT_RESIZE_MS,
+} from './playbackLayout';
 
 type PlaybackSession = {
   map: mapboxgl.Map;

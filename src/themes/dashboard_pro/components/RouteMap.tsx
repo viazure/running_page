@@ -136,6 +136,11 @@ export function RouteMap({
     displayActivity.run_id !== selectedActivity.run_id
       ? displayActivity
       : null;
+  const hasGeometry = Boolean(
+    selectedActivity
+      ? displayActivity?.summary_polyline
+      : activities.some((a) => a.summary_polyline)
+  );
   const activitiesRef = useRef(activities);
   const selectedRef = useRef(selectedActivity);
   const displayRef = useRef(displayActivity);
@@ -158,6 +163,10 @@ export function RouteMap({
   const [exportEnding, setExportEnding] = useState(false);
   const [exportConverting, setExportConverting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  /** Basemap/script load: quiet empty when error; ready on style.load. */
+  const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading'
+  );
   const fsRootRef = useRef<HTMLDivElement>(null);
   const [chromeRoot, setChromeRoot] = useState<HTMLDivElement | null>(null);
   const bindFsRoot = useCallback((el: HTMLDivElement | null) => {
@@ -863,6 +872,7 @@ export function RouteMap({
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
     styleIdleRef.current = false;
+    setMapStatus('loading');
 
     const hasRouteLayers = (map: mapboxgl.Map) => {
       try {
@@ -887,20 +897,41 @@ export function RouteMap({
       updateRoutesRef.current();
     };
 
-    mapRef.current = new mapboxgl.Map({
-      container,
-      style,
-      center: [121.4, 31.2],
-      zoom: 10,
-      pitch: 0,
-      maxPitch: 85,
-      attributionControl: false,
-      /** Needed so WebGL frames remain readable for MediaRecorder export. */
-      preserveDrawingBuffer: true,
-      keyboard: false,
-      language: mapLabelLanguage(locale),
-      locale: mapboxControlLocale(t),
-    });
+    let settled = false;
+    let timedOut = false;
+
+    const fallBackBasemap = (reason: string) => {
+      if (settled || lightsOff) return;
+      const next = nextBasemapProvider(provider);
+      if (!next) {
+        setMapStatus('error');
+        return;
+      }
+      settled = true;
+      console.warn(reason);
+      setProvider(next);
+    };
+
+    try {
+      mapRef.current = new mapboxgl.Map({
+        container,
+        style,
+        center: [121.4, 31.2],
+        zoom: 10,
+        pitch: 0,
+        maxPitch: 85,
+        attributionControl: false,
+        /** Needed so WebGL frames remain readable for MediaRecorder export. */
+        preserveDrawingBuffer: true,
+        keyboard: false,
+        language: mapLabelLanguage(locale),
+        locale: mapboxControlLocale(t),
+      });
+    } catch (err) {
+      console.warn('Map failed to initialize', err);
+      setMapStatus('error');
+      return;
+    }
 
     if (!useBlank) {
       mapRef.current.addControl(
@@ -908,18 +939,6 @@ export function RouteMap({
         'bottom-right'
       );
     }
-
-    let settled = false;
-    let timedOut = false;
-
-    const fallBackBasemap = (reason: string) => {
-      if (settled || lightsOff) return;
-      const next = nextBasemapProvider(provider);
-      if (!next) return;
-      settled = true;
-      console.warn(reason);
-      setProvider(next);
-    };
 
     const timer = window.setTimeout(() => {
       if (!mapRef.current || mapRef.current.isStyleLoaded() || timedOut) return;
@@ -934,6 +953,7 @@ export function RouteMap({
           console.warn(
             'Map style load timed out; no further free basemap fallback'
           );
+          setMapStatus('error');
         }
       }
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
@@ -945,9 +965,14 @@ export function RouteMap({
     };
 
     mapRef.current.on('error', onError);
-    const onUserCameraChange = (event: { originalEvent?: Event }) => {
+    // Mapbox declares these payloads as `{ originalEvent? } | void`; `EventOf`
+    // then collapses to `{ type, target }`, so `originalEvent` is absent from
+    // the inferred type. Take `unknown` and read the field defensively.
+    const onUserCameraChange = (payload?: unknown) => {
       // Programmatic fitBounds/easeTo have no originalEvent; ignore those.
-      if (!event.originalEvent) return;
+      const originalEvent = (payload as { originalEvent?: Event } | undefined)
+        ?.originalEvent;
+      if (!originalEvent) return;
       if (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
         return;
       const map = mapRef.current;
@@ -967,6 +992,7 @@ export function RouteMap({
         settled = true;
         window.clearTimeout(timer);
       }
+      setMapStatus('ready');
       ensureRoutes();
     });
     mapRef.current.on('idle', ensureRoutes);
@@ -974,7 +1000,10 @@ export function RouteMap({
     mapRef.current.on('zoomend', onUserCameraChange);
     mapRef.current.on('rotateend', onUserCameraChange);
     mapRef.current.on('pitchend', onUserCameraChange);
-    if (mapRef.current.isStyleLoaded()) ensureRoutes();
+    if (mapRef.current.isStyleLoaded()) {
+      setMapStatus('ready');
+      ensureRoutes();
+    }
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
@@ -1108,6 +1137,15 @@ export function RouteMap({
         >
           {t('routeFallbackNone')}
         </p>
+      ) : null}
+      {mapStatus === 'error' ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapBasemapFailed')}
+        </div>
+      ) : mapStatus === 'ready' && !selectedActivity && !hasGeometry ? (
+        <div className="route-map-empty z-10" role="status">
+          {t('mapNoGeometry')}
+        </div>
       ) : null}
       <div
         className={

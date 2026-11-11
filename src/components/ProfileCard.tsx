@@ -87,33 +87,17 @@ export const ProfileCard = memo(function ProfileCard({
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:shadow-[var(--color-accent)]/5 hover:shadow-lg">
-      {/* Avatar top-left + Distance */}
-      <div className="flex items-center gap-4">
-        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[var(--color-border)]">
-          {AVATAR ? (
+      {/* Avatar (optional) + Distance */}
+      <div className={`flex items-center ${AVATAR.trim() ? 'gap-4' : ''}`}>
+        {AVATAR.trim() ? (
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[var(--color-border)]">
             <img
-              src={AVATAR}
+              src={AVATAR.trim()}
               alt="avatar"
               className="h-full w-full object-cover"
             />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[var(--color-accent)]/20">
-              <svg
-                className="h-7 w-7 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                />
-              </svg>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : null}
         <div className="flex-1 text-center">
           <p className="font-mono text-3xl font-bold">
             {formatDistance(totalDistance)}

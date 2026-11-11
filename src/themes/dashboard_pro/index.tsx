@@ -3,6 +3,7 @@ import {
   lazy,
   startTransition,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -14,7 +15,6 @@ import {
   useFilteredActivities,
   getAvailableYears,
   extractProvince,
-  getActivityData,
 } from '@/hooks/useActivities';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocale } from '@/hooks/useLocale';
@@ -33,17 +33,25 @@ import {
   PRIVACY_MODE,
   PRIVACY_ANONYMOUS_TITLES,
   GITHUB_URL,
+  DASHBOARD_PRO_MODULES,
+  DASHBOARD_PRO_SHOW_LATEST,
 } from '@/core/config';
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TracksPageSkeleton } from './components/TracksPageSkeleton';
-import { TrendChart } from './components/TrendChart';
+import { MonthGlance } from './components/MonthGlance';
 import { MapDockFab } from './components/MapDockFab';
+import { LatestStrip } from './components/LatestStrip';
 import {
   playbackMapHeightPx,
   useMobileMapDock,
 } from './hooks/useMobileMapDock';
-import { PLAYBACK_LAYOUT_SETTLE_MS } from '@/utils/mapChase3d';
+import { PLAYBACK_LAYOUT_SETTLE_MS } from '@/utils/playbackLayout';
+import { useActivitiesWithTracks } from './hooks/useActivitiesWithTracks';
+import {
+  getProActivityData,
+  preloadProActivityData,
+} from './hooks/useProActivities';
 
 const loadRouteMap = () =>
   import('./components/RouteMap').then((m) => ({ default: m.RouteMap }));
@@ -64,11 +72,33 @@ const RunAnalysisLauncher = lazy(() =>
   }))
 );
 
-// Prefetch secondary pages so navigating home → summary/tracks does not flash Suspense.
-void loadSummaryPage();
-void loadTracksPage();
-void loadRouteMap();
-void loadChinaMap();
+/**
+ * Prefetch secondary pages so home → summary/tracks does not flash Suspense.
+ * Deferred to idle time: the first paint must not compete with map/chart chunks.
+ * Falls back to a timeout where requestIdleCallback is unavailable (Safari).
+ */
+function scheduleIdlePrefetch(): void {
+  if (typeof window === 'undefined') return;
+  const run = () => {
+    void loadSummaryPage();
+    void loadTracksPage();
+  };
+  const ric = (
+    window as Window & {
+      requestIdleCallback?: (
+        cb: () => void,
+        opts?: { timeout: number }
+      ) => number;
+    }
+  ).requestIdleCallback;
+  if (typeof ric === 'function') {
+    ric(run, { timeout: 2500 });
+    return;
+  }
+  window.setTimeout(run, 1200);
+}
+
+scheduleIdlePrefetch();
 
 type Page = 'home' | 'tracks' | 'summary';
 
@@ -104,12 +134,24 @@ function DashboardProContent({
   /** Mobile FAB clearance for the home footer (0 / one / two stacked). */
   onFabClearanceChange?: (pad: 'none' | 'one' | 'two') => void;
 }) {
-  const activities = getActivityData() as Activity[];
+  const activities = getProActivityData();
+  /**
+   * Lite payload has no polylines; the sidecar merges geometry in after first
+   * paint for the map / track wall / calendar previews.
+   */
+  const activitiesWithTracks = useActivitiesWithTracks(activities);
   const isUnlocked = usePrivacyUnlock();
   const { locale } = useLocale();
   const years = getAvailableYears(activities);
   /** Default to the latest year that has data (falls back to ALL if none). */
   const [year, setYear] = useState<number | null>(() => years[0] ?? null);
+  /** Shared by DualCalendarWidget + MonthGlance so flipping months stays in sync. */
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const onCalViewChange = useCallback((y: number, m: number) => {
+    setCalYear(y);
+    setCalMonth(m);
+  }, []);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
     null
   );
@@ -117,8 +159,7 @@ function DashboardProContent({
   const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const filtered = useFilteredActivities(activities, filter, year);
-  /** Fallback year for components that require a concrete calendar year (e.g. TrendChart). */
-  const chartYear = year ?? years[0] ?? FOOTER_YEAR;
+  const modules = DASHBOARD_PRO_MODULES;
   const privacyActive = PRIVACY_MODE && !isUnlocked;
   const useAnonymousTitles = privacyActive && PRIVACY_ANONYMOUS_TITLES;
   const activityTitle = (a: Activity) =>
@@ -130,6 +171,15 @@ function DashboardProContent({
       (a) => extractProvince(a.location_country) === selectedProvince
     );
   }, [filtered, selectedProvince]);
+
+  /** Same filter, but with sidecar geometry for map rendering. */
+  const provinceFilteredTracks = useMemo(() => {
+    if (provinceFiltered === filtered) return activitiesWithTracks;
+    const byId = new Map(
+      activitiesWithTracks.map((a) => [a.run_id, a] as const)
+    );
+    return provinceFiltered.map((a) => byId.get(a.run_id) ?? a);
+  }, [provinceFiltered, filtered, activitiesWithTracks]);
 
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
@@ -182,7 +232,7 @@ function DashboardProContent({
     return (
       <Suspense fallback={<TracksPageSkeleton />}>
         <TracksPage
-          activities={activities}
+          activities={activitiesWithTracks}
           filter={filter}
           onSelectActivity={setSelectedActivity}
           onBack={onNavigateHome}
@@ -203,18 +253,28 @@ function DashboardProContent({
   }
 
   const activityLog = (
-    <ActivityLog
-      activities={filtered}
-      years={years}
-      year={year}
-      setYear={setYear}
-      selectedActivity={selectedActivity}
-      onSelectActivity={setSelectedActivity}
-      filter={filter}
-      getTitle={activityTitle}
-      pageSize={ACTIVITY_LOG_PAGE_SIZE}
-      variant="pro"
-    />
+    <>
+      {DASHBOARD_PRO_SHOW_LATEST ? (
+        <LatestStrip
+          activities={filtered}
+          getTitle={activityTitle}
+          onSelectActivity={setSelectedActivity}
+          limit={3}
+        />
+      ) : null}
+      <ActivityLog
+        activities={filtered}
+        years={years}
+        year={year}
+        setYear={setYear}
+        selectedActivity={selectedActivity}
+        onSelectActivity={setSelectedActivity}
+        filter={filter}
+        getTitle={activityTitle}
+        pageSize={ACTIVITY_LOG_PAGE_SIZE}
+        variant="pro"
+      />
+    </>
   );
 
   // Long document + viewport: slot is a plain placeholder (lockHeight).
@@ -260,8 +320,8 @@ function DashboardProContent({
             fallback={<MapFallback className="h-[220px] lg:h-[260px]" />}
           >
             <RouteMap
-              activities={provinceFiltered}
-              allActivities={activities}
+              activities={provinceFilteredTracks}
+              allActivities={activitiesWithTracks}
               selectedActivity={selectedActivity}
               dark={dark}
               lightsOff={privacyActive}
@@ -288,22 +348,26 @@ function DashboardProContent({
   const calendar = (
     <div className="order-5 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
       <DualCalendarWidget
-        activities={activities}
+        activities={activitiesWithTracks}
         selectedActivity={selectedActivity}
         onSelectActivity={setSelectedActivity}
+        viewYear={calYear}
+        viewMonth={calMonth}
+        onViewChange={onCalViewChange}
       />
     </div>
   );
 
-  const trend = (
+  const trend = modules.month_glance ? (
     <div
       className={`order-8 flex min-w-0 flex-col lg:order-none ${
         allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
       }`}
     >
-      <TrendChart
-        activities={filtered}
-        year={chartYear}
+      <MonthGlance
+        activities={activities}
+        viewYear={calYear}
+        viewMonth={calMonth}
         className={
           allYears
             ? 'h-[260px]'
@@ -311,7 +375,7 @@ function DashboardProContent({
         }
       />
     </div>
-  );
+  ) : null;
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
@@ -331,25 +395,32 @@ function DashboardProContent({
       >
         {/* Left: stats + heatmap, plus the log when every year is shown */}
         <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
-          <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
-            <StatsCards
-              activities={filtered}
-              allActivities={activities}
-              year={year}
-              filter={filter}
-              onSelectActivity={setSelectedActivity}
-              compact
-            />
-          </div>
-          <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
-            <ContributionHeatmap
-              activities={activities}
-              year={year}
-              filter={filter}
-              onSelectActivity={setSelectedActivity}
-              onYearChange={setYear}
-            />
-          </div>
+          {modules.weekly ||
+          modules.yearly_goal ||
+          modules.monthly_goal ||
+          modules.streak ? (
+            <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
+              <StatsCards
+                activities={filtered}
+                allActivities={activities}
+                year={year}
+                filter={filter}
+                onSelectActivity={setSelectedActivity}
+                compact
+              />
+            </div>
+          ) : null}
+          {modules.heatmap ? (
+            <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+              <ContributionHeatmap
+                activities={activities}
+                year={year}
+                filter={filter}
+                onSelectActivity={setSelectedActivity}
+                onYearChange={setYear}
+              />
+            </div>
+          ) : null}
           {allYears ? (
             <div className="order-6 flex min-w-0 flex-col overflow-hidden lg:order-none lg:min-h-0 lg:flex-1">
               {activityLog}
@@ -365,7 +436,7 @@ function DashboardProContent({
         >
           <div className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
             <ProfileCard
-              activities={activities}
+              activities={activitiesWithTracks}
               filter={filter}
               getTitle={activityTitle}
               onSelectActivity={setSelectedActivity}
@@ -374,36 +445,38 @@ function DashboardProContent({
               showLocationStats
             />
           </div>
-          <div
-            className={`order-7 min-w-0 overflow-hidden lg:order-none ${
-              allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
-            }`}
-          >
-            <Suspense
-              fallback={
-                <MapFallback
+          {modules.footprint ? (
+            <div
+              className={`order-7 min-w-0 overflow-hidden lg:order-none ${
+                allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+              }`}
+            >
+              <Suspense
+                fallback={
+                  <MapFallback
+                    className={
+                      allYears
+                        ? 'h-[220px] lg:h-[260px]'
+                        : 'h-[200px] lg:h-full lg:min-h-[180px]'
+                    }
+                  />
+                }
+              >
+                <ChinaMap
+                  activities={filtered}
+                  filter={filter}
+                  selectedProvince={selectedProvince}
+                  onSelectProvince={(p) => {
+                    setSelectedProvince(p);
+                    setSelectedActivity(null);
+                  }}
                   className={
-                    allYears
-                      ? 'h-[220px] lg:h-[260px]'
-                      : 'h-[200px] lg:h-full lg:min-h-[180px]'
+                    allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
                   }
                 />
-              }
-            >
-              <ChinaMap
-                activities={filtered}
-                filter={filter}
-                selectedProvince={selectedProvince}
-                onSelectProvince={(p) => {
-                  setSelectedProvince(p);
-                  setSelectedActivity(null);
-                }}
-                className={
-                  allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
-                }
-              />
-            </Suspense>
-          </div>
+              </Suspense>
+            </div>
+          ) : null}
           {allYears ? (
             <>
               {routeMap}
@@ -535,6 +608,9 @@ function DashboardProInner() {
 }
 
 export default function DashboardProTheme() {
+  // Lite payload fetch overlaps the theme chunk download; Suspense inside
+  // DashboardContentSkeleton handles first visit.
+  void preloadProActivityData();
   return (
     <PrivacyUnlockProvider>
       <DashboardProInner />

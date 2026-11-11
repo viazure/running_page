@@ -296,60 +296,65 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
 
       {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
       <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
-        <div className="mb-3 space-y-1 @min-[48rem]:mb-0">
-          {rows
-            .filter((r) => (r.distance ?? 0) >= 50)
-            .map((r) => {
-              const p = r.pace ?? 0;
-              const tiny = (r.distance ?? 0) < 200;
-              const ratio =
-                slow > fast && has(r.pace)
-                  ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
-                  : 0.5;
-              const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
-              return (
-                <div
-                  key={`bar-${mode}-${r.index}`}
-                  className={`flex items-center gap-2 text-[12px] ${tiny ? 'opacity-50' : ''}`}
-                >
-                  <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
-                    {r.index}
-                  </span>
-                  <div className="h-5 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
-                    <div
-                      className="h-full rounded-sm"
-                      style={{
-                        width: `${25 + ratio * 75}%`,
-                        backgroundColor: 'var(--color-accent)',
-                        opacity: 0.35 + ratio * 0.55,
-                      }}
-                    />
-                  </div>
-                  <span
-                    className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
-                  >
-                    {formatPaceSeconds(r.pace)}
-                  </span>
+        <div className="mb-3 space-y-1 @min-[48rem]:mb-0 @min-[48rem]:space-y-0">
+          {/* Shared h-8 row box with table so data rows stay vertically aligned. */}
+          <div
+            aria-hidden
+            className="box-border hidden h-8 items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
+          >
+            <span className="invisible text-[12px] font-medium">#</span>
+          </div>
+          {rows.map((r) => {
+            const p = r.pace ?? 0;
+            const tiny = (r.distance ?? 0) < 200;
+            const ratio =
+              slow > fast && has(r.pace)
+                ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
+                : 0.5;
+            const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
+            return (
+              <div
+                key={`bar-${mode}-${r.index}`}
+                className={`box-border flex h-8 items-center gap-2 border-b border-transparent text-[12px] @min-[48rem]:border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+              >
+                <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
+                  {r.index}
+                </span>
+                <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                  <div
+                    className="h-full rounded-sm"
+                    style={{
+                      width: `${25 + ratio * 75}%`,
+                      backgroundColor: 'var(--color-accent)',
+                      opacity: 0.35 + ratio * 0.55,
+                    }}
+                  />
                 </div>
-              );
-            })}
+                <span
+                  className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                >
+                  {formatPaceSeconds(r.pace)}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="-mx-0.5 overflow-x-auto">
-          <table className="w-full min-w-0 text-[12px]">
+          <table className="w-full min-w-0 border-collapse text-[12px]">
             <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-                <th className="py-2 pr-2 font-medium">#</th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+              <tr className="box-border h-8 border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                <th className="h-8 py-0 pr-2 align-middle font-medium">#</th>
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('距离', 'Dist')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('时间', 'Time')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('配速', 'Pace')}
                 </th>
-                <th className="py-2 pr-2 font-medium whitespace-nowrap">
+                <th className="h-8 py-0 pr-2 align-middle font-medium whitespace-nowrap">
                   {tr('心率', 'HR')}
                 </th>
               </tr>
@@ -364,24 +369,24 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                 return (
                   <tr
                     key={`${mode}-${r.index}`}
-                    className={`border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
+                    className={`box-border h-8 border-b border-[var(--color-border)]/50 ${tiny ? 'opacity-50' : ''}`}
                   >
-                    <td className="metric py-2 pr-2 text-[var(--color-muted)]">
+                    <td className="metric h-8 py-0 pr-2 align-middle text-[var(--color-muted)]">
                       {r.index}
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {((r.distance ?? 0) / 1000).toFixed(2)}
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {formatClock(r.time)}
                     </td>
                     <td
-                      className={`metric py-2 pr-2 whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
+                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
                     >
                       {formatPaceSeconds(r.pace)}
                       <Delta cur={r.pace} prev={prev?.pace} invert />
                     </td>
-                    <td className="metric py-2 pr-2 whitespace-nowrap">
+                    <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {fmt(r.hr_avg)}
                       <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
                     </td>
@@ -456,18 +461,49 @@ function AnalysisBody({ data }: { data: RunSplits }) {
       offset;
     scroller.scrollTo({ top, behavior: 'smooth' });
   };
+  // Chip visibility matches ChartStack / SplitsBlock: hide when no target.
+  const chart = data.chart;
+  const chartUsable = Boolean(chart && chart.d.length >= 2);
+  const seriesHas = (arr?: (number | null)[] | null) =>
+    Boolean(arr?.some((v) => has(v)));
+  const canShowSplits = data.splits.length > 0 || data.laps.length > 0;
+  const canShowForm =
+    chartUsable &&
+    (seriesHas(chart?.vo) ||
+      seriesHas(chart?.vr) ||
+      seriesHas(chart?.gct) ||
+      // Derived stride (same as AnalysisCharts enrichChart).
+      Boolean(
+        chart?.pace &&
+        chart?.cad &&
+        chart.pace.some(
+          (p, i) => has(p) && has(chart.cad![i]) && p > 0 && chart.cad![i]! > 0
+        )
+      ));
   const anchors: { id: string; label: string; show?: boolean }[] = [
     { id: 'ra-overview', label: tr('概览', 'Overview') },
-    { id: 'ra-splits', label: tr('分段', 'Splits') },
-    { id: 'ra-pace', label: tr('配速', 'Pace'), show: Boolean(data.chart) },
-    { id: 'ra-hr', label: tr('心率', 'HR'), show: Boolean(data.chart) },
-    { id: 'ra-power', label: tr('功率', 'Power'), show: Boolean(data.chart) },
+    { id: 'ra-splits', label: tr('分段', 'Splits'), show: canShowSplits },
+    {
+      id: 'ra-pace',
+      label: tr('配速', 'Pace'),
+      show: chartUsable && seriesHas(chart?.pace),
+    },
+    {
+      id: 'ra-hr',
+      label: tr('心率', 'HR'),
+      show: chartUsable && seriesHas(chart?.hr),
+    },
+    {
+      id: 'ra-power',
+      label: tr('功率', 'Power'),
+      show: chartUsable && seriesHas(chart?.power),
+    },
     {
       id: 'ra-cadence',
       label: tr('步频', 'Cadence'),
-      show: Boolean(data.chart),
+      show: chartUsable && seriesHas(chart?.cad),
     },
-    { id: 'ra-form', label: tr('形态', 'Form'), show: Boolean(data.chart) },
+    { id: 'ra-form', label: tr('形态', 'Form'), show: canShowForm },
   ].filter((a) => a.show !== false);
 
   return (
@@ -502,12 +538,14 @@ function AnalysisBody({ data }: { data: RunSplits }) {
           </div>
         )}
 
-        <div
-          id="ra-splits"
-          className="border-t border-[var(--color-border)] pt-4"
-        >
-          <SplitsBlock data={data} tr={tr} />
-        </div>
+        {canShowSplits ? (
+          <div
+            id="ra-splits"
+            className="border-t border-[var(--color-border)] pt-4"
+          >
+            <SplitsBlock data={data} tr={tr} />
+          </div>
+        ) : null}
 
         {data.chart ? (
           <div className="border-t border-[var(--color-border)] pt-4">
