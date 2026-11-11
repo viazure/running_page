@@ -110,12 +110,13 @@ function MapFallback({
 }: {
   className?: string;
 }) {
+  const { t } = useLocale();
   return (
     <div
       className={`card flex flex-col items-center justify-center gap-1 px-4 text-center text-sm text-[var(--color-muted)] ${className}`}
     >
-      <span>地图暂时不可用</span>
-      <span className="text-[11px]">不影响本周进度与记录</span>
+      <span>{t('mapUnavailable')}</span>
+      <span className="text-[11px]">{t('mapUnavailableHint')}</span>
     </div>
   );
 }
@@ -256,14 +257,14 @@ function DashboardProContent({
     <>
       {DASHBOARD_PRO_SHOW_LATEST ? (
         <LatestStrip
-          activities={filtered}
+          activities={provinceFilteredTracks}
           getTitle={activityTitle}
           onSelectActivity={setSelectedActivity}
           limit={3}
         />
       ) : null}
       <ActivityLog
-        activities={filtered}
+        activities={provinceFilteredTracks}
         years={years}
         year={year}
         setYear={setYear}
@@ -401,8 +402,8 @@ function DashboardProContent({
           modules.streak ? (
             <div className="order-2 min-w-0 lg:order-none lg:shrink-0">
               <StatsCards
-                activities={filtered}
-                allActivities={activities}
+                activities={provinceFilteredTracks}
+                allActivities={activitiesWithTracks}
                 year={year}
                 filter={filter}
                 onSelectActivity={setSelectedActivity}
@@ -413,7 +414,7 @@ function DashboardProContent({
           {modules.heatmap ? (
             <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
               <ContributionHeatmap
-                activities={activities}
+                activities={activitiesWithTracks}
                 year={year}
                 filter={filter}
                 onSelectActivity={setSelectedActivity}
