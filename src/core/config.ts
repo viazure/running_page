@@ -28,6 +28,29 @@ export function navLinkLabel(link: NavLink, locale: Locale): string {
   return link.name_en || link.name || link.name_zh || link.url;
 }
 
+export interface DashboardProModules {
+  /** 本周目标 */
+  weekly: boolean;
+  /** 年目标 */
+  yearly_goal: boolean;
+  /** 月目标 */
+  monthly_goal: boolean;
+  /** 连续 */
+  streak: boolean;
+  /** 贡献热力 */
+  heatmap: boolean;
+  /** 足迹（中国地图） */
+  footprint: boolean;
+  /** 本月快览（首页右下角槽） */
+  month_glance: boolean;
+}
+
+export interface DashboardProConfig {
+  /** 首页 Latest 紧凑条；默认 false */
+  show_latest?: boolean;
+  modules?: Partial<DashboardProModules>;
+}
+
 interface AppConfig {
   locale: Locale;
   theme: 'light' | 'dark' | 'system';
@@ -45,6 +68,7 @@ interface AppConfig {
   blog_url?: string;
   /** Optional GitHub repo URL — shown in footer when set */
   github_url?: string;
+  dashboard_pro?: DashboardProConfig;
 }
 
 const config = rawConfig as unknown as AppConfig;
@@ -70,7 +94,7 @@ export const DEFAULT_GOAL: GoalConfig = GOALS.all ?? {
   weekly: 35,
   unit: 'distance',
 };
-export const AVATAR: string = config.avatar ?? '';
+export const AVATAR: string = (config.avatar ?? '').trim();
 export const NAV_LINKS: NavLink[] = config.nav_links ?? [];
 export const BLOG_URL: string = (config.blog_url ?? '').trim();
 export const GITHUB_URL: string = (config.github_url ?? '').trim();
@@ -79,6 +103,43 @@ export const MAPBOX_TOKEN: string =
   import.meta.env.MAPBOX_TOKEN ||
   config.mapbox_token ||
   '';
+
+const DEFAULT_DASHBOARD_PRO_MODULES: DashboardProModules = {
+  weekly: true,
+  yearly_goal: true,
+  monthly_goal: true,
+  streak: true,
+  heatmap: true,
+  footprint: true,
+  month_glance: true,
+};
+
+const rawDashboardPro = config.dashboard_pro ?? {};
+
+/** Homepage Latest strip (1–3 compact rows). Default off. */
+export const DASHBOARD_PRO_SHOW_LATEST: boolean =
+  rawDashboardPro.show_latest === true;
+
+/**
+ * Homepage module visibility.
+ * `yearly_distance` is the pre-rename key for the bottom-right slot; map it
+ * onto `month_glance` so older config.yml still works.
+ */
+export const DASHBOARD_PRO_MODULES: DashboardProModules = (() => {
+  const raw = (rawDashboardPro.modules ??
+    {}) as Partial<DashboardProModules> & {
+    yearly_distance?: boolean;
+  };
+  const { yearly_distance, month_glance, ...rest } = raw;
+  return {
+    ...DEFAULT_DASHBOARD_PRO_MODULES,
+    ...rest,
+    month_glance:
+      month_glance ??
+      yearly_distance ??
+      DEFAULT_DASHBOARD_PRO_MODULES.month_glance,
+  };
+})();
 
 export interface AnalysisHrZonesConfig {
   method?: 'percent_lthr' | 'percent_max_hr';
