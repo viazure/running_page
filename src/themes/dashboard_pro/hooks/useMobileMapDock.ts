@@ -6,6 +6,11 @@ import {
   useState,
   type RefObject,
 } from 'react';
+import {
+  mapDockFabVisible,
+  pinAlreadyHome,
+  slotFullyVisible,
+} from './mapDockGeometry';
 
 const MOBILE_MQ = '(max-width: 1023px)';
 /** Floating dock offset — Tailwind `top-20`. */
@@ -19,23 +24,6 @@ const PIN_OUT_MS = 420;
 const AT_HOME_PX = 12;
 /** Keep slot spacer after unfixed so in-flow height owns layout. */
 const HANDOFF_MS = 100;
-
-/**
- * When the collapsed map FAB may appear.
- * - Still below the fold → hide (homepage must not flash「显示轨迹」).
- * - Fully above the header → show (scrolled past — user can tap to bring map back).
- * - Midpoint at/above the header while bottom still peeks → show
- *   (lower half in the visible area).
- */
-function mapDockFabVisible(rect: DOMRectReadOnly): boolean {
-  const viewTop = HEADER_INSET_PX;
-  const viewBottom = typeof window !== 'undefined' ? window.innerHeight : 0;
-  if (rect.width < 1 || rect.height < 1 || viewBottom < 1) return false;
-  if (rect.top >= viewBottom) return false;
-  if (rect.bottom <= viewTop) return true;
-  const mid = rect.top + rect.height * 0.5;
-  return mid <= viewTop;
-}
 
 /**
  * Match `.route-map-play-surface.is-play-sized` /
@@ -395,7 +383,7 @@ export function useMobileMapDock(
     const observer = new IntersectionObserver(
       ([entry]) => {
         const rect = slot.getBoundingClientRect();
-        setFabVisible(mapDockFabVisible(rect));
+        setFabVisible(mapDockFabVisible(rect, window.innerHeight));
         if (!entry.isIntersecting) {
           if (rect.width > 1) {
             // Away slot is a spacer — never learn base height from it.
@@ -444,7 +432,7 @@ export function useMobileMapDock(
     const away =
       seed.bottom <= HEADER_INSET_PX || seed.top >= window.innerHeight;
     setOutOfView(away);
-    setFabVisible(mapDockFabVisible(seed));
+    setFabVisible(mapDockFabVisible(seed, window.innerHeight));
 
     return () => observer.disconnect();
   }, [active, layoutKey, slotRef, clearPinInline]);
@@ -458,7 +446,9 @@ export function useMobileMapDock(
       raf = 0;
       const slot = slotRef.current;
       if (!slot) return;
-      setFabVisible(mapDockFabVisible(slot.getBoundingClientRect()));
+      setFabVisible(
+        mapDockFabVisible(slot.getBoundingClientRect(), window.innerHeight)
+      );
     };
     const onScrollOrResize = () => {
       if (raf) return;
@@ -742,29 +732,87 @@ export function useMobileMapDock(
    * back to where the in-flow map already fits on screen still showed the
    * floating map.
    *
-   * Uses an IntersectionObserver at ratio 1 (root inset by the sticky header)
-   * so it fires on the exact frame the slot clears the header — no scroll
-   * listener and no layout reads of our own, so the scroll thread stays free.
-   * Then hands back with NO motion: at that moment the dock and the slot are
-   * a few pixels apart, so a slide would only read as a stray animation, and
-   * tweening `top` on a fixed Mapbox canvas costs a layout per frame. The FAB
-   * keeps the animated path; this one is silent.
+   * Near/far split: scrolling back slowly, the slot clears the header while
+   * the dock is only ~16px away, so `releaseToFlow` takes it home silently —
+   * the motionless handoff the design asks for. A fling can instead land the
+   * slot mid-viewport in one frame, hundreds of px from the pin; releasing
+   * silently there would teleport the map, so those go through `collapse()`
+   * and reuse the tuned exit animation (which itself takes the silent path
+   * once the pin is within `AT_HOME_PX` of its slot).
+   *
+   * Why not `IntersectionObserver` at `threshold: 1`: a ratio only fires when
+   * it *crosses* a configured threshold, so a fling that lands inside the
+   * fully-visible band in one frame (the review's「一次跳到完整可见区」), a
+   * subpixel slot height capping the ratio under 1, or a slot taller than the
+   * header-inset root all produced no entry and left the dock pinned. Exact
+   * geometry is the reliable test, and it has to run on scroll — hence one
+   * capture-phase `scroll` listener: scroll does not bubble, but capture at
+   * `window` still sees nested scrollers (Tracks has its own overflow box).
+   * One rAF-coalesced rect read per frame, and only while expanded.
+   *
+   * `armed` requires the slot to leave full view at least once first, so
+   * expanding the dock can never be undone by its own entrance frame.
    */
   useEffect(() => {
     if (!active || !expanded) return;
-    const slot = slotRef.current;
-    if (!slot) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || entry.intersectionRatio < 0.999) return;
-        if (!expandedRef.current || pinMotionRef.current === 'out') return;
+    let raf = 0;
+    // `expanded` stays true until React commits, so repeated ticks must not
+    // re-enter the collapse.
+    let done = false;
+    let armed = false;
+    const check = () => {
+      raf = 0;
+      if (done) return;
+      // Mid slide-in / slide-out the pin is travelling; the slot being visible
+      // then is the motion itself, not the user scrolling back to the map.
+      if (pinMotionRef.current != null) return;
+      // Chasing keeps the pin deliberately tall and pinned; collapsing here
+      // would shrink the play surface out from under the compass.
+      if (playHeightPxRef.current != null) return;
+      if (!expandedRef.current || holdSpacerRef.current) return;
+      const slot = slotRef.current;
+      if (!slot) return;
+      // One rect read serves both tests: "fully visible yet?" and, once armed
+      // and releasing, "is the pin already sitting on it?".
+      const rect = slot.getBoundingClientRect();
+      if (!slotFullyVisible(rect, window.innerHeight)) {
+        armed = true;
+        return;
+      }
+      if (!armed) return;
+      done = true;
+      // Near the slot → silent handoff (the design's normal scroll-back).
+      // Far from it → take the animated exit so the map does not teleport.
+      if (pinAlreadyHome(rect.top, lastWrittenTopRef.current)) {
         releaseToFlow();
-      },
-      { rootMargin: `-${HEADER_INSET_PX}px 0px 0px 0px`, threshold: 1 }
-    );
-    observer.observe(slot);
-    return () => observer.disconnect();
-  }, [active, expanded, releaseToFlow, slotRef]);
+        return;
+      }
+      collapse();
+    };
+    const schedule = () => {
+      if (done || raf) return;
+      raf = requestAnimationFrame(check);
+    };
+    schedule();
+    window.addEventListener('scroll', schedule, {
+      passive: true,
+      capture: true,
+    });
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', schedule, { capture: true });
+      window.removeEventListener('resize', schedule);
+    };
+  }, [
+    active,
+    collapse,
+    expanded,
+    pinMotion,
+    playHeightPx,
+    releaseToFlow,
+    slotRef,
+  ]);
 
   const showFab = active && (expanded || fabVisible || holdSpacer);
   // Reserve slot height while away, expanded (map is fixed), or handing off.
