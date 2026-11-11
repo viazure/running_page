@@ -63,6 +63,8 @@ privacy_anonymous_titles: true     # 按需
 - 隐私模式（关灯底图、匿名标题、可解锁）
 - 月历支持距离视图与路线视图切换
 
+视觉 / token / 组件契约见 [`CURRENT-THEME-SPEC.md`](CURRENT-THEME-SPEC.md)（与本文件并列；本文件只讲主题插拔）。
+
 定制建议：优先改 `src/themes/dashboard_pro/`，通过可选 props 开启共享组件增强，避免直接改写 `src/components/` 默认行为。
 
 本主题常用可选 props（细节见主题代码）：

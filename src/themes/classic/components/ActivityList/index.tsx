@@ -42,6 +42,21 @@ export interface ActivityListProps {
   initialInterval?: 'year' | 'month' | 'week' | 'day' | 'life';
   /** Hide year/month/week/day/Life chips when parent owns period pills. */
   hideIntervalChips?: boolean;
+  /**
+   * When set (including `null` = all years), parent owns the year filter.
+   * Used by dashboard_pro Summary toolbar so Day/Life share the same year nav.
+   */
+  controlledYear?: string | null;
+  /** Hide embedded year chips when parent shows a shared year navigator. */
+  hideYearChips?: boolean;
+  /**
+   * Embedded only: the parent's already-resolved activity list. The Pro Summary
+   * loads `activities.lite.json`, and without this the embedded list silently
+   * reads the full bundled `activities.json` instead — two data sources that can
+   * disagree (different run counts per tab) and re-download the 2 MB payload the
+   * lite path exists to avoid.
+   */
+  activities?: Activity[];
 }
 
 const VIRTUAL_LIST_STYLES = {
@@ -513,17 +528,18 @@ function useActivityListMeasurements(
     const containerWidth = container.clientWidth;
     if (embedded) {
       // Year/month/week: one full-width card on mobile.
-      // Day: fluid columns (2–3) so each card reads like a mini hero panel.
+      // Day: also one full-width card on mobile — a 2-up day card clipped the
+      // metric row and the elevation figure, so every day now reads in full.
       const isMobile = containerWidth <= 640;
       let count: number;
       if (isMobile) {
-        count = interval === 'day' && containerWidth >= 300 ? 2 : 1;
+        count = 1;
       } else if (interval === 'day') {
-        // Narrower day cards (was 300/3-col) — less empty right pad on desktop.
-        const minDayWidth = 220;
+        // Prefer 3-up on desktop so day cards breathe (not a 4-col word wall).
+        const minDayWidth = 240;
         count = Math.max(
           2,
-          Math.min(4, Math.floor((containerWidth + gap) / (minDayWidth + gap)))
+          Math.min(3, Math.floor((containerWidth + gap) / (minDayWidth + gap)))
         );
       } else {
         count = Math.max(
@@ -820,12 +836,37 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
                   <p className={cs.statMeta}>
                     {formatTime(summary.totalTime)}
                     {interval === 'day' ? (
-                      summary.count > 1 ? (
-                        <>
-                          <span className={cs.statMetaSep}>·</span>
-                          {summary.count} {t('times')}
-                        </>
-                      ) : null
+                      <>
+                        {showElevation ? (
+                          <>
+                            <span className={cs.statMetaSep}>·</span>
+                            <span className={cs.statElevInline}>
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                role="img"
+                                aria-label={t('elevationGain')}
+                              >
+                                <path d="M3 17l6-6 4 4 8-8" />
+                                <path d="M14 7h7v7" />
+                              </svg>
+                              {elevationGain.toFixed(0)} m
+                            </span>
+                          </>
+                        ) : null}
+                        {summary.count > 1 ? (
+                          <>
+                            <span className={cs.statMetaSep}>·</span>
+                            {summary.count} {t('times')}
+                          </>
+                        ) : null}
+                      </>
                     ) : (
                       <>
                         <span className={cs.statMetaSep}>·</span>
@@ -834,7 +875,7 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
                     )}
                   </p>
                 </div>
-                {showElevation ? (
+                {showElevation && interval !== 'day' ? (
                   <div className={cs.statElevCorner}>
                     <span className={cs.statLabel}>
                       <svg
@@ -863,32 +904,27 @@ const ActivityCardInner: React.FC<ActivityCardProps> = ({
                 ) : null}
               </div>
               {interval === 'day' ? (
-                <div className={cs.statPillRow}>
-                  <div className={cs.statPill}>
-                    <span className={cs.statPillLabel}>{t('avgPace')}</span>
-                    <span className={cs.statPillValue}>
-                      {formatPace(summary.averageSpeed)}
-                    </span>
-                  </div>
+                <div className={cs.statDayFoot}>
+                  <span className={cs.statDayFootValue}>
+                    {formatPace(summary.averageSpeed)}
+                  </span>
                   {summary.averageHeartRate !== undefined ? (
-                    <div className={cs.statPill}>
-                      <span className={cs.statPillLabel}>
-                        {t('avgHeartRate')}
+                    <>
+                      <span className={cs.statMetaSep}>·</span>
+                      <span className={cs.statDayFootValue}>
+                        {summary.averageHeartRate.toFixed(0)}
                       </span>
-                      <span className={cs.statPillValue}>
-                        {summary.averageHeartRate.toFixed(0)} bpm
-                      </span>
-                    </div>
+                      <span className={cs.statDayFootUnit}>bpm</span>
+                    </>
                   ) : null}
                   {summary.count > 1 ? (
-                    <div className={cs.statPill}>
-                      <span className={cs.statPillLabel}>
-                        {t('avgDistance')}
+                    <>
+                      <span className={cs.statMetaSep}>·</span>
+                      <span className={cs.statDayFootValue}>
+                        {avgDistance.toFixed(2)}
                       </span>
-                      <span className={cs.statPillValue}>
-                        {avgDistance.toFixed(2)} {DIST_UNIT}
-                      </span>
-                    </div>
+                      <span className={cs.statDayFootUnit}>{DIST_UNIT}</span>
+                    </>
                   ) : null}
                 </div>
               ) : (
@@ -1056,15 +1092,17 @@ const activityCardAreEqual = (
 const ActivityCard = React.memo(ActivityCardInner, activityCardAreEqual);
 
 const ActivityListInner: React.FC<
-  ActivityListProps & { navigate?: NavigateFunction }
+  ActivityListProps & { navigate?: NavigateFunction; activities: Activity[] }
 > = ({
   onBack,
   embedded = false,
   navigate,
   initialInterval = 'month',
   hideIntervalChips = false,
+  controlledYear,
+  hideYearChips = false,
+  activities: activityData,
 }) => {
-  const { activities: activityData } = useActivities();
   const { t, locale } = useLocale();
   const cs = embedded ? embedStyles : styles;
   const [intervalState, setInterval] = useState<IntervalType>(initialInterval);
@@ -1073,24 +1111,27 @@ const ActivityListInner: React.FC<
   // drops `.summary-day-classic` (overflow/width thrash = visible shrink).
   const interval: IntervalType = embedded ? initialInterval : intervalState;
   const [sportType, setSportType] = useState<string>('all');
+  const yearControlled = controlledYear !== undefined;
   // Day / Life keep independent year chips (Pro Summary switches interval in-place).
   // Sync defaults on first mount (activities already resolved via Suspense) so the
   // first paint never shows the unfiltered full Day list / full Life SVG.
   const [daySelectedYear, setDaySelectedYear] = useState<string | null>(() =>
-    defaultSelectedYear(getAvailableActivityYears(activityData))
+    yearControlled
+      ? controlledYear
+      : defaultSelectedYear(getAvailableActivityYears(activityData))
   );
+  // Life = full career by default; year chips opt-in (no auto calendar/newest year).
   const [lifeSelectedYear, setLifeSelectedYear] = useState<string | null>(() =>
-    defaultSelectedYear(getAvailableActivityYears(activityData))
+    yearControlled ? controlledYear : null
   );
   const [otherSelectedYear, setOtherSelectedYear] = useState<string | null>(
-    null
+    () => (yearControlled ? controlledYear : null)
   );
   const dayYearSeededRef = useRef(
     defaultSelectedYear(getAvailableActivityYears(activityData)) != null
   );
-  const lifeYearSeededRef = useRef(
-    defaultSelectedYear(getAvailableActivityYears(activityData)) != null
-  );
+  // Already decided: stay on null unless user picks a year chip.
+  const lifeYearSeededRef = useRef(true);
   const lifeCaptureRef = useRef<HTMLDivElement>(null);
   const [lifeExporting, setLifeExporting] = useState(false);
   const lifeExportingRef = useRef(false);
@@ -1112,8 +1153,8 @@ const ActivityListInner: React.FC<
     [activityData]
   );
 
-  // Seed defaults once per mode: calendar year if present, else newest with data.
-  // Prevents first Day/Life visit from rendering the unfiltered full set / full Life SVG.
+  // Seed Day default once: calendar year if present, else newest with data.
+  // Life stays null (full career) until the user picks a year chip.
   useEffect(() => {
     if (!availableYears.length) return;
     const def = defaultSelectedYear(availableYears);
@@ -1122,14 +1163,11 @@ const ActivityListInner: React.FC<
       dayYearSeededRef.current = true;
       setDaySelectedYear(def);
     }
-    if (!lifeYearSeededRef.current) {
-      lifeYearSeededRef.current = true;
-      setLifeSelectedYear(def);
-    }
   }, [availableYears]);
 
-  const selectedYear =
-    interval === 'life'
+  const selectedYear = yearControlled
+    ? controlledYear
+    : interval === 'life'
       ? lifeSelectedYear
       : interval === 'day'
         ? daySelectedYear
@@ -1137,11 +1175,12 @@ const ActivityListInner: React.FC<
 
   const setSelectedYear = useCallback(
     (year: string | null) => {
+      if (yearControlled) return;
       if (interval === 'life') setLifeSelectedYear(year);
       else if (interval === 'day') setDaySelectedYear(year);
       else setOtherSelectedYear(year);
     },
-    [interval]
+    [interval, yearControlled]
   );
 
   const handleLifeExport = useCallback(async () => {
@@ -1239,7 +1278,7 @@ const ActivityListInner: React.FC<
     setInterval(newInterval);
   }
 
-  const dataList = useMemo(() => {
+  const dataListFull = useMemo(() => {
     // Life never renders the period card list - skip grouping so day->Life
     // does not burn a frame aggregating hundreds of day rows first.
     if (interval === 'life') return [];
@@ -1249,6 +1288,19 @@ const ActivityListInner: React.FC<
       periodMatchesYear(period, selectedYear, interval)
     );
   }, [activityData, interval, sportType, embedded, selectedYear]);
+
+  /** Pro Summary day: page like PeriodCompare so first paint stays light. */
+  const DAY_PAGE = 15;
+  const dayPaged = embedded && interval === 'day';
+  const [dayLimit, setDayLimit] = useState(DAY_PAGE);
+  useEffect(() => {
+    if (dayPaged) setDayLimit(DAY_PAGE);
+  }, [dayPaged, selectedYear, sportType]);
+
+  const dataList = useMemo(() => {
+    if (!dayPaged) return dataListFull;
+    return dataListFull.slice(0, dayLimit);
+  }, [dataListFull, dayPaged, dayLimit]);
 
   const {
     itemsPerRow,
@@ -1377,7 +1429,10 @@ const ActivityListInner: React.FC<
         {embedded ? (
           <>
             {/* Life only allows "all" — hide sport row so year chips align with 年/月/周. */}
-            {showSportTypeFilter && interval !== 'life' ? (
+            {/* Pro Summary already owns year/period chrome — skip sport row so day cards align. */}
+            {showSportTypeFilter &&
+            interval !== 'life' &&
+            !(hideYearChips && hideIntervalChips) ? (
               <div className={cs.chipRow}>
                 {sportTypeOptions.map((type) => {
                   const disabled = interval === 'life' && type !== 'all';
@@ -1410,7 +1465,61 @@ const ActivityListInner: React.FC<
                 ))}
               </div>
             ) : null}
-            {availableYears.length > 0 || interval === 'life' ? (
+            {hideYearChips ? (
+              interval === 'life' ? (
+                <div className={cs.lifeExportTrailing}>
+                  <button
+                    type="button"
+                    className={cs.lifeExportIconBtn}
+                    onClick={handleLifeExport}
+                    disabled={lifeExporting}
+                    data-export-hidden
+                    title={
+                      locale === 'zh' ? '下载 Life 图片' : 'Download Life image'
+                    }
+                    aria-label={
+                      locale === 'zh' ? '下载 Life 图片' : 'Download Life image'
+                    }
+                  >
+                    {lifeExporting ? (
+                      <svg
+                        className={cs.lifeExportIconSpin}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                  {lifeExportMessage ? (
+                    <span className={cs.lifeExportHint}>
+                      {lifeExportMessage}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null
+            ) : availableYears.length > 0 || interval === 'life' ? (
               interval === 'life' ? (
                 <div
                   className={cs.chipRowWithExport}
@@ -1720,7 +1829,11 @@ const ActivityListInner: React.FC<
                       : `${sportType}-${interval}-${itemsPerRow}`
                   }
                   data={calcGroup}
-                  height={listHeight}
+                  height={
+                    dayPaged && dataListFull.length > dayLimit
+                      ? Math.max(120, listHeight - 64)
+                      : listHeight
+                  }
                   itemHeight={rowHeight}
                   itemKey={(row: RowGroup) => row[0]?.period ?? ''}
                   styles={VIRTUAL_LIST_STYLES}
@@ -1757,6 +1870,18 @@ const ActivityListInner: React.FC<
                   )}
                 </VirtualList>
               )}
+              {dayPaged && dataListFull.length > dayLimit ? (
+                <div className={cs.loadMoreWrap}>
+                  <button
+                    type="button"
+                    className={cs.loadMoreBtn}
+                    onClick={() => setDayLimit((n) => n + DAY_PAGE)}
+                  >
+                    {locale === 'zh' ? '加载更多' : 'Load more'} ({dayLimit}/
+                    {dataListFull.length})
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1767,7 +1892,31 @@ const ActivityListInner: React.FC<
 
 function ActivityListWithRouter(props: ActivityListProps) {
   const navigate = useNavigate();
-  return <ActivityListInner {...props} navigate={navigate} />;
+  return <ActivityListResolved {...props} navigate={navigate} />;
+}
+
+/**
+ * Resolves the activity list without always fetching the bundled payload.
+ *
+ * Two components instead of one `providedActivities ?? useActivities()` because
+ * the hook cannot be called conditionally: the Pro Summary passes its own lite
+ * list, and mounting the hook anyway would trigger the 2 MB activities.json
+ * fetch the lite path exists to avoid.
+ */
+function ActivityListResolved(
+  props: ActivityListProps & { navigate?: NavigateFunction }
+) {
+  if (props.activities) {
+    return <ActivityListInner {...props} activities={props.activities} />;
+  }
+  return <ActivityListFromBundle {...props} />;
+}
+
+function ActivityListFromBundle(
+  props: ActivityListProps & { navigate?: NavigateFunction }
+) {
+  const { activities } = useActivities();
+  return <ActivityListInner {...props} activities={activities} />;
 }
 
 const ActivityList: React.FC<ActivityListProps> = (props) => {
@@ -1775,7 +1924,7 @@ const ActivityList: React.FC<ActivityListProps> = (props) => {
   if (inRouter) {
     return <ActivityListWithRouter {...props} />;
   }
-  return <ActivityListInner {...props} />;
+  return <ActivityListResolved {...props} />;
 };
 
 export default ActivityList;

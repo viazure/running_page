@@ -17,22 +17,14 @@ export const M_TO_ELEV = IS_IMPERIAL ? 3.28084 : 1; // Meters to Feet or Meters
 export const DIST_UNIT = IS_IMPERIAL ? 'mi' : 'km'; // Label
 export const ELEV_UNIT = IS_IMPERIAL ? 'ft' : 'm'; // Label
 
-export interface Activity {
-  run_id: number;
-  name: string;
-  distance: number;
-  moving_time: string;
-  type: string;
-  subtype: string;
-  start_date: string;
-  start_date_local: string;
-  location_country?: string | null;
-  summary_polyline?: string | null;
-  average_heartrate?: number | null;
-  elevation_gain: number | null;
-  average_speed: number;
-  streak: number;
-}
+import type { Activity as CoreActivity } from '../../../core/types';
+
+/**
+ * Classic list activity shape. Reuses the core definition so the dashboard can
+ * hand its own list straight to the embedded list without a structural cast —
+ * a duplicated interface here silently diverged (it was missing `source`).
+ */
+export type Activity = CoreActivity;
 
 const titleForShow = (run: Activity): string => {
   const date = run.start_date_local.slice(0, 11);
