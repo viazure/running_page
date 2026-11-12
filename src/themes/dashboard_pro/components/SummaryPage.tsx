@@ -7,6 +7,7 @@ import {
   summaryChart,
   type SummaryPeriod,
 } from '@/utils/summary';
+import { periodHeroTiles } from './summary/periodHeroTiles';
 import { formatPaceSeconds } from '@/core/splits';
 import ActivityList from '@/themes/classic/components/ActivityList';
 import { ProgressQuestions } from './ProgressQuestions';
@@ -348,32 +349,19 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                 {formatHours(stats.seconds)} · {stats.count} {tr('次', 'runs')}
               </div>
 
-              {/* Same tile grid as the month/week cards: one shape, one type
-                  scale, averages first → peaks → elevation last. */}
+              {/* Same 2×3 tile grid as month/week: 最远距离 / 最快配速 /
+                  累计爬升; 平均配速 / 平均距离 / 平均心率. */}
               <dl className="summary-period-tiles">
-                {(
-                  [
-                    [tr('均配速', 'Avg pace'), paceFromSpeed(stats.speed)],
-                    [
-                      tr('均心率', 'Avg HR'),
-                      stats.heartRate != null
-                        ? `${Math.round(stats.heartRate)} bpm`
-                        : '—',
-                    ],
-                    [tr('均距', 'Avg dist'), `${formatKm(avgDistance)} km`],
-                    [
-                      tr('最远', 'Longest'),
-                      `${formatKm(stats.maxDistance)} km`,
-                    ],
-                    [
-                      tr('最快配速', 'Best pace'),
-                      paceFromSpeed(stats.maxSpeed),
-                    ],
-                    [
-                      tr('爬升', 'Elevation'),
-                      `${Math.round(stats.elevation).toLocaleString()} m`,
-                    ],
-                  ] as [string, string][]
+                {periodHeroTiles(
+                  stats,
+                  tr,
+                  {
+                    avgPace: paceFromSpeed(stats.speed),
+                    avgDistance: `${formatKm(avgDistance)} km`,
+                    longest: `${formatKm(stats.maxDistance)} km`,
+                    fastestPace: paceFromSpeed(stats.maxSpeed),
+                  },
+                  locale
                 )
                   // Keep all six so the grid stays a stable 3×2 — a missing
                   // metric shows an em dash instead of collapsing the row.

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import type { Activity } from '@/types';
 import { formatPace } from '@/hooks/useActivities';
 import { summarize, summaryChart, type SummaryPeriod } from '@/utils/summary';
+import { periodHeroTiles } from './periodHeroTiles';
 
 const PAGE = 12;
 
@@ -31,7 +32,7 @@ function PeriodCard({
   period,
   periodKey,
   label,
-  locale: _locale,
+  locale,
   tr,
 }: {
   activities: Activity[];
@@ -41,29 +42,25 @@ function PeriodCard({
   locale: string;
   tr: (zh: string, en: string) => string;
 }) {
-  void _locale;
   const [focus, setFocus] = useState<number | null>(null);
   const stats = summarize(activities);
   const chart = summaryChart(activities, period, periodKey);
   const maxKm = Math.max(0.01, ...chart.map((d) => d.km));
   const avgDistance = stats.count > 0 ? stats.distance / stats.count / 1000 : 0;
 
-  // 3-up: averages first (always available), peaks next, elevation last
-  // (optional — it degrades to a dash and must not own a prime slot).
-  const tiles: [string, string][] = [
-    [tr('均配速', 'Avg pace'), paceOrDash(stats.speed)],
-    [
-      tr('均心率', 'Avg HR'),
-      stats.heartRate ? `${Math.round(stats.heartRate)} bpm` : '—',
-    ],
-    [
-      tr('均距', 'Avg dist'),
-      stats.count > 0 ? `${number(avgDistance)} km` : '—',
-    ],
-    [tr('最远', 'Longest'), `${number(stats.maxDistance / 1000)} km`],
-    [tr('最快配速', 'Best pace'), paceOrDash(stats.maxSpeed)],
-    [tr('爬升', 'Elevation'), `${Math.round(stats.elevation)} m`],
-  ];
+  // 2×3: 最远距离 / 最快配速 / 累计爬升; 平均配速 / 平均距离 / 平均心率.
+  // The two commonly missing metrics sit at the end of each row.
+  const tiles: [string, string][] = periodHeroTiles(
+    stats,
+    tr,
+    {
+      avgPace: paceOrDash(stats.speed),
+      avgDistance: stats.count > 0 ? `${number(avgDistance)} km` : '—',
+      longest: `${number(stats.maxDistance / 1000)} km`,
+      fastestPace: paceOrDash(stats.maxSpeed),
+    },
+    locale
+  );
 
   const edgeLeft = chart[0]?.label ?? '';
   const edgeRight = chart[chart.length - 1]?.label ?? '';

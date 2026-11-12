@@ -261,6 +261,9 @@
   font-size: 11px;
   letter-spacing: 0.4px;
   color: var(--color-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-period-tile dd {
@@ -270,6 +273,9 @@
   line-height: 1.25;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-period-chart {
@@ -391,8 +397,9 @@
   }
 }
 
-/* Month/week tiles: keep 3-up even at 420px — the labels are 2–3 chars and the
- * previous 2-up grid left each tile half empty. */
+/* Month/week tiles: keep 3-up even at 420px — the labels are four Chinese
+ * characters (or short English) and must stay on one line. The previous 2-up
+ * grid left each tile half empty. */
 @media (max-width: 420px) {
   .summary-period-tiles {
     grid-template-columns: repeat(3, minmax(0, 1fr));
