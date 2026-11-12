@@ -223,7 +223,10 @@ export function PlaybackHudView({
   onExport,
   onShowEndpointsChange,
   onLockOrientationChange,
+  onLockMapChange,
+  onLockView3dChange,
   onHeightChange,
+  view3d = false,
 }: {
   snap: PlaybackProgress;
   hrSeries: HrSeries | null;
@@ -252,6 +255,10 @@ export function PlaybackHudView({
   /** Live start/finish pins. Persisted preference is applied by the caller. */
   onShowEndpointsChange?: (show: boolean) => void;
   onLockOrientationChange?: (locked: boolean) => void;
+  onLockMapChange?: (locked: boolean) => void;
+  onLockView3dChange?: (locked: boolean) => void;
+  /** Show the 3D-only view-lock setting. */
+  view3d?: boolean;
   onHeightChange?: (heightPx: number) => void;
 }) {
   const { t } = useLocale();
@@ -550,19 +557,54 @@ export function PlaybackHudView({
                 <button
                   type="button"
                   className="route-playback-hud__setting"
-                  aria-pressed={prefs.lockOrientation}
+                  aria-pressed={prefs.lockMap}
                   onClick={() => {
-                    const next = !prefs.lockOrientation;
-                    setPlaybackPrefs({ lockOrientation: next });
-                    onLockOrientationChange?.(next);
+                    const next = !prefs.lockMap;
+                    setPlaybackPrefs({ lockMap: next });
+                    onLockMapChange?.(next);
                   }}
                 >
-                  <span>{t('playbackLockOrientation')}</span>
+                  <span>{t('playbackLockMap')}</span>
                   <span
                     className="route-playback-hud__switch"
                     aria-hidden="true"
                   />
                 </button>
+                {view3d ? (
+                  <button
+                    type="button"
+                    className="route-playback-hud__setting"
+                    aria-pressed={prefs.lockView3d}
+                    onClick={() => {
+                      const next = !prefs.lockView3d;
+                      setPlaybackPrefs({ lockView3d: next });
+                      onLockView3dChange?.(next);
+                    }}
+                  >
+                    <span>{t('playbackLockView')}</span>
+                    <span
+                      className="route-playback-hud__switch"
+                      aria-hidden="true"
+                    />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="route-playback-hud__setting"
+                    aria-pressed={prefs.lockOrientation}
+                    onClick={() => {
+                      const next = !prefs.lockOrientation;
+                      setPlaybackPrefs({ lockOrientation: next });
+                      onLockOrientationChange?.(next);
+                    }}
+                  >
+                    <span>{t('playbackLockOrientation')}</span>
+                    <span
+                      className="route-playback-hud__switch"
+                      aria-hidden="true"
+                    />
+                  </button>
+                )}
               </div>
             ) : null}
             <button

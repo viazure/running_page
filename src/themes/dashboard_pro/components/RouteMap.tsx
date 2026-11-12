@@ -473,6 +473,10 @@ export function RouteMap({
     setView3d(next);
     if (chaseRef.current.isAnimating()) {
       chaseRef.current.setCameraMode(next ? '3d' : '2d');
+      const prefs = getPlaybackPrefs();
+      chaseRef.current.setBearingLocked(
+        next ? prefs.lockView3d : prefs.lockOrientation
+      );
       return;
     }
     if (next) {
@@ -534,7 +538,13 @@ export function RouteMap({
         isDark: dark !== false,
         cameraMode: can3d && view3dRef.current ? '3d' : '2d',
         showEndpoints: getPlaybackPrefs().showEndpoints,
-        lockOrientation: getPlaybackPrefs().lockOrientation,
+        lockOrientation: (() => {
+          const prefs = getPlaybackPrefs();
+          return can3d && view3dRef.current
+            ? prefs.lockView3d
+            : prefs.lockOrientation;
+        })(),
+        lockMap: getPlaybackPrefs().lockMap,
         endpointTitles:
           locale === 'en'
             ? { start: 'Start', end: 'Finish' }
@@ -576,7 +586,11 @@ export function RouteMap({
           }
         },
         onBearingLockChange: (locked) => {
-          setPlaybackPrefs({ lockOrientation: locked });
+          setPlaybackPrefs(
+            view3dRef.current
+              ? { lockView3d: locked }
+              : { lockOrientation: locked }
+          );
         },
       }
     );
@@ -1268,6 +1282,13 @@ export function RouteMap({
               onSeek={(p) => chaseRef.current.seek(p)}
               onShowEndpointsChange={(show) =>
                 chaseRef.current.setShowEndpoints(show)
+              }
+              view3d={view3d}
+              onLockMapChange={(locked) =>
+                chaseRef.current.setMapLocked(locked)
+              }
+              onLockView3dChange={(locked) =>
+                chaseRef.current.setBearingLocked(locked)
               }
               onLockOrientationChange={(locked) =>
                 chaseRef.current.setBearingLocked(locked)
