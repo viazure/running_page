@@ -1,5 +1,12 @@
 import type { Activity } from '../types';
 import { parseMovingTime } from '../hooks/useActivities';
+import { summarizeElevation } from './summaryElevation';
+
+export {
+  formatElevationMeters,
+  isPresentElevation,
+  summarizeElevation,
+} from './summaryElevation';
 
 export type SummaryPeriod = 'year' | 'month' | 'week' | 'day' | 'life';
 
@@ -26,7 +33,21 @@ export function summaryKey(date: string, period: SummaryPeriod): string {
 const MIN_PACE_SEC_PER_KM = 150;
 const MAX_PACE_SEC_PER_KM = 900;
 
-export function summarize(activities: Activity[]) {
+export type SummarizeStats = {
+  distance: number;
+  seconds: number;
+  count: number;
+  speed: number;
+  maxDistance: number;
+  maxSpeed: number;
+  /** Sum of recorded elevation samples; null when none are present. */
+  elevation: number | null;
+  /** True only when every activity in the set has a recorded elevation. */
+  elevationComplete: boolean;
+  heartRate: number | null;
+};
+
+export function summarize(activities: Activity[]): SummarizeStats {
   const distance = activities.reduce((sum, a) => sum + a.distance, 0);
   const seconds = activities.reduce(
     (sum, a) => sum + parseMovingTime(a.moving_time),
@@ -48,6 +69,7 @@ export function summarize(activities: Activity[]) {
     const speed = a.distance / time;
     if (speed > maxSpeed) maxSpeed = speed;
   }
+  const elevation = summarizeElevation(activities);
   return {
     distance,
     seconds,
@@ -55,7 +77,8 @@ export function summarize(activities: Activity[]) {
     speed: seconds > 0 ? distance / seconds : 0,
     maxDistance: Math.max(0, ...activities.map((a) => a.distance)),
     maxSpeed,
-    elevation: activities.reduce((sum, a) => sum + (a.elevation_gain ?? 0), 0),
+    elevation: elevation.totalM,
+    elevationComplete: elevation.complete,
     heartRate: heartRates.length
       ? heartRates.reduce((sum, a) => sum + a.average_heartrate!, 0) /
         heartRates.length

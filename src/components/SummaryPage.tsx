@@ -12,6 +12,7 @@ import type { Activity } from '../types';
 import { useLocale } from '../hooks/useLocale';
 import { formatPace } from '../hooks/useActivities';
 import {
+  formatElevationMeters,
   groupSummary,
   summaryKey,
   summarize,
@@ -67,7 +68,14 @@ function SummaryCard({
       zh ? '平均距离' : 'Average distance',
       `${number(stats.distance / stats.count / 1000)} km`,
     ],
-    [zh ? '累计爬升' : 'Elevation gain', `${number(stats.elevation)} m`],
+    [
+      zh ? '累计爬升' : 'Elevation gain',
+      formatElevationMeters(
+        stats.elevation,
+        stats.elevationComplete,
+        zh ? 'zh' : 'en'
+      ),
+    ],
   ];
   const chartUnit =
     period === 'life'
