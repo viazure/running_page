@@ -1027,8 +1027,7 @@ export function createMapChaseController() {
     const rawDt = ts - lastTs;
     lastTs = ts;
     const dt = clampChaseDt(rawDt);
-    const progressDt =
-      Number.isFinite(rawDt) && rawDt > 0 ? rawDt : 0;
+    const progressDt = Number.isFinite(rawDt) && rawDt > 0 ? rawDt : 0;
     progress = Math.min(progress + (progressDt * speed) / s.durationMs, 1);
     applyFrame(s, progress, { dt });
     if (progress >= 1) {
