@@ -1,5 +1,17 @@
 import mapboxgl from 'mapbox-gl';
 import { haversine, type Coordinate } from './routeAnimation';
+import {
+  CHASE_BEARING_TAU_MS,
+  CHASE_PITCH_ZOOM_TAU_2D_MS,
+  CHASE_PITCH_ZOOM_TAU_MS,
+  chaseFollowCenter,
+  clampChaseDt,
+  nextChase3dPose,
+  poseWhenTogglingMapLock,
+  shortestAngleDelta,
+  smoothAngleToward,
+  smoothToward,
+} from './mapChaseSmooth';
 
 export function calculateBearing(start: Coordinate, end: Coordinate): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -558,8 +570,10 @@ type ChaseStartArgs = {
   showEndpoints?: boolean;
   /** Compass button copy while playback is running. */
   compassTitles?: { lock: string; follow: string };
-  /** Start with bearing frozen (from playback prefs). Default false. */
+  /** Start with bearing (and 3D pitch/zoom) frozen. Default false. */
   lockOrientation?: boolean;
+  /** Start with the camera center frozen. Default false. */
+  lockMap?: boolean;
   /**
    * Wait this many ms (and map.resize) before placing the start Marker / easeTo.
    * Hosts that grow the map card on play should pass PLAYBACK_LAYOUT_SETTLE_MS
@@ -596,10 +610,6 @@ type PlaybackSession = {
   smoothIntro: boolean;
 };
 
-function shortestAngleDelta(from: number, to: number): number {
-  return ((to - from + 540) % 360) - 180;
-}
-
 /** Heading over a long stretch so short GPS wiggles don't spin the map. */
 function stableHeading(
   s: { sample: (meters: number) => Coordinate },
@@ -632,8 +642,11 @@ export function createMapChaseController() {
   let progress = 0;
   let cameraMode: PlaybackCameraMode = '3d';
   let currentBearing = 0;
-  /** Compass click during playback: freeze current bearing (no route-follow yaw). */
+  /** Compass / 3D view lock: freeze current bearing (and 3D pitch/zoom). */
   let bearingLocked = false;
+  /** Settings: freeze the camera center; the runner marker can still move. */
+  let mapLocked = false;
+  let lockedCenter: Coordinate | null = null;
   let compassBtn: HTMLButtonElement | null = null;
   /** Mapbox puts the tooltip on the icon span (`title`), label on the button. */
   let compassIdleLabel = '';
@@ -806,7 +819,6 @@ export function createMapChaseController() {
     onCompassTouchBlock = null;
     compassIdleLabel = '';
     compassTitlesLive = null;
-    bearingLocked = false;
   };
 
   /**
@@ -849,7 +861,7 @@ export function createMapChaseController() {
       event.stopImmediatePropagation();
       bearingLocked = !bearingLocked;
       if (bearingLocked) {
-        // Freeze whatever bearing the chase currently has — do not snap to north.
+        // Freeze whatever pose the chase currently has — do not snap to north.
         // Do not disable map dragRotate: idle Ctrl/right-drag orbit must keep working
         // after playback ends, and jumpTo already holds bearing while chase runs.
         map.stop();
@@ -877,12 +889,14 @@ export function createMapChaseController() {
   /**
    * 2D and 3D share one bearing. Center stays on the runner — offsetting the
    * camera along a noisy heading is what made the line appear to shake.
-   * Compass click freezes the current bearing (no route-follow yaw).
+   * View lock freezes the current bearing (no route-follow yaw).
+   * In 3D it also freezes pitch and zoom at their lock-time values.
+   * Map lock freezes the camera center; the runner marker can still move.
    */
   const applyFrame = (
     s: PlaybackSession,
     p: number,
-    _opts?: { instant?: boolean }
+    opts?: { instant?: boolean; dt?: number; keepPose?: boolean }
   ) => {
     const { coord, idx, distanceKm } = sampleAt(s, p);
     const lineCoords =
@@ -902,13 +916,21 @@ export function createMapChaseController() {
       along,
       currentBearing
     );
-    if (!bearingLocked) {
-      const delta = shortestAngleDelta(currentBearing, heading);
-      if (Math.abs(delta) > 4) currentBearing += delta * 0.07;
-    }
-    // When locked, currentBearing stays frozen at the value from lock time.
+    const instant = opts?.instant === true;
+    const keepPose = opts?.keepPose === true;
+    const dt = opts?.dt ?? 1000 / 60;
 
-    if (cameraMode === '3d') {
+    if (keepPose) {
+      // Map-lock toggles only move the center; keep mid-ease pose as-is.
+      const pose = poseWhenTogglingMapLock({
+        bearing: currentBearing,
+        zoom: currentZoom,
+        pitch: currentPitch,
+      });
+      currentBearing = pose.bearing;
+      currentZoom = pose.zoom;
+      currentPitch = pose.pitch;
+    } else if (cameraMode === '3d') {
       const far = stableHeading(
         {
           sample: (meters) => pointAtDistance(s, meters + 120),
@@ -919,16 +941,45 @@ export function createMapChaseController() {
       const turn = Math.min(1, Math.abs(shortestAngleDelta(heading, far)) / 70);
       const targetZoom = 16.8 - turn * 0.45;
       const targetPitch = ORBIT_PITCH - turn * 6;
-      currentZoom += (targetZoom - currentZoom) * 0.04;
-      currentPitch += (targetPitch - currentPitch) * 0.04;
-    } else {
-      currentPitch += (0 - currentPitch) * 0.12;
+      // Locked 3D pose freezes bearing, pitch and zoom; center still follows.
+      const pose = nextChase3dPose(
+        { bearing: currentBearing, zoom: currentZoom, pitch: currentPitch },
+        { bearing: heading, zoom: targetZoom, pitch: targetPitch },
+        { locked: bearingLocked, instant, dt }
+      );
+      currentBearing = pose.bearing;
+      currentZoom = pose.zoom;
+      currentPitch = pose.pitch;
+    } else if (instant) {
+      if (!bearingLocked) currentBearing = heading;
+      currentPitch = 0;
       // Wider framing — user can't zoom during chase.
-      currentZoom += (zoom2dTarget() - currentZoom) * 0.12;
+      currentZoom = zoom2dTarget();
+    } else {
+      if (!bearingLocked) {
+        currentBearing = smoothAngleToward(
+          currentBearing,
+          heading,
+          dt,
+          CHASE_BEARING_TAU_MS
+        );
+      }
+      currentPitch = smoothToward(
+        currentPitch,
+        0,
+        dt,
+        CHASE_PITCH_ZOOM_TAU_2D_MS
+      );
+      currentZoom = smoothToward(
+        currentZoom,
+        zoom2dTarget(),
+        dt,
+        CHASE_PITCH_ZOOM_TAU_2D_MS
+      );
     }
 
     s.map.jumpTo({
-      center: coord,
+      center: chaseFollowCenter(coord, lockedCenter, mapLocked),
       bearing: currentBearing,
       pitch: currentPitch,
       zoom: currentZoom,
@@ -947,6 +998,10 @@ export function createMapChaseController() {
     if (finishing || animToken !== s.token) return;
     finishing = true;
     clearTimers();
+    // Drop map lock for the end frame so the camera lands on the finish,
+    // not a mid-route frozen center. Next start() re-reads prefs.
+    mapLocked = false;
+    lockedCenter = null;
     applyFrame(s, 1, { instant: true });
     if (s.showEndpoints) {
       showEndEndpoint(s.map, s.coords, s.endpointTitles);
@@ -979,10 +1034,14 @@ export function createMapChaseController() {
       return;
     }
     if (lastTs == null) lastTs = ts;
-    const dt = ts - lastTs;
+    // Progress tracks wall-clock so low FPS / long hitches don't stretch the
+    // chase. Camera easing still uses a clamped dt so pose doesn't lurch.
+    const rawDt = ts - lastTs;
     lastTs = ts;
-    progress = Math.min(progress + (dt * speed) / s.durationMs, 1);
-    applyFrame(s, progress);
+    const dt = clampChaseDt(rawDt);
+    const progressDt = Number.isFinite(rawDt) && rawDt > 0 ? rawDt : 0;
+    progress = Math.min(progress + (progressDt * speed) / s.durationMs, 1);
+    applyFrame(s, progress, { dt });
     if (progress >= 1) {
       finishPlayback(s);
       return;
@@ -1022,6 +1081,9 @@ export function createMapChaseController() {
     progress = 0;
     speed = 1;
     unbindCompass();
+    bearingLocked = false;
+    mapLocked = false;
+    lockedCenter = null;
     unbindResize(map);
     clearEndpoints();
     // keepHighlight: host already showed the full route (or will in the same
@@ -1132,6 +1194,20 @@ export function createMapChaseController() {
     callbacks.onBearingLockChange?.(bearingLocked);
   };
 
+  const setMapLocked = (locked: boolean) => {
+    if (!running || mapLocked === locked) return;
+    mapLocked = locked;
+    if (mapLocked && session) {
+      lockedCenter = sampleAt(session, progress).coord;
+      session.map.stop();
+      // Center only — do not instant-snap bearing/pitch/zoom mid-ease.
+      applyFrame(session, progress, { keepPose: true });
+    } else {
+      lockedCenter = null;
+      if (session) applyFrame(session, progress, { keepPose: true });
+    }
+  };
+
   const seek = (p: number) => {
     if (!session || !running) return;
     progress = Math.min(Math.max(p, 0), 1);
@@ -1193,6 +1269,7 @@ export function createMapChaseController() {
       endpointTitles = { start: '起点', end: '终点' },
       showEndpoints = true,
       lockOrientation = false,
+      lockMap = false,
       compassTitles = {
         lock: '朝向已锁定（点击跟随路线）',
         follow: '锁定朝向',
@@ -1266,6 +1343,13 @@ export function createMapChaseController() {
       m.setPaintProperty(overviewLayerId, 'line-opacity', overviewDimOpacity);
     }
 
+    // Apply initial locks once before any layout wait. A mid-settle 3D↔2D
+    // toggle calls setBearingLocked with the live pref; beginIntro must not
+    // overwrite that with the values captured at start().
+    bearingLocked = lockOrientation === true;
+    mapLocked = lockMap === true;
+    lockedCenter = mapLocked ? coords[0] : null;
+
     let begun = false;
     const beginPlayback = () => {
       if (begun || animToken !== token || !session) return;
@@ -1303,11 +1387,8 @@ export function createMapChaseController() {
       }
       unbindResize(m);
       m.on('resize', onMapResize);
+      // Bind + sync only — do not re-apply start-time lockOrientation/lockMap.
       bindCompass(m, compassTitles);
-      if (lockOrientation) {
-        bearingLocked = true;
-        syncCompassLock(compassTitles);
-      }
       callbacks.onProgress?.({
         progress: 0,
         distanceKm: 0,
@@ -1316,13 +1397,17 @@ export function createMapChaseController() {
         speed: 1,
       });
 
-      const introPitch = mode === '3d' ? ORBIT_PITCH : 0;
+      // Use live cameraMode so a mid-settle 3D↔2D toggle is honored.
+      const introPitch = cameraMode === '3d' ? ORBIT_PITCH : 0;
       const introBearing = currentBearing;
       const introCamera = {
-        center: coords[0] as [number, number],
+        center: chaseFollowCenter(coords[0], lockedCenter, mapLocked) as [
+          number,
+          number,
+        ],
         bearing: introBearing,
         pitch: introPitch,
-        zoom: mode === '3d' ? 16.5 : zoom2dIntro(),
+        zoom: cameraMode === '3d' ? 16.5 : zoom2dIntro(),
         essential: true as const,
       };
       if (smoothIntro) {
@@ -1372,6 +1457,7 @@ export function createMapChaseController() {
     setStrokeScale,
     setShowEndpoints,
     setBearingLocked,
+    setMapLocked,
   };
 }
 

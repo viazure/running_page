@@ -59,7 +59,11 @@ import {
 } from './PlaybackHud';
 import { parseMovingTime } from '@/hooks/useActivities';
 import { loadSplits } from '@/core/splits';
-import { getPlaybackPrefs, setPlaybackPrefs } from '@/utils/playbackPrefs';
+import {
+  bearingLockPrefForMode,
+  getPlaybackPrefs,
+  setPlaybackPrefs,
+} from '@/utils/playbackPrefs';
 import {
   defaultMapVideoFilename,
   downloadBlob,
@@ -473,6 +477,11 @@ export function RouteMap({
     setView3d(next);
     if (chaseRef.current.isAnimating()) {
       chaseRef.current.setCameraMode(next ? '3d' : '2d');
+      // Live pref for the new mode — chase owns lock state after start();
+      // beginIntro must not overwrite this with start-time captures.
+      chaseRef.current.setBearingLocked(
+        bearingLockPrefForMode(next ? '3d' : '2d', getPlaybackPrefs())
+      );
       return;
     }
     if (next) {
@@ -534,7 +543,11 @@ export function RouteMap({
         isDark: dark !== false,
         cameraMode: can3d && view3dRef.current ? '3d' : '2d',
         showEndpoints: getPlaybackPrefs().showEndpoints,
-        lockOrientation: getPlaybackPrefs().lockOrientation,
+        lockOrientation: bearingLockPrefForMode(
+          can3d && view3dRef.current ? '3d' : '2d',
+          getPlaybackPrefs()
+        ),
+        lockMap: getPlaybackPrefs().lockMap,
         endpointTitles:
           locale === 'en'
             ? { start: 'Start', end: 'Finish' }
@@ -576,7 +589,11 @@ export function RouteMap({
           }
         },
         onBearingLockChange: (locked) => {
-          setPlaybackPrefs({ lockOrientation: locked });
+          setPlaybackPrefs(
+            view3dRef.current
+              ? { lockView3d: locked }
+              : { lockOrientation: locked }
+          );
         },
       }
     );
@@ -1268,6 +1285,13 @@ export function RouteMap({
               onSeek={(p) => chaseRef.current.seek(p)}
               onShowEndpointsChange={(show) =>
                 chaseRef.current.setShowEndpoints(show)
+              }
+              view3d={view3d}
+              onLockMapChange={(locked) =>
+                chaseRef.current.setMapLocked(locked)
+              }
+              onLockView3dChange={(locked) =>
+                chaseRef.current.setBearingLocked(locked)
               }
               onLockOrientationChange={(locked) =>
                 chaseRef.current.setBearingLocked(locked)
