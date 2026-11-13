@@ -59,7 +59,11 @@ import {
 } from './PlaybackHud';
 import { parseMovingTime } from '@/hooks/useActivities';
 import { loadSplits } from '@/core/splits';
-import { getPlaybackPrefs, setPlaybackPrefs } from '@/utils/playbackPrefs';
+import {
+  bearingLockPrefForMode,
+  getPlaybackPrefs,
+  setPlaybackPrefs,
+} from '@/utils/playbackPrefs';
 import {
   defaultMapVideoFilename,
   downloadBlob,
@@ -473,9 +477,10 @@ export function RouteMap({
     setView3d(next);
     if (chaseRef.current.isAnimating()) {
       chaseRef.current.setCameraMode(next ? '3d' : '2d');
-      const prefs = getPlaybackPrefs();
+      // Live pref for the new mode — chase owns lock state after start();
+      // beginIntro must not overwrite this with start-time captures.
       chaseRef.current.setBearingLocked(
-        next ? prefs.lockView3d : prefs.lockOrientation
+        bearingLockPrefForMode(next ? '3d' : '2d', getPlaybackPrefs())
       );
       return;
     }
@@ -538,12 +543,10 @@ export function RouteMap({
         isDark: dark !== false,
         cameraMode: can3d && view3dRef.current ? '3d' : '2d',
         showEndpoints: getPlaybackPrefs().showEndpoints,
-        lockOrientation: (() => {
-          const prefs = getPlaybackPrefs();
-          return can3d && view3dRef.current
-            ? prefs.lockView3d
-            : prefs.lockOrientation;
-        })(),
+        lockOrientation: bearingLockPrefForMode(
+          can3d && view3dRef.current ? '3d' : '2d',
+          getPlaybackPrefs()
+        ),
         lockMap: getPlaybackPrefs().lockMap,
         endpointTitles:
           locale === 'en'

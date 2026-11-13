@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parsePlaybackPrefs } from './playbackPrefs.ts';
+import { bearingLockPrefForMode, parsePlaybackPrefs } from './playbackPrefs.ts';
 
 describe('parsePlaybackPrefs', () => {
   it('defaults to following the map and locking the 3D view', () => {
@@ -23,5 +23,14 @@ describe('parsePlaybackPrefs', () => {
     assert.equal(parsePlaybackPrefs({}).lockView3d, true);
     assert.equal(parsePlaybackPrefs({ lockView3d: true }).lockView3d, true);
     assert.equal(parsePlaybackPrefs({ lockView3d: false }).lockView3d, false);
+  });
+});
+
+describe('bearingLockPrefForMode', () => {
+  const prefs = { lockOrientation: false, lockView3d: true };
+
+  it('uses lockView3d in 3D and lockOrientation in 2D', () => {
+    assert.equal(bearingLockPrefForMode('3d', prefs), true);
+    assert.equal(bearingLockPrefForMode('2d', prefs), false);
   });
 });

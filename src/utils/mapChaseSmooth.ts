@@ -106,6 +106,19 @@ export function nextChase3dPose(
   };
 }
 
+/**
+ * Pose to keep when toggling map lock.
+ * Must not go through nextChase3dPose({ instant: true }) — that snaps to the
+ * route target and jumps an in-progress bearing/pitch/zoom ease.
+ */
+export function poseWhenTogglingMapLock(current: Chase3dPose): Chase3dPose {
+  return {
+    bearing: current.bearing,
+    zoom: current.zoom,
+    pitch: current.pitch,
+  };
+}
+
 /** Keep the camera center frozen while the map is locked. */
 export function chaseFollowCenter(
   follow: readonly [number, number],

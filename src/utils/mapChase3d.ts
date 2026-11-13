@@ -7,6 +7,7 @@ import {
   chaseFollowCenter,
   clampChaseDt,
   nextChase3dPose,
+  poseWhenTogglingMapLock,
   shortestAngleDelta,
   smoothAngleToward,
   smoothToward,
@@ -895,7 +896,7 @@ export function createMapChaseController() {
   const applyFrame = (
     s: PlaybackSession,
     p: number,
-    opts?: { instant?: boolean; dt?: number }
+    opts?: { instant?: boolean; dt?: number; keepPose?: boolean }
   ) => {
     const { coord, idx, distanceKm } = sampleAt(s, p);
     const lineCoords =
@@ -916,9 +917,20 @@ export function createMapChaseController() {
       currentBearing
     );
     const instant = opts?.instant === true;
+    const keepPose = opts?.keepPose === true;
     const dt = opts?.dt ?? 1000 / 60;
 
-    if (cameraMode === '3d') {
+    if (keepPose) {
+      // Map-lock toggles only move the center; keep mid-ease pose as-is.
+      const pose = poseWhenTogglingMapLock({
+        bearing: currentBearing,
+        zoom: currentZoom,
+        pitch: currentPitch,
+      });
+      currentBearing = pose.bearing;
+      currentZoom = pose.zoom;
+      currentPitch = pose.pitch;
+    } else if (cameraMode === '3d') {
       const far = stableHeading(
         {
           sample: (meters) => pointAtDistance(s, meters + 120),
@@ -1188,9 +1200,11 @@ export function createMapChaseController() {
     if (mapLocked && session) {
       lockedCenter = sampleAt(session, progress).coord;
       session.map.stop();
-      applyFrame(session, progress, { instant: true });
+      // Center only — do not instant-snap bearing/pitch/zoom mid-ease.
+      applyFrame(session, progress, { keepPose: true });
     } else {
       lockedCenter = null;
+      if (session) applyFrame(session, progress, { keepPose: true });
     }
   };
 
@@ -1329,6 +1343,13 @@ export function createMapChaseController() {
       m.setPaintProperty(overviewLayerId, 'line-opacity', overviewDimOpacity);
     }
 
+    // Apply initial locks once before any layout wait. A mid-settle 3D↔2D
+    // toggle calls setBearingLocked with the live pref; beginIntro must not
+    // overwrite that with the values captured at start().
+    bearingLocked = lockOrientation === true;
+    mapLocked = lockMap === true;
+    lockedCenter = mapLocked ? coords[0] : null;
+
     let begun = false;
     const beginPlayback = () => {
       if (begun || animToken !== token || !session) return;
@@ -1366,15 +1387,8 @@ export function createMapChaseController() {
       }
       unbindResize(m);
       m.on('resize', onMapResize);
+      // Bind + sync only — do not re-apply start-time lockOrientation/lockMap.
       bindCompass(m, compassTitles);
-      if (lockOrientation) {
-        bearingLocked = true;
-        syncCompassLock(compassTitles);
-      }
-      if (lockMap) {
-        mapLocked = true;
-        lockedCenter = coords[0];
-      }
       callbacks.onProgress?.({
         progress: 0,
         distanceKm: 0,
@@ -1383,13 +1397,17 @@ export function createMapChaseController() {
         speed: 1,
       });
 
-      const introPitch = mode === '3d' ? ORBIT_PITCH : 0;
+      // Use live cameraMode so a mid-settle 3D↔2D toggle is honored.
+      const introPitch = cameraMode === '3d' ? ORBIT_PITCH : 0;
       const introBearing = currentBearing;
       const introCamera = {
-        center: coords[0] as [number, number],
+        center: chaseFollowCenter(coords[0], lockedCenter, mapLocked) as [
+          number,
+          number,
+        ],
         bearing: introBearing,
         pitch: introPitch,
-        zoom: mode === '3d' ? 16.5 : zoom2dIntro(),
+        zoom: cameraMode === '3d' ? 16.5 : zoom2dIntro(),
         essential: true as const,
       };
       if (smoothIntro) {

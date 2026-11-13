@@ -37,6 +37,14 @@ export function parsePlaybackPrefs(
   };
 }
 
+/** Bearing / view lock pref for the active chase camera mode. */
+export function bearingLockPrefForMode(
+  mode: '2d' | '3d',
+  prefs: Pick<PlaybackPrefs, 'lockOrientation' | 'lockView3d'>
+): boolean {
+  return mode === '3d' ? prefs.lockView3d : prefs.lockOrientation;
+}
+
 function read(): PlaybackPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

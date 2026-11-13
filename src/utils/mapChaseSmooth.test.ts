@@ -7,6 +7,7 @@ import {
   frameSmoothAlpha,
   chaseFollowCenter,
   nextChase3dPose,
+  poseWhenTogglingMapLock,
   shortestAngleDelta,
   smoothAngleToward,
   smoothToward,
@@ -142,5 +143,23 @@ describe('chaseFollowCenter', () => {
   it('follows the runner when unlocked or if no center was captured', () => {
     assert.deepEqual(chaseFollowCenter(follow, frozen, false), follow);
     assert.deepEqual(chaseFollowCenter(follow, null, true), follow);
+  });
+});
+
+describe('poseWhenTogglingMapLock', () => {
+  it('keeps the current bearing/pitch/zoom instead of instant-snapping', () => {
+    const current = { bearing: 40, zoom: 16.5, pitch: 50 };
+    const target = { bearing: 90, zoom: 16.3, pitch: 44 };
+    // Unlocked + instant is the bug path setMapLocked used to take.
+    assert.deepEqual(
+      nextChase3dPose(current, target, {
+        locked: false,
+        instant: true,
+        dt: 16,
+      }),
+      target
+    );
+    assert.deepEqual(poseWhenTogglingMapLock(current), current);
+    assert.notDeepEqual(poseWhenTogglingMapLock(current), target);
   });
 });
