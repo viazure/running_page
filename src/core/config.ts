@@ -145,6 +145,7 @@ export interface AnalysisHrZonesConfig {
   method?: 'percent_lthr' | 'percent_max_hr';
   lthr_percents?: number[];
   maxhr_percents?: number[];
+  prefer?: 'auto' | 'lthr' | 'device';
 }
 
 export interface AnalysisConfig {
@@ -165,6 +166,7 @@ export const ANALYSIS_HR_ZONES: AnalysisHrZonesConfig = {
   method: analysisConfig?.hr_zones?.method ?? 'percent_lthr',
   lthr_percents: analysisConfig?.hr_zones?.lthr_percents,
   maxhr_percents: analysisConfig?.hr_zones?.maxhr_percents,
+  prefer: analysisConfig?.hr_zones?.prefer ?? 'device',
 };
 
 export const ANALYSIS_CONFIG_LTHR: number | null =
