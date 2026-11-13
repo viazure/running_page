@@ -508,10 +508,17 @@ function ZoneTable({
           {estimated ? (
             <span
               className="rounded bg-[var(--color-sunken)] px-1.5 py-px text-[10px] font-normal text-[var(--color-muted)]"
-              title={tr(
-                '设备未提供区间，按本次数据估算',
-                'No device zones; estimated from this activity'
-              )}
+              title={
+                zone.calc_type === 'percent_max_hr_estimated'
+                  ? tr(
+                      '按本次最高心率估算，不是乳酸阈区间，也不是生理最大心率表',
+                      'Estimated from this activity’s max HR, not the lactate-threshold table'
+                    )
+                  : tr(
+                      '设备未提供区间，按本次数据估算',
+                      'No device zones; estimated from this activity'
+                    )
+              }
             >
               {tr('估算', 'Estimated')}
             </span>
@@ -2127,6 +2134,8 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
     activityMaxHr: s.hr_max,
     analysis: ANALYSIS_HR_ZONES,
     configLthr: ANALYSIS_CONFIG_LTHR,
+    hr: chart.hr,
+    t: chart.t,
   });
   const powerZone = resolvePowerZones(data.zones?.power);
 

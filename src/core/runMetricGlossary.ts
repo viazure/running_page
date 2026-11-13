@@ -46,8 +46,8 @@ export const METRIC_GLOSSARY: Record<
   lthr: {
     titleZh: '乳酸阈心率 (LTHR)',
     titleEn: 'Lactate threshold HR',
-    zh: '接近乳酸阈时的心率。%LTHR 区间常用 65/80/89/95/100%。个人 LTHR 请放本地/环境变量，不要提交到仓库。',
-    en: 'Heart rate near lactate threshold. Common %LTHR cuts are 65/80/89/95/100%. Keep personal LTHR in local/env, not the repo.',
+    zh: '接近乳酸阈时的心率。默认 %LTHR 高限是 65/80/89/95/100/107（从 <Z1 起各档；Z5 为 100–107%）。个人 LTHR / 最大心率请放本地环境变量 VITE_LTHR / VITE_MAX_HR，不要提交到仓库。',
+    en: 'Heart rate near lactate threshold. Default %LTHR highs are 65/80/89/95/100/107 (from <Z1 upward; Z5 is 100–107%). Keep personal LTHR / max HR in VITE_LTHR / VITE_MAX_HR, not the repo.',
   },
   power: {
     titleZh: '功率',

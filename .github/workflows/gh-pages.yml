@@ -100,6 +100,9 @@ jobs:
         env:
           # Prefer VITE_MAPBOX_TOKEN if that Secret exists; otherwise MAPBOX_TOKEN (upstream default name)
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN || secrets.MAPBOX_TOKEN }}
+          # Personal LTHR / max HR: repository Variables (not Secrets). Empty is fine for forks.
+          VITE_LTHR: ${{ vars.VITE_LTHR }}
+          VITE_MAX_HR: ${{ vars.VITE_MAX_HR }}
         run: PATH_PREFIX=/ pnpm build
 
       - name: Upload artifact
