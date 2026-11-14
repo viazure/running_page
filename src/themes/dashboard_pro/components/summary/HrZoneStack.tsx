@@ -13,7 +13,6 @@ import {
   ALL_YEARS_CHART_MONTHS,
   inChartWindow,
 } from '../../summary/chartWindow';
-
 /** Warm-paper triptych — lilac / sand-ochre / clay (no teal, no traffic light). */
 const ZONE_COLORS = {
   easy: 'var(--intensity-easy)',
@@ -82,8 +81,8 @@ export function HrZoneStack({
       <SectionTitle
         title={tr('强度分布', 'Intensity mix')}
         tip={tr(
-          '轻松 = Z1–Z2（淡紫），中等 = Z3（沙赭），高强度 = Z4+（陶土橙）。极化训练建议轻松约占 80%。选「全部」时只画近 24 个月。本图仍按各活动原始区间（设备或旧估算）汇总；分段分析里只有没有设备区间的活动才会按乳酸阈重分，两页不一定是同一张表。',
-          'Easy = Z1–Z2 (lilac), moderate = Z3 (sand ochre), hard = Z4+ (clay orange). Polarized training targets ~80% easy. “All” shows the last 24 months. This chart still uses each activity’s original zones (device or older estimates). In split analysis, only activities without device zones are rebinned to the lactate-threshold table, so the two views may differ.'
+          '轻松 = Z1–Z2（淡紫），中等 = Z3（沙赭），高强度 = Z4+（陶土橙）。极化训练建议把约 80% 跑量放在轻松区间。选「全部」时显示近 24 个月。',
+          'Easy = Z1–Z2 (lilac), moderate = Z3 (sand ochre), hard = Z4+ (clay orange). Polarized training: aim for ~80% easy. “All” shows the last 24 months.'
         )}
         right={
           <div className="progress-q-stat text-[11px]">

@@ -80,17 +80,21 @@ goals:
     weekly: 15
     unit: distance
 
-# ── 分段分析（公开默认；个人 LTHR/最大心率/FTP 用 VITE_LTHR / VITE_MAX_HR / VITE_FTP）──
-# prefer: device（默认）有设备心率区间就用设备的；没有时（如小米 TCX）才按站点乳酸阈表重分。
+# 出生年月（YYYY-MM）。没有设备区间和乳酸阈时，按活动当日年龄用 220−年龄估算最大心率，并标明「估算」。
+# 生涯月份图也读这里，不要在 workflow 里再写一份。
+birthday_month: '1995-02'
+
+# ── 分段分析（公开默认；个人乳酸阈 / 最大心率 / FTP 用环境变量，不要写进仓库）──
+# prefer: device（默认）有设备心率区间就用设备的；没有时才按乳酸阈表重分。
 # prefer: auto 在设备边界与站点表不一致时也会重分设备区间。prefer: lthr 强制按心率曲线重分。
-# lthr_percents 是从 <Z1 起各档高限，不是「Z1..Z5 上限」的含糊说法：
+# lthr_percents 是从 <Z1 起各档高限：
 # <Z1≤65%，Z1 65–80%，Z2 80–89%，Z3 89–95%，Z4 95–100%，Z5 100–107%，之上为 >Z5。
-# 有 VITE_MAX_HR 时 Z5 高限用最大心率 bpm，避免百分比取整偏差。
-# 不要把个人乳酸阈/最大心率/FTP 写进仓库。
+# 已配置乳酸阈且设置了 VITE_MAX_HR 时，只修正 Z5 高限，来源仍是乳酸阈重分。
+# 没有乳酸阈时不要用 VITE_MAX_HR 或当次最高心率当整张表的 100%；改用 birthday_month 的 220−年龄估算，并标明「估算」。
 analysis:
   hr_zones:
     method: percent_lthr
     prefer: device
     lthr_percents: [65, 80, 89, 95, 100, 107]
-    # 无 LTHR 时退回 %MaxHR（按当次最高心率，不是生理最大心率）
+    # 无 LTHR 时按 220−年龄估算最大心率后的分桶高限（%），必须标明「估算」
     maxhr_percents: [50, 60, 70, 80, 90, 100]

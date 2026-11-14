@@ -127,6 +127,15 @@ export const messages: Record<Locale, Record<string, string>> = {
     mapUnavailableHint: '不影响本周进度与记录',
     runHashNotFound: '找不到这条跑步记录',
     runHashNoSplits: '该记录没有分段分析',
+    hrZoneTitle: '心率区间',
+    hrZoneTitleEstimated: '心率区间（估算）',
+    hrZoneTipDevice: '按设备记录的心率区间。',
+    hrZoneTipLthr: '按乳酸阈心率重新划分。',
+    hrZoneTipMaxHrAge: '按年龄估算的心率区间，非设备原始数据。',
+    hrZoneEmptyNoBaseline: '信息不足，无法计算心率区间。',
+    hrZoneEmptyNoBaselineHint:
+      '需要设备记录的心率数据，或提供乳酸阈心率、出生年月来估算。',
+    hrZoneEmptyNoHrData: '这次活动没有记录到心率。',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -254,5 +263,14 @@ export const messages: Record<Locale, Record<string, string>> = {
     mapUnavailableHint: 'Your weekly progress and log are unaffected',
     runHashNotFound: 'This run was not found',
     runHashNoSplits: 'This run has no split analysis',
+    hrZoneTitle: 'Heart Rate Zones',
+    hrZoneTitleEstimated: 'Heart Rate Zones (estimated)',
+    hrZoneTipDevice: 'From your device.',
+    hrZoneTipLthr: 'Based on your lactate threshold heart rate.',
+    hrZoneTipMaxHrAge: 'Age-based estimate, not from device.',
+    hrZoneEmptyNoBaseline: 'Not enough info to show heart rate zones.',
+    hrZoneEmptyNoBaselineHint:
+      'Add heart rate data from your device, or provide your lactate threshold and birth month for an estimate.',
+    hrZoneEmptyNoHrData: 'No heart rate recorded for this run.',
   },
 };

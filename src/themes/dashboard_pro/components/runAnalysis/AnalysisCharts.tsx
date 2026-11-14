@@ -42,8 +42,19 @@ import {
   lapAveragePaceSeries,
   movingAveragePace,
 } from '@/core/runPaceVariants';
-import { resolveHrZones, resolvePowerZones } from '@/core/runHrZones';
-import { ANALYSIS_CONFIG_LTHR, ANALYSIS_HR_ZONES } from '@/core/config';
+import {
+  resolveHrZones,
+  resolvePowerZones,
+  type HrZoneEmptyReason,
+  type HrZoneSource,
+  type ResolvedHrZones,
+} from '@/core/runHrZones';
+import {
+  ANALYSIS_CONFIG_LTHR,
+  ANALYSIS_HR_ZONES,
+  BIRTHDAY_MONTH,
+} from '@/core/config';
+import { messages } from '@/core/i18n';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -461,6 +472,65 @@ function formatZoneRange(
   return `≥ ${Math.round(lo)}`;
 }
 
+function hrZoneCopy(key: keyof typeof messages.zh, tr: Tr): string {
+  return tr(messages.zh[key], messages.en[key]);
+}
+
+function hrZoneCaption(
+  source: HrZoneSource,
+  emptyReason: HrZoneEmptyReason | undefined,
+  tr: Tr
+): string {
+  if (source === 'device') return hrZoneCopy('hrZoneTipDevice', tr);
+  if (source === 'lthr') return hrZoneCopy('hrZoneTipLthr', tr);
+  if (source === 'maxhr_age') return hrZoneCopy('hrZoneTipMaxHrAge', tr);
+  if (emptyReason === 'no_hr_data')
+    return hrZoneCopy('hrZoneEmptyNoHrData', tr);
+  return [
+    hrZoneCopy('hrZoneEmptyNoBaseline', tr),
+    hrZoneCopy('hrZoneEmptyNoBaselineHint', tr),
+  ].join(tr(' ', ' '));
+}
+
+function HrZoneEmpty({ title, caption }: { title: string; caption: string }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[13px] font-semibold">{title}</p>
+      <p className="text-[11px] leading-relaxed text-[var(--color-muted)]">
+        {caption}
+      </p>
+    </div>
+  );
+}
+
+function HrZoneFooter({ resolved, tr }: { resolved: ResolvedHrZones; tr: Tr }) {
+  const caption = hrZoneCaption(resolved.source, resolved.emptyReason, tr);
+  if (!resolved.zone) {
+    return (
+      <HrZoneEmpty title={hrZoneCopy('hrZoneTitle', tr)} caption={caption} />
+    );
+  }
+  return (
+    <ZoneTable
+      title={
+        resolved.estimated
+          ? hrZoneCopy('hrZoneTitleEstimated', tr)
+          : hrZoneCopy('hrZoneTitle', tr)
+      }
+      zone={resolved.zone}
+      colors={[...ZONE_COLORS]}
+      unit="bpm"
+      tr={tr}
+      caption={caption}
+      estimatedTip={
+        resolved.source === 'maxhr_age'
+          ? hrZoneCopy('hrZoneTipMaxHrAge', tr)
+          : undefined
+      }
+    />
+  );
+}
+
 function ZoneTable({
   title,
   zone,
@@ -468,6 +538,8 @@ function ZoneTable({
   unit,
   tr,
   labels,
+  caption,
+  estimatedTip,
 }: {
   title: string;
   zone: ZoneInfo;
@@ -475,6 +547,8 @@ function ZoneTable({
   unit: string;
   tr: Tr;
   labels?: string[];
+  caption?: string;
+  estimatedTip?: string;
 }) {
   const secs = zone.seconds;
   const total = secs.reduce((a, b) => a + b, 0);
@@ -509,15 +583,13 @@ function ZoneTable({
             <span
               className="rounded bg-[var(--color-sunken)] px-1.5 py-px text-[10px] font-normal text-[var(--color-muted)]"
               title={
-                zone.calc_type === 'percent_max_hr_estimated'
-                  ? tr(
-                      '按本次最高心率估算，不是乳酸阈区间，也不是生理最大心率表',
-                      'Estimated from this activity’s max HR, not the lactate-threshold table'
-                    )
+                estimatedTip ??
+                (zone.calc_type === 'percent_max_hr_age_estimated'
+                  ? hrZoneCopy('hrZoneTipMaxHrAge', tr)
                   : tr(
                       '设备未提供区间，按本次数据估算',
                       'No device zones; estimated from this activity'
-                    )
+                    ))
               }
             >
               {tr('估算', 'Estimated')}
@@ -541,6 +613,11 @@ function ZoneTable({
           </p>
         ) : null}
       </div>
+      {caption ? (
+        <p className="-mt-1 mb-2 text-[11px] leading-relaxed text-[var(--color-muted)]">
+          {caption}
+        </p>
+      ) : null}
       <div className="space-y-2">
         {rows.map((r) => {
           const nearZero = r.pct < 0.5 || r.sec < 5;
@@ -1932,7 +2009,15 @@ const MetricCard = memo(function MetricCard({
   );
 });
 
-export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
+export function ChartStack({
+  data,
+  tr,
+  activityDate,
+}: {
+  data: RunSplits;
+  tr: Tr;
+  activityDate?: string | null;
+}) {
   const base = data.chart;
   // Shared live hover — scrub one chart, all crosshairs follow (no pinned sync).
   const hoverStore = useMemo(() => createHoverStore(), []);
@@ -2131,12 +2216,21 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
 
   const hrResolved = resolveHrZones({
     fit: data.zones?.hr,
-    activityMaxHr: s.hr_max,
     analysis: ANALYSIS_HR_ZONES,
     configLthr: ANALYSIS_CONFIG_LTHR,
+    birthdayMonth: BIRTHDAY_MONTH,
+    activityDate,
     hr: chart.hr,
     t: chart.t,
   });
+  const showHrZones = Boolean(
+    shown.some((d) => d.key === 'hr') ||
+    hrResolved.zone ||
+    data.zones?.hr ||
+    has(s.hr_max) ||
+    has(s.hr_avg) ||
+    (chart.hr && chart.hr.some((v) => has(v)))
+  );
   const powerZone = resolvePowerZones(data.zones?.power);
 
   const enableCompare = () => {
@@ -2395,18 +2489,8 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
                       tr={tr}
                       labels={paceZoneLabels(paceZones)}
                     />
-                  ) : d.key === 'hr' && hrResolved ? (
-                    <ZoneTable
-                      title={
-                        hrResolved.estimated
-                          ? tr('心率区间（估算）', 'HR zones (est.)')
-                          : tr('心率区间', 'HR zones')
-                      }
-                      zone={hrResolved.zone}
-                      colors={[...ZONE_COLORS]}
-                      unit="bpm"
-                      tr={tr}
-                    />
+                  ) : d.key === 'hr' && showHrZones ? (
+                    <HrZoneFooter resolved={hrResolved} tr={tr} />
                   ) : d.key === 'cad' && cadZones ? (
                     <ZoneTable
                       title={tr('步频区间', 'Cadence zones')}
@@ -2430,6 +2514,11 @@ export function ChartStack({ data, tr }: { data: RunSplits; tr: Tr }) {
             </div>
           );
         })}
+        {showHrZones && !shown.some((d) => d.key === 'hr') ? (
+          <div className="border-t border-[var(--color-border)]/70 pt-3">
+            <HrZoneFooter resolved={hrResolved} tr={tr} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

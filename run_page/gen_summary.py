@@ -46,6 +46,20 @@ DECOUPLING_MIN_SECONDS = 30 * 60
 DECOUPLING_MIN_SAMPLES = 30
 
 
+def is_device_hr_zone(hr_zone: dict[str, Any] | None) -> bool:
+    """Real device time-in-zone only. Skip percent_max_hr_estimated / derived."""
+    if not hr_zone:
+        return False
+    calc = str(hr_zone.get("calc_type") or "")
+    if re.search(r"estimated|derived", calc, re.I):
+        return False
+    highs = hr_zone.get("high_boundary") or []
+    seconds = hr_zone.get("seconds") or []
+    if not any(isinstance(b, (int, float)) and b > 0 for b in highs):
+        return False
+    return bool(seconds)
+
+
 def parse_moving_time(value: Any) -> float:
     """Mirror of the frontend parser for H:MM:SS / MM:SS / SS (float seconds).
 
@@ -284,7 +298,8 @@ def build(
         zones = split.get("zones") or {}
         hr_zone = zones.get("hr") or {}
         seconds_in_zone = hr_zone.get("seconds")
-        if seconds_in_zone:
+        # Intensity mix only sums real device zones, not estimates.
+        if is_device_hr_zone(hr_zone) and seconds_in_zone:
             capability["hrZones"] += 1
             bucket = hr_zone_monthly.setdefault(mk, [0.0] * len(seconds_in_zone))
             for i, s in enumerate(seconds_in_zone):
