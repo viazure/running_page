@@ -298,8 +298,7 @@ def build(
         zones = split.get("zones") or {}
         hr_zone = zones.get("hr") or {}
         seconds_in_zone = hr_zone.get("seconds")
-        # Intensity mix only sums real device zones. Estimated peak-HR
-        # tables (e.g. Xiaomi TCX) would otherwise inflate easy efforts.
+        # Intensity mix only sums real device zones, not estimates.
         if is_device_hr_zone(hr_zone) and seconds_in_zone:
             capability["hrZones"] += 1
             bucket = hr_zone_monthly.setdefault(mk, [0.0] * len(seconds_in_zone))
