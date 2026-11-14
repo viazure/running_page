@@ -932,37 +932,54 @@ function Sheet({
 export function RunAnalysisLauncher({
   activity,
   showFab = true,
+  open: openProp,
+  onOpen,
+  onClose,
   onOpenChange,
   anonymousTitles = false,
 }: {
   activity: Activity | null;
   /** When false, hide the bottom FAB (sheet can still open if already open). */
   showFab?: boolean;
+  /** Controlled open state; omit to manage open/close internally. */
+  open?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
   /** Fires when the analysis sheet opens/closes (hide map-dock FAB while open). */
   onOpenChange?: (open: boolean) => void;
   /** Match list/profile privacy titles when privacy is locked. */
   anonymousTitles?: boolean;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
-  const open = activity != null && openId === activity.run_id;
+  const controlled = openProp !== undefined;
+  const open =
+    activity != null && (controlled ? openProp : openId === activity.run_id);
   useEffect(() => {
     onOpenChange?.(open);
     return () => onOpenChange?.(false);
   }, [open, onOpenChange]);
+  const handleOpen = () => {
+    if (controlled) onOpen?.();
+    else if (activity) setOpenId(activity.run_id);
+  };
+  const handleClose = () => {
+    if (controlled) onClose?.();
+    else setOpenId(null);
+  };
   if (!activity) return null;
   return (
     <Suspense fallback={null}>
       {open ? (
         <Sheet
           activity={activity}
-          onClose={() => setOpenId(null)}
+          onClose={handleClose}
           anonymousTitles={anonymousTitles}
         />
       ) : showFab ? (
         <LauncherButton
           activity={activity}
           index={loadSplitsIndex()}
-          onOpen={() => setOpenId(activity.run_id)}
+          onOpen={handleOpen}
         />
       ) : null}
     </Suspense>

@@ -125,6 +125,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     mapNoGeometry: '暂无 GPS 轨迹可显示',
     mapUnavailable: '地图暂时不可用',
     mapUnavailableHint: '不影响本周进度与记录',
+    runHashNotFound: '找不到这条跑步记录',
+    runHashNoSplits: '该记录没有分段分析',
   },
   en: {
     totalDistance: 'Total Distance',
@@ -250,5 +252,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     mapNoGeometry: 'No GPS route to show',
     mapUnavailable: 'Map is temporarily unavailable',
     mapUnavailableHint: 'Your weekly progress and log are unaffected',
+    runHashNotFound: 'This run was not found',
+    runHashNoSplits: 'This run has no split analysis',
   },
 };
