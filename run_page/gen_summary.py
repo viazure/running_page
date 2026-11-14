@@ -46,7 +46,6 @@ DECOUPLING_MIN_SECONDS = 30 * 60
 DECOUPLING_MIN_SAMPLES = 30
 
 
-
 def is_device_hr_zone(hr_zone: dict[str, Any] | None) -> bool:
     """Real device time-in-zone only. Skip percent_max_hr_estimated / derived."""
     if not hr_zone:
