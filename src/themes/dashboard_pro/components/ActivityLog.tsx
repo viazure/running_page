@@ -173,6 +173,14 @@ export function ActivityLog({
     }
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const row = logRef.current?.querySelector(
+      `[data-run-id="${selectedActivity.run_id}"]`
+    );
+    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [selectedActivity, page]);
+
   const yearOptions: Array<number | null> = [null, ...years];
 
   const totalPages = Math.ceil(sorted.length / pageSize) || 1;
@@ -391,6 +399,7 @@ export function ActivityLog({
                 return (
                   <tr
                     key={a.run_id}
+                    data-run-id={a.run_id}
                     onClick={() => toggleSelect(a)}
                     className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
                       selectedActivity?.run_id === a.run_id
@@ -466,6 +475,7 @@ export function ActivityLog({
               {pageData.map((a) => (
                 <tr
                   key={a.run_id}
+                  data-run-id={a.run_id}
                   onClick={() => toggleSelect(a)}
                   className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
                     selectedActivity?.run_id === a.run_id

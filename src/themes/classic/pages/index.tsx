@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useState,
-  useMemo,
-  useCallback,
-  useRef,
-  useSyncExternalStore,
-} from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { Helmet } from 'react-helmet-async';
 import Layout from '../components/Layout';
@@ -36,51 +29,22 @@ import {
   type IViewState,
 } from '../utils/geoUtils';
 import { useTheme } from '../hooks/useTheme';
-
-const HASH_RUN_CHANGE_EVENT = 'running-page-hash-run-change';
-
-const getRunIdFromHash = () => {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash.replace('#', '');
-  if (!hash.startsWith('run_')) return null;
-  const runId = parseInt(hash.replace('run_', ''), 10);
-  return Number.isNaN(runId) ? null : runId;
-};
-
-const subscribeToRunHash = (onStoreChange: () => void) => {
-  window.addEventListener('hashchange', onStoreChange);
-  window.addEventListener(HASH_RUN_CHANGE_EVENT, onStoreChange);
-  return () => {
-    window.removeEventListener('hashchange', onStoreChange);
-    window.removeEventListener(HASH_RUN_CHANGE_EVENT, onStoreChange);
-  };
-};
-
-const notifyRunHashChange = () => {
-  window.dispatchEvent(new Event(HASH_RUN_CHANGE_EVENT));
-};
-
-const clearRunHash = () => {
-  if (window.location.hash) {
-    window.history.pushState(
-      null,
-      '',
-      `${window.location.pathname}${window.location.search}`
-    );
-    notifyRunHashChange();
-  }
-};
+import {
+  clearRunHash,
+  readRunHash,
+  replaceClearedRunHash,
+  writeRunHash,
+} from '../../../core/runHash';
+import { useRunHash } from '../../../core/hooks/useRunHash';
 
 const setRunHash = (runId: number) => {
-  const newHash = `#run_${runId}`;
-  if (window.location.hash !== newHash) {
-    window.history.pushState(null, '', newHash);
-    notifyRunHashChange();
-  }
+  // Keep an incoming `#run_<id>/analysis` suffix; classic only locates.
+  const current = readRunHash();
+  if (current?.runId === runId) return;
+  writeRunHash(runId, false, 'push');
 };
 
-const useRunHashId = () =>
-  useSyncExternalStore(subscribeToRunHash, getRunIdFromHash, () => null);
+const useRunHashId = () => useRunHash()?.runId ?? null;
 
 const Index = () => {
   const { siteTitle, siteUrl } = getSiteMetadata();
@@ -319,8 +283,7 @@ const Index = () => {
         } else {
           // If run doesn't exist, clear the hash and show a warning
           console.warn(`Run with ID ${singleRunId} not found in activities`);
-          window.history.replaceState(null, '', window.location.pathname);
-          notifyRunHashChange();
+          replaceClearedRunHash();
         }
       });
       return () => cancelAnimationFrame(frameId);

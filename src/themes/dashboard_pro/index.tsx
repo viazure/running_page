@@ -52,6 +52,15 @@ import {
   getProActivityData,
   preloadProActivityData,
 } from './hooks/useProActivities';
+import { useRunHash } from '@/core/hooks/useRunHash';
+import {
+  activityYear,
+  clearRunHash,
+  readRunHash,
+  replaceClearedRunHash,
+  writeRunHash,
+} from '@/core/runHash';
+import { loadSplitsIndex } from '@/core/splits';
 
 const loadRouteMap = () =>
   import('./components/RouteMap').then((m) => ({ default: m.RouteMap }));
@@ -142,7 +151,7 @@ function DashboardProContent({
    */
   const activitiesWithTracks = useActivitiesWithTracks(activities);
   const isUnlocked = usePrivacyUnlock();
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const years = getAvailableYears(activities);
   /** Default to the latest year that has data (falls back to ALL if none). */
   const [year, setYear] = useState<number | null>(() => years[0] ?? null);
@@ -158,6 +167,129 @@ function DashboardProContent({
   );
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [hashNotice, setHashNotice] = useState<string | null>(null);
+  const runHash = useRunHash();
+  const runHashKey = runHash
+    ? `${runHash.runId}:${runHash.analysis ? '1' : '0'}`
+    : '';
+  const analysisEntryRef = useRef<'external' | 'internal' | null>(null);
+  const applyingHashRef = useRef(false);
+  const lastAppliedHashKeyRef = useRef('');
+
+  const selectActivity = useCallback((next: Activity | null) => {
+    if (applyingHashRef.current) {
+      setSelectedActivity(next);
+      return;
+    }
+    setSelectedActivity(next);
+    if (!next) {
+      setAnalysisOpen(false);
+      analysisEntryRef.current = null;
+      clearRunHash();
+      return;
+    }
+    const current = readRunHash();
+    if (current?.analysis && current.runId !== next.run_id) {
+      setAnalysisOpen(false);
+      analysisEntryRef.current = null;
+    }
+    if (current?.runId === next.run_id && !current.analysis) return;
+    writeRunHash(
+      next.run_id,
+      false,
+      current?.runId === next.run_id ? 'replace' : 'push'
+    );
+  }, []);
+
+  const openAnalysis = useCallback(() => {
+    if (!selectedActivity) return;
+    analysisEntryRef.current = 'internal';
+    writeRunHash(selectedActivity.run_id, true, 'push');
+    setAnalysisOpen(true);
+  }, [selectedActivity]);
+
+  const closeAnalysis = useCallback(() => {
+    const id = selectedActivity?.run_id;
+    const entry = analysisEntryRef.current;
+    analysisEntryRef.current = null;
+    setAnalysisOpen(false);
+    if (id == null) return;
+    if (entry === 'internal') {
+      window.history.back();
+      return;
+    }
+    writeRunHash(id, false, 'replace');
+  }, [selectedActivity]);
+
+  useEffect(() => {
+    if (!hashNotice) return;
+    const timer = window.setTimeout(() => setHashNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [hashNotice]);
+
+  useEffect(() => {
+    if (activities.length === 0) return;
+    const hash = readRunHash();
+    if (!hash) {
+      lastAppliedHashKeyRef.current = '';
+      setAnalysisOpen(false);
+      return;
+    }
+
+    const key = `${hash.runId}:${hash.analysis ? '1' : '0'}`;
+    const hashChanged = lastAppliedHashKeyRef.current !== key;
+    lastAppliedHashKeyRef.current = key;
+    // Only jump back to home when the hash itself changes (or asks for analysis).
+    // A selected `#run_<id>` must not trap the user on the home page.
+    if (page !== 'home' && (hashChanged || hash.analysis)) {
+      onNavigateHome();
+    }
+
+    const activity = activities.find((a) => a.run_id === hash.runId);
+    if (!activity) {
+      setHashNotice(t('runHashNotFound'));
+      setAnalysisOpen(false);
+      analysisEntryRef.current = null;
+      replaceClearedRunHash();
+      return;
+    }
+
+    const y = activityYear(activity.start_date_local);
+    if (y != null && year !== y) setYear(y);
+
+    applyingHashRef.current = true;
+    setSelectedActivity(activity);
+    queueMicrotask(() => {
+      applyingHashRef.current = false;
+    });
+
+    if (!hash.analysis) {
+      setAnalysisOpen(false);
+      return;
+    }
+
+    let cancelled = false;
+    void loadSplitsIndex().then((ids) => {
+      if (cancelled) return;
+      if (!ids.has(hash.runId)) {
+        setHashNotice(t('runHashNoSplits'));
+        setAnalysisOpen(false);
+        analysisEntryRef.current = null;
+        writeRunHash(hash.runId, false, 'replace');
+        return;
+      }
+      if (analysisEntryRef.current == null) {
+        analysisEntryRef.current = 'external';
+        writeRunHash(hash.runId, true, 'replace');
+      }
+      setAnalysisOpen(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // year is read to decide a switch; omitting it avoids a setYear loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runHashKey, activities, page, onNavigateHome, t]);
 
   const filtered = useFilteredActivities(activities, filter, year);
   const modules = DASHBOARD_PRO_MODULES;
@@ -235,7 +367,7 @@ function DashboardProContent({
         <TracksPage
           activities={activitiesWithTracks}
           filter={filter}
-          onSelectActivity={setSelectedActivity}
+          onSelectActivity={selectActivity}
           onBack={onNavigateHome}
           getTitle={activityTitle}
           lightsOff={privacyActive}
@@ -259,7 +391,7 @@ function DashboardProContent({
         <LatestStrip
           activities={provinceFilteredTracks}
           getTitle={activityTitle}
-          onSelectActivity={setSelectedActivity}
+          onSelectActivity={selectActivity}
           limit={3}
         />
       ) : null}
@@ -269,7 +401,7 @@ function DashboardProContent({
         year={year}
         setYear={setYear}
         selectedActivity={selectedActivity}
-        onSelectActivity={setSelectedActivity}
+        onSelectActivity={selectActivity}
         filter={filter}
         getTitle={activityTitle}
         pageSize={ACTIVITY_LOG_PAGE_SIZE}
@@ -326,7 +458,7 @@ function DashboardProContent({
               selectedActivity={selectedActivity}
               dark={dark}
               lightsOff={privacyActive}
-              onClearSelection={() => setSelectedActivity(null)}
+              onClearSelection={() => selectActivity(null)}
               onPlaybackChange={setMapPlaying}
               className={routeMapCardClass}
             />
@@ -351,7 +483,7 @@ function DashboardProContent({
       <DualCalendarWidget
         activities={activitiesWithTracks}
         selectedActivity={selectedActivity}
-        onSelectActivity={setSelectedActivity}
+        onSelectActivity={selectActivity}
         viewYear={calYear}
         viewMonth={calMonth}
         onViewChange={onCalViewChange}
@@ -406,7 +538,7 @@ function DashboardProContent({
                 allActivities={activitiesWithTracks}
                 year={year}
                 filter={filter}
-                onSelectActivity={setSelectedActivity}
+                onSelectActivity={selectActivity}
                 compact
               />
             </div>
@@ -417,7 +549,7 @@ function DashboardProContent({
                 activities={activitiesWithTracks}
                 year={year}
                 filter={filter}
-                onSelectActivity={setSelectedActivity}
+                onSelectActivity={selectActivity}
                 onYearChange={setYear}
               />
             </div>
@@ -440,7 +572,7 @@ function DashboardProContent({
               activities={activitiesWithTracks}
               filter={filter}
               getTitle={activityTitle}
-              onSelectActivity={setSelectedActivity}
+              onSelectActivity={selectActivity}
               showRouteIcon
               showPersonalBest
               showLocationStats
@@ -469,7 +601,7 @@ function DashboardProContent({
                   selectedProvince={selectedProvince}
                   onSelectProvince={(p) => {
                     setSelectedProvince(p);
-                    setSelectedActivity(null);
+                    selectActivity(null);
                   }}
                   className={
                     allYears ? 'h-[220px] lg:h-[260px]' : 'h-[200px] lg:h-full'
@@ -504,9 +636,22 @@ function DashboardProContent({
       <Suspense fallback={null}>
         <RunAnalysisLauncher
           activity={selectedActivity}
+          open={analysisOpen}
+          onOpen={openAnalysis}
+          onClose={closeAnalysis}
           onOpenChange={setAnalysisOpen}
           anonymousTitles={useAnonymousTitles}
         />
+        {hashNotice ? (
+          <div
+            role="status"
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[80] flex justify-center px-4"
+          >
+            <p className="max-w-md rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm shadow-lg">
+              {hashNotice}
+            </p>
+          </div>
+        ) : null}
       </Suspense>
     </main>
   );
