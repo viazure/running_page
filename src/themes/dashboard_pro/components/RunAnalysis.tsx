@@ -443,7 +443,13 @@ function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
   );
 }
 
-function AnalysisBody({ data }: { data: RunSplits }) {
+function AnalysisBody({
+  data,
+  activityDate,
+}: {
+  data: RunSplits;
+  activityDate?: string | null;
+}) {
   const tr = useTr();
   const s = data.summary;
   const scrollTo = (id: string) => {
@@ -549,7 +555,7 @@ function AnalysisBody({ data }: { data: RunSplits }) {
 
         {data.chart ? (
           <div className="border-t border-[var(--color-border)] pt-4">
-            <ChartStack data={data} tr={tr} />
+            <ChartStack data={data} tr={tr} activityDate={activityDate} />
           </div>
         ) : null}
       </div>
@@ -749,7 +755,10 @@ function Loaded({
       />
       <div className="run-analysis-scroll min-h-0 flex-auto overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
         <div className="@container">
-          <AnalysisBody data={data} />
+          <AnalysisBody
+            data={data}
+            activityDate={activity.start_date_local || activity.start_date}
+          />
         </div>
       </div>
     </div>

@@ -1,17 +1,28 @@
 /**
- * HR / power zone resolution: site %LTHR table when a personal LTHR is
- * available; otherwise real device time-in-zone, then a %MaxHR estimate.
+ * HR / power zone resolution.
+ * Priority: real device time-in-zone, then site %LTHR rebin, then
+ * 220−age from config.yml birthday_month. Never use this activity's
+ * peak HR, and never use VITE_MAX_HR as the 100% anchor without LTHR.
  * Personal LTHR / max HR stay in env (VITE_LTHR / VITE_MAX_HR).
  */
 import type { ZoneInfo } from './splits';
 
 export type HrZoneMethod = 'percent_lthr' | 'percent_max_hr';
 export type HrZonePrefer = 'auto' | 'lthr' | 'device';
+export type HrZoneSource = 'device' | 'lthr' | 'maxhr_age' | 'none';
+export type HrZoneEmptyReason = 'no_baseline' | 'no_hr_data';
+
+export type ResolvedHrZones = {
+  zone: ZoneInfo | null;
+  estimated: boolean;
+  source: HrZoneSource;
+  emptyReason?: HrZoneEmptyReason;
+};
 
 /** High bounds from <Z1 upward: <Z1≤65%, Z1 65–80%, …, Z5 100–107%, then >Z5. */
 export const DEFAULT_LTHR_PERCENTS = [65, 80, 89, 95, 100, 107] as const;
 
-/** Fallback %MaxHR high bounds when no LTHR is available. */
+/** Fallback %MaxHR high bounds when estimating from age (no LTHR). */
 export const DEFAULT_MAXHR_PERCENTS = [50, 60, 70, 80, 90, 100] as const;
 
 const CHART_DT_MAX_S = 120;
@@ -24,7 +35,7 @@ export type AnalysisZoneConfig = {
   hr_method?: HrZoneMethod;
   /** Percent of LTHR for each high bound, starting at <Z1. */
   lthr_percents?: number[];
-  /** Percent of max HR when estimating without LTHR. */
+  /** Percent of estimated max HR (220−age) when no LTHR is available. */
   maxhr_percents?: number[];
   /**
    * device (default): keep real device time-in-zone; rebin estimates when LTHR is set.
@@ -198,7 +209,83 @@ function lthrZone(
   };
 }
 
-function resolveLthrZone(args: {
+function none(reason: HrZoneEmptyReason): ResolvedHrZones {
+  return {
+    zone: null,
+    estimated: false,
+    source: 'none',
+    emptyReason: reason,
+  };
+}
+
+/** Public identity `YYYY-MM` from config.yml; missing day is treated as the 1st. */
+export function parseBirthdayMonth(
+  raw?: string | null
+): { year: number; month: number } | null {
+  const m = /^(\d{4})-(\d{2})$/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (!Number.isFinite(year) || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+/** Calendar date `YYYY-MM-DD`, optionally followed by a time. */
+export function parseActivityDate(
+  raw?: string | null
+): { year: number; month: number; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (
+    !Number.isFinite(year) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+/**
+ * Age in whole years on the activity date, not today.
+ * birthday_month uses day 1 of that month.
+ */
+export function ageOnActivityDate(
+  birthdayMonth?: string | null,
+  activityDate?: string | null
+): number | null {
+  const born = parseBirthdayMonth(birthdayMonth);
+  const on = parseActivityDate(activityDate);
+  if (!born || !on) return null;
+  let age = on.year - born.year;
+  if (on.month < born.month || (on.month === born.month && on.day < 1)) {
+    age -= 1;
+  }
+  if (age <= 0 || age >= 220) return null;
+  return age;
+}
+
+/** 220−age. A later defaultMaxHeartRate hook would sit just before this. */
+export function estimatedMaxHrFromAge(age: number): number {
+  return 220 - age;
+}
+
+export function estimatedMaxHrFromBirthday(
+  birthdayMonth?: string | null,
+  activityDate?: string | null
+): number | null {
+  const age = ageOnActivityDate(birthdayMonth, activityDate);
+  if (age == null) return null;
+  const maxHr = estimatedMaxHrFromAge(age);
+  return maxHr > 0 ? maxHr : null;
+}
+
+function resolveLthrRebin(args: {
   fit?: ZoneInfo | null;
   highs: number[];
   lthr: number;
@@ -206,7 +293,7 @@ function resolveLthrZone(args: {
   prefer: HrZonePrefer;
   hr?: (number | null)[];
   t?: number[];
-}): { zone: ZoneInfo; estimated: boolean; source: string } | null {
+}): ResolvedHrZones {
   const { fit, highs, lthr, maxHr, prefer } = args;
   const rebinned = hrZonesFromChart(args.hr, args.t, highs);
   const device = isDeviceHrZone(fit);
@@ -215,179 +302,137 @@ function resolveLthrZone(args: {
     hrZoneBoundsMatch(fit?.high_boundary, highs, fit?.threshold_hr, lthr);
   const reused = consistent && fit ? reuseDeviceSeconds(fit, highs) : null;
 
-  if (prefer === 'device' && device && fit) {
-    return {
-      zone: fit,
-      estimated: false,
-      source: fit.calc_type || 'fit',
-    };
-  }
-
   if (prefer === 'lthr') {
     if (rebinned) {
       return {
         zone: lthrZone(highs, rebinned, lthr, maxHr, fit),
         estimated: false,
-        source: 'percent_lthr',
+        source: 'lthr',
       };
     }
     if (reused) {
       return {
         zone: lthrZone(highs, reused, lthr, maxHr, fit),
         estimated: false,
-        source: 'percent_lthr',
+        source: 'lthr',
       };
     }
-    return null;
+    return none('no_hr_data');
   }
 
-  // auto, and estimated under prefer:device (device branch already returned)
+  // auto (device + matching bounds already returned as source:device)
   if (device && reused) {
     return {
       zone: lthrZone(highs, reused, lthr, maxHr, fit),
       estimated: false,
-      source: 'percent_lthr',
+      source: 'lthr',
     };
   }
   if (rebinned) {
     return {
       zone: lthrZone(highs, rebinned, lthr, maxHr, fit),
       estimated: false,
-      source: 'percent_lthr',
+      source: 'lthr',
     };
   }
-  // No series (or too short): never paste old seconds onto new LTHR bounds.
-  return null;
+  return none('no_hr_data');
 }
 
 /**
  * Resolve HR zones for the analysis UI.
- * 1) With LTHR and method percent_lthr: keep real device time-in-zone
- *    (default prefer:device). Estimates are rebinned to the site table.
- *    prefer:auto also rebins a device zone when its bounds do not match.
- * 2) Else real device time-in-zone (not estimates).
- * 3) Else %MaxHR estimate from activity max HR (marked estimated).
+ * 1) Real device time-in-zone (not percent_max_hr_estimated).
+ * 2) With LTHR and method percent_lthr: rebin chart.hr to the site table.
+ *    VITE_MAX_HR only corrects the Z5 high bound; source stays lthr.
+ * 3) Else 220−age from birthday_month vs the activity date (source maxhr_age).
+ *    Skip VITE_MAX_HR and this activity's peak HR.
+ * 4) Else source none — no all-zero placeholder chart.
  */
 export function resolveHrZones(args: {
   fit?: ZoneInfo | null;
-  activityMaxHr?: number | null;
   analysis?: AnalysisZoneConfig | null;
   /** Optional public/default LTHR — prefer env for personal values. */
   configLthr?: number | null;
-  /** Test hook / optional cap; VITE_MAX_HR wins when set. */
+  /** Test hook / optional Z5 cap; VITE_MAX_HR wins when set. Ignored without LTHR. */
   maxHr?: number | null;
   hr?: (number | null)[] | null;
   t?: number[] | null;
-}): { zone: ZoneInfo; estimated: boolean; source: string } | null {
+  /** Public identity from config.yml, `YYYY-MM`. */
+  birthdayMonth?: string | null;
+  /** Activity start date (`YYYY-MM-DD` or local datetime), not today. */
+  activityDate?: string | null;
+}): ResolvedHrZones {
   const fit = args.fit;
   const method = zoneMethod(args.analysis);
   const prefer = zonePrefer(args.analysis);
   const lthr = personalLthr(args.configLthr ?? fit?.threshold_hr ?? null);
   const maxHrCap = personalMaxHr(args.maxHr);
-  const activityMaxHr =
-    (fit?.max_hr != null && fit.max_hr > 0 ? fit.max_hr : null) ??
-    (args.activityMaxHr != null && args.activityMaxHr > 0
-      ? args.activityMaxHr
-      : null);
-  const displayMaxHr = maxHrCap ?? activityMaxHr;
   const hr = args.hr ?? undefined;
   const t = args.t ?? undefined;
+  const device = isDeviceHrZone(fit);
 
-  if (method === 'percent_lthr' && lthr) {
-    const pcts = args.analysis?.lthr_percents?.length
-      ? args.analysis.lthr_percents
-      : [...DEFAULT_LTHR_PERCENTS];
-    const highs = lthrHighBounds(lthr, pcts, maxHrCap);
-    return resolveLthrZone({
+  const lthrPcts = args.analysis?.lthr_percents?.length
+    ? args.analysis.lthr_percents
+    : [...DEFAULT_LTHR_PERCENTS];
+  const lthrHighs =
+    method === 'percent_lthr' && lthr
+      ? lthrHighBounds(lthr, lthrPcts, maxHrCap)
+      : null;
+
+  const mustRebinDevice =
+    Boolean(device && lthr && lthrHighs) &&
+    (prefer === 'lthr' ||
+      (prefer === 'auto' &&
+        !hrZoneBoundsMatch(
+          fit?.high_boundary,
+          lthrHighs!,
+          fit?.threshold_hr,
+          lthr
+        )));
+
+  if (device && fit && !mustRebinDevice) {
+    return { zone: fit, estimated: false, source: 'device' };
+  }
+
+  if (method === 'percent_lthr' && lthr && lthrHighs) {
+    return resolveLthrRebin({
       fit,
-      highs,
+      highs: lthrHighs,
       lthr,
-      maxHr: displayMaxHr,
+      maxHr: maxHrCap,
       prefer,
-      hr: hr ?? undefined,
-      t: t ?? undefined,
+      hr,
+      t,
     });
   }
 
-  if (isDeviceHrZone(fit) && fit) {
-    return {
-      zone: fit,
-      estimated: false,
-      source: fit.calc_type || 'fit',
-    };
-  }
-
-  if (
-    isEstimatedHrZone(fit) &&
-    fit?.high_boundary?.some((b) => b != null && b > 0) &&
-    fit.seconds?.length
-  ) {
-    return {
-      zone: fit,
-      estimated: true,
-      source: fit.calc_type || 'percent_max_hr_estimated',
-    };
-  }
-
-  const maxHr = displayMaxHr;
-  if (!maxHr)
-    return fit?.seconds?.length
-      ? { zone: fit, estimated: true, source: fit.calc_type || 'fit' }
-      : null;
-
-  const pcts = args.analysis?.maxhr_percents?.length
-    ? args.analysis.maxhr_percents
-    : [...DEFAULT_MAXHR_PERCENTS];
-  const highs = boundsFromPercents(maxHr, pcts);
-  const rebinned = hrZonesFromChart(hr ?? undefined, t ?? undefined, highs);
-  const seconds =
-    rebinned ??
-    (fit?.seconds?.length === highs.length
-      ? fit.seconds
-      : fit?.seconds?.length === highs.length + 1
-        ? fit.seconds
-        : null);
-  if (!seconds) {
+  // No LTHR: skip VITE_MAX_HR / activity peak. Age estimate only.
+  // A defaultMaxHeartRate hook would be inserted here, before 220−age.
+  const ageMaxHr = estimatedMaxHrFromBirthday(
+    args.birthdayMonth,
+    args.activityDate
+  );
+  if (ageMaxHr) {
+    const pcts = args.analysis?.maxhr_percents?.length
+      ? args.analysis.maxhr_percents
+      : [...DEFAULT_MAXHR_PERCENTS];
+    const highs = boundsFromPercents(ageMaxHr, pcts);
+    const rebinned = hrZonesFromChart(hr, t, highs);
+    if (!rebinned) return none('no_hr_data');
     return {
       zone: {
-        seconds: Array.from({ length: highs.length }, () => 0),
+        seconds: rebinned,
         high_boundary: highs,
-        calc_type: 'percent_max_hr_estimated',
-        max_hr: maxHr,
-        threshold_hr: lthr,
+        calc_type: 'percent_max_hr_age_estimated',
+        max_hr: ageMaxHr,
+        threshold_hr: null,
         resting_hr: fit?.resting_hr ?? null,
       },
       estimated: true,
-      source: 'percent_max_hr_estimated',
+      source: 'maxhr_age',
     };
   }
-  // Avoid inventing an all-zero table when we had to pad placeholders.
-  if (!seconds.some((s) => s > 0) && !rebinned) {
-    return {
-      zone: {
-        seconds,
-        high_boundary: highs,
-        calc_type: 'percent_max_hr_estimated',
-        max_hr: maxHr,
-        threshold_hr: lthr,
-        resting_hr: fit?.resting_hr ?? null,
-      },
-      estimated: true,
-      source: 'percent_max_hr_estimated',
-    };
-  }
-  return {
-    zone: {
-      seconds,
-      high_boundary: highs,
-      calc_type: 'percent_max_hr_estimated',
-      max_hr: maxHr,
-      threshold_hr: lthr,
-      resting_hr: fit?.resting_hr ?? null,
-    },
-    estimated: true,
-    source: 'percent_max_hr_estimated',
-  };
+
+  return none('no_baseline');
 }
 
 /** Power zones: FIT only — never invent. */

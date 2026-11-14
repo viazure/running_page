@@ -46,8 +46,8 @@ export const METRIC_GLOSSARY: Record<
   lthr: {
     titleZh: '乳酸阈心率 (LTHR)',
     titleEn: 'Lactate threshold HR',
-    zh: '接近乳酸阈时的心率。默认 %LTHR 高限是 65/80/89/95/100/107（从 <Z1 起各档；Z5 为 100–107%）。个人 LTHR / 最大心率请放本地环境变量 VITE_LTHR / VITE_MAX_HR，不要提交到仓库。',
-    en: 'Heart rate near lactate threshold. Default %LTHR highs are 65/80/89/95/100/107 (from <Z1 upward; Z5 is 100–107%). Keep personal LTHR / max HR in VITE_LTHR / VITE_MAX_HR, not the repo.',
+    zh: '接近乳酸阈时的心率。默认 %LTHR 高限是 65/80/89/95/100/107（从 <Z1 起各档；Z5 为 100–107%）。个人 LTHR / 最大心率请放本地环境变量 VITE_LTHR / VITE_MAX_HR，不要提交到仓库。VITE_MAX_HR 只在已配置乳酸阈时修正 Z5 高限。',
+    en: 'Heart rate near lactate threshold. Default %LTHR highs are 65/80/89/95/100/107 (from <Z1 upward; Z5 is 100–107%). Keep personal LTHR / max HR in VITE_LTHR / VITE_MAX_HR, not the repo. VITE_MAX_HR only corrects the Z5 high bound when LTHR is set.',
   },
   power: {
     titleZh: '功率',

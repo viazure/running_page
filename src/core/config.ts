@@ -55,6 +55,8 @@ interface AppConfig {
   locale: Locale;
   theme: 'light' | 'dark' | 'system';
   theme_preset: string;
+  /** Public identity, YYYY-MM. Used to estimate max HR when no LTHR is set. */
+  birthday_month?: string;
   privacy_mode?: boolean;
   /** Allow temporary unlock of privacy mode (easter egg). Default true. */
   privacy_unlock?: boolean;
@@ -178,3 +180,15 @@ export const ANALYSIS_CONFIG_FTP: number | null =
   analysisConfig?.ftp != null && Number.isFinite(analysisConfig.ftp)
     ? Number(analysisConfig.ftp)
     : null;
+
+function parseBirthdayMonthConfig(raw?: string): string | null {
+  const m = /^(\d{4})-(\d{2})$/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const month = Number(m[2]);
+  return month >= 1 && month <= 12 ? `${m[1]}-${m[2]}` : null;
+}
+
+/** Public identity from config.yml (`YYYY-MM`), or null if missing/invalid. */
+export const BIRTHDAY_MONTH: string | null = parseBirthdayMonthConfig(
+  (config as AppConfig).birthday_month
+);
