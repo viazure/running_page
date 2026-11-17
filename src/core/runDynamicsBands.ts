@@ -162,3 +162,182 @@ export function cadenceGarminZonesFromChart(
     labels: dynamicsBandLabels('cadence').map((x) => x.label),
   };
 }
+
+/** Percentile names for dynamics colors, best → worst. Not qualitative grades. */
+export const DYNAMICS_BAND_PERCENTILE_LABELS = [
+  { zh: '优于约 95%', en: 'Better than ~95%' },
+  { zh: '70%–95%', en: '70%–95%' },
+  { zh: '30%–69%', en: '30%–69%' },
+  { zh: '5%–29%', en: '5%–29%' },
+  { zh: '不到 5%', en: 'Below 5%' },
+] as const;
+
+export function dynamicsPercentileNames(
+  tr: (zh: string, en: string) => string
+): string[] {
+  return DYNAMICS_BAND_PERCENTILE_LABELS.map((row) => tr(row.zh, row.en));
+}
+
+/**
+ * Finite extent that keeps all five band stripes visible.
+ * Each open-ended outer band gets the width of its neighboring inner band.
+ */
+export function dynamicsBandExtent(metric: DynamicsMetric): [number, number] {
+  const cuts = DYNAMICS_BANDS[metric];
+  const firstSpan = cuts[1] - cuts[0];
+  const lastSpan = cuts[cuts.length - 1] - cuts[cuts.length - 2];
+  return [cuts[0] - firstSpan, cuts[cuts.length - 1] + lastSpan];
+}
+
+const DYNAMICS_DOMAIN_PAD = 0.07;
+
+/**
+ * Y domain for VO / VR / GCT: five-band extent ∪ data extrema (and avg).
+ * The existing 7% pad stays outside the extrema and must not zoom away bands.
+ */
+export function dynamicsScatterDomain(
+  metric: 'vo' | 'vr' | 'gct',
+  values: number[],
+  avg?: number | null
+): [number, number] {
+  const [bandLo, bandHi] = dynamicsBandExtent(metric);
+  const nums = values.filter((v) => Number.isFinite(v));
+  let lo = nums.length ? Math.min(...nums) : bandLo;
+  let hi = nums.length ? Math.max(...nums) : bandHi;
+  if (avg != null && Number.isFinite(avg)) {
+    lo = Math.min(lo, avg);
+    hi = Math.max(hi, avg);
+  }
+  if (hi - lo < 1e-6) {
+    lo -= 1;
+    hi += 1;
+  }
+  const pad = (hi - lo) * DYNAMICS_DOMAIN_PAD;
+  lo -= pad;
+  hi += pad;
+  return [Math.min(lo, bandLo), Math.max(hi, bandHi)];
+}
+
+/**
+ * Cadence Y-domain base window (spm). All five bands stay visible
+ * inside this span; expand only when a run falls outside it.
+ */
+export const CADENCE_Y_DOMAIN: [number, number] = [90, 190];
+
+function niceCeil(value: number, step: number): number {
+  return Math.round(Math.ceil((value - 1e-9) / step) * step * 1e6) / 1e6;
+}
+
+function niceFloor(value: number, step: number): number {
+  return Math.round(Math.floor((value + 1e-9) / step) * step * 1e6) / 1e6;
+}
+
+function strideNiceStep(x: number): number {
+  if (x <= 2.5) return 0.1;
+  if (x <= 5) return 0.2;
+  return 0.5;
+}
+
+/**
+ * Stride Y domain (m): always 0 at the bottom; the top is a nice tick
+ * above this run's max plus a little headroom. Not locked to 0.6–1.1
+ * or to a fixed 0–2.0. The domain includes every sample, so points are
+ * not clamped to the axis edge.
+ */
+export function strideYDomain(
+  values: number[],
+  avg?: number | null
+): [number, number] {
+  const nums = values.filter((v) => Number.isFinite(v));
+  let hi = nums.length ? Math.max(...nums) : 1;
+  if (avg != null && Number.isFinite(avg)) hi = Math.max(hi, avg);
+  if (hi < 0) hi = 0;
+  const pad = Math.max(hi * 0.06, 0.08);
+  const step = strideNiceStep(hi + pad);
+  let domainHi = niceCeil(hi + pad, step);
+  if (domainHi <= hi) domainHi = niceCeil(hi + step, step);
+  if (domainHi <= 0) domainHi = 0.1;
+  return [0, domainHi];
+}
+
+/**
+ * Cadence Y domain (spm): keep 90–190 so all five bands stay visible.
+ * Expand (with padding, not flush to the extreme) only when this run
+ * goes below 90 or above 190. Never shrink to wrap only this run.
+ */
+export function cadenceYDomain(
+  values: number[],
+  avg?: number | null
+): [number, number] {
+  const [baseLo, baseHi] = CADENCE_Y_DOMAIN;
+  const nums = values.filter((v) => Number.isFinite(v));
+  let min = nums.length ? Math.min(...nums) : baseLo;
+  let max = nums.length ? Math.max(...nums) : baseHi;
+  if (avg != null && Number.isFinite(avg)) {
+    min = Math.min(min, avg);
+    max = Math.max(max, avg);
+  }
+  let lo = baseLo;
+  let hi = baseHi;
+  if (min < baseLo) {
+    const pad = Math.max(5, (baseHi - min) * 0.05);
+    const step = min - pad >= 40 ? 10 : 5;
+    lo = niceFloor(min - pad, step);
+    if (lo >= min) lo = niceFloor(min - step, step);
+    if (lo < 0) lo = 0;
+  }
+  if (max > baseHi) {
+    const pad = Math.max(5, (max - baseLo) * 0.05);
+    const step = max + pad - baseLo >= 40 ? 10 : 5;
+    hi = niceCeil(max + pad, step);
+    if (hi <= max) hi = niceCeil(max + step, step);
+  }
+  return [lo, hi];
+}
+
+/** Scatter-chart Y domain. VO/VR/GCT fill all five bands. */
+export function scatterMetricDomain(
+  key: string,
+  values: number[],
+  avg?: number | null
+): [number, number] {
+  if (key === 'cad') return cadenceYDomain(values, avg);
+  if (key === 'stride') return strideYDomain(values, avg);
+  if (key === 'vo' || key === 'vr' || key === 'gct') {
+    return dynamicsScatterDomain(key, values, avg);
+  }
+  const nums = values.filter((v) => Number.isFinite(v));
+  if (!nums.length) return [0, 1];
+  let lo = Math.min(...nums);
+  let hi = Math.max(...nums);
+  if (avg != null && Number.isFinite(avg)) {
+    lo = Math.min(lo, avg);
+    hi = Math.max(hi, avg);
+  }
+  if (hi - lo < 1e-6) {
+    lo -= 1;
+    hi += 1;
+  }
+  const pad = (hi - lo) * DYNAMICS_DOMAIN_PAD;
+  lo -= pad;
+  hi += pad;
+  if (hi <= lo) hi = lo + 1;
+  return [lo, hi];
+}
+
+export function dynamicsLegendRange(
+  metric: DynamicsMetric,
+  rangeLabel: string,
+  unit: string
+): string {
+  if (unit === '%') return `${rangeLabel}%`;
+  return `${rangeLabel} ${unit}`.trim();
+}
+
+export function cadenceZoneNameAndRange(
+  tr: (zh: string, en: string) => string
+): { name: string; range: string }[] {
+  const names = dynamicsPercentileNames(tr);
+  const ranges = dynamicsBandLabels('cadence');
+  return names.map((name, i) => ({ name, range: ranges[i]?.label ?? '' }));
+}

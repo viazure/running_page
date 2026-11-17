@@ -1,4 +1,12 @@
-import { Suspense, use, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { bookmarkFabClass, desktopCenteredFabClass } from './MapDockFab';
 import type { Activity } from '@/types';
@@ -15,6 +23,14 @@ import {
 } from '@/core/splits';
 import { ChartStack } from './runAnalysis/AnalysisCharts';
 import { ChipScrollRow } from './ChipScrollRow';
+import {
+  SPLITS_BAR_FILL,
+  SPLITS_FAST_PACE_TEXT_CLASS,
+  SPLITS_PACE_COL_CLASS,
+  splitBarRatio,
+  splitDeltaClass,
+  splitPaceAxis,
+} from '@/core/analysisPanelCopy';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -236,14 +252,24 @@ function TeScale({
 }
 
 // ---------------------------------------------------------------- splits (Garmin-like)
-function Delta({ cur, prev, invert }: { cur: N; prev: N; invert?: boolean }) {
+function Delta({
+  cur,
+  prev,
+  invert,
+  kind,
+}: {
+  cur: N;
+  prev: N;
+  invert?: boolean;
+  kind: 'pace' | 'hr';
+}) {
   if (!has(cur) || !has(prev) || prev === 0) return null;
   const better = invert ? cur < prev : cur > prev;
   const worse = invert ? cur > prev : cur < prev;
   if (!better && !worse) return null;
   return (
     <span
-      className={`ml-0.5 text-[9px] ${better ? 'text-emerald-500' : 'text-rose-500'}`}
+      className={`ml-0.5 text-[9px] ${splitDeltaClass(kind, better)}`}
       aria-hidden
     >
       {better ? '▲' : '▼'}
@@ -263,7 +289,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
     .filter((r) => !r.partial && has(r.pace) && (r.distance ?? 0) >= 200)
     .map((r) => r.pace as number);
   const fast = paces.length ? Math.min(...paces) : 0;
-  const slow = paces.length ? Math.max(...paces) : 0;
+  const axis = splitPaceAxis(paces);
 
   return (
     <div>
@@ -297,20 +323,45 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
       {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
       <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
         <div className="mb-3 space-y-1 @min-[48rem]:mb-0 @min-[48rem]:space-y-0">
-          {/* Shared h-8 row box with table so data rows stay vertically aligned. */}
-          <div
-            aria-hidden
-            className="box-border hidden h-8 items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
-          >
-            <span className="invisible text-[12px] font-medium">#</span>
+          {/* Compact pace scale above the bars; same h-8 box as the table header. */}
+          <div className="box-border flex h-8 items-center gap-2 border-b border-[var(--color-border)]">
+            <span className="w-4 shrink-0" aria-hidden />
+            <div className="relative h-full min-w-0 flex-1">
+              {axis
+                ? axis.ticks.map((tick, i) => {
+                    const ratio = splitBarRatio(tick, axis);
+                    const style: CSSProperties =
+                      i === 0
+                        ? { left: 0 }
+                        : i === axis.ticks.length - 1
+                          ? { right: 0 }
+                          : {
+                              left: `${ratio * 100}%`,
+                              transform: 'translateX(-50%)',
+                            };
+                    return (
+                      <span
+                        key={tick}
+                        className="metric absolute top-1/2 -translate-y-1/2 text-[10px] text-[var(--color-muted)]"
+                        style={style}
+                      >
+                        {formatPaceSeconds(tick)}
+                      </span>
+                    );
+                  })
+                : null}
+            </div>
+            <span
+              className={`metric invisible ${SPLITS_PACE_COL_CLASS}`}
+              aria-hidden
+            >
+              0'00"
+            </span>
           </div>
           {rows.map((r) => {
             const p = r.pace ?? 0;
             const tiny = (r.distance ?? 0) < 200;
-            const ratio =
-              slow > fast && has(r.pace)
-                ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
-                : 0.5;
+            const ratio = axis && has(r.pace) ? splitBarRatio(p, axis) : 0.5;
             const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
             return (
               <div
@@ -320,20 +371,24 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                 <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
                   {r.index}
                 </span>
-                <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                <div className="h-4 min-w-0 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
                   <div
                     className="h-full rounded-sm"
                     style={{
-                      width: `${25 + ratio * 75}%`,
-                      backgroundColor: 'var(--color-accent)',
-                      opacity: 0.35 + ratio * 0.55,
+                      width: `${ratio * 100}%`,
+                      background: SPLITS_BAR_FILL,
                     }}
                   />
                 </div>
                 <span
-                  className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                  className={`metric ${SPLITS_PACE_COL_CLASS} ${isFast ? `font-semibold ${SPLITS_FAST_PACE_TEXT_CLASS}` : ''}`}
                 >
                   {formatPaceSeconds(r.pace)}
+                  {isFast ? (
+                    <span className="sr-only">
+                      {tr('本趟最快', 'fastest split')}
+                    </span>
+                  ) : null}
                 </span>
               </div>
             );
@@ -381,14 +436,24 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                       {formatClock(r.time)}
                     </td>
                     <td
-                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
+                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? `font-semibold ${SPLITS_FAST_PACE_TEXT_CLASS}` : ''}`}
                     >
                       {formatPaceSeconds(r.pace)}
-                      <Delta cur={r.pace} prev={prev?.pace} invert />
+                      {isFast ? (
+                        <span className="sr-only">
+                          {tr('本趟最快', 'fastest split')}
+                        </span>
+                      ) : null}
+                      <Delta
+                        cur={r.pace}
+                        prev={prev?.pace}
+                        invert
+                        kind="pace"
+                      />
                     </td>
                     <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {fmt(r.hr_avg)}
-                      <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
+                      <Delta cur={r.hr_avg} prev={prev?.hr_avg} kind="hr" />
                     </td>
                   </tr>
                 );
@@ -402,45 +467,216 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
 }
 
 // ---------------------------------------------------------------- stack
-function PrimaryStats({ data, tr }: { data: RunSplits; tr: Tr }) {
+function primaryStatCells(data: RunSplits, tr: Tr) {
   const s = data.summary;
-  const cells = [
+  return [
     {
-      key: 'dist',
+      key: 'dist' as const,
       label: tr('距离', 'Distance'),
       value: has(s.distance) ? (s.distance / 1000).toFixed(2) : '--',
       unit: 'km',
     },
     {
-      key: 'time',
+      key: 'time' as const,
       label: tr('用时', 'Time'),
       value: formatClock(s.time),
     },
     {
-      key: 'pace',
+      key: 'pace' as const,
       label: tr('平均配速', 'Avg pace'),
       value: formatPaceSeconds(s.pace),
     },
   ];
+}
+
+function PrimaryStatIcon({
+  kind,
+  className,
+}: {
+  kind: 'dist' | 'time' | 'pace';
+  className?: string;
+}) {
+  const common = {
+    className,
+    fill: 'none',
+    viewBox: '0 0 24 24',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  if (kind === 'dist') {
+    // Lucide `route`
+    return (
+      <svg {...common}>
+        <path d="M9 5h8.5a1 1 0 010 7h-11a1 1 0 000 7H15" />
+        <circle cx="18" cy="19" r="3" />
+        <circle cx="6" cy="5" r="3" />
+      </svg>
+    );
+  }
+  if (kind === 'time') {
+    // Lucide `timer`
+    return (
+      <svg {...common}>
+        <line x1="10" x2="14" y1="2" y2="2" />
+        <line x1="12" x2="15" y1="14" y2="11" />
+        <circle cx="12" cy="14" r="8" />
+      </svg>
+    );
+  }
+  // Lucide `gauge`
   return (
-    <div className="grid grid-cols-3 gap-3 @min-[40rem]:gap-10">
-      {cells.map((c) => (
-        <div key={c.key} className="min-w-0 text-center">
-          <p className="metric text-[1.65rem] leading-none font-bold tracking-tight @min-[40rem]:text-[2.125rem]">
-            {c.value}
-            {c.unit ? (
-              <span className="ml-1 text-xs font-medium text-[var(--color-muted)]">
-                {c.unit}
-              </span>
-            ) : null}
-          </p>
-          <p className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)] @min-[40rem]:mt-2">
-            {c.label}
-          </p>
-        </div>
-      ))}
-    </div>
+    <svg {...common}>
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </svg>
   );
+}
+
+function lerp(a: number, b: number, p: number) {
+  return a + (b - a) * p;
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function lockPageScroll() {
+  const html = document.documentElement;
+  const body = document.body;
+  const scrollbarWidth = window.innerWidth - html.clientWidth;
+  const prevHtmlOverflow = html.style.overflow;
+  const prevBodyOverflow = body.style.overflow;
+  const prevHtmlPaddingRight = html.style.paddingRight;
+  html.style.overflow = 'hidden';
+  body.style.overflow = 'hidden';
+  if (scrollbarWidth > 0) {
+    html.style.paddingRight = `${scrollbarWidth}px`;
+  }
+  return () => {
+    html.style.overflow = prevHtmlOverflow;
+    body.style.overflow = prevBodyOverflow;
+    html.style.paddingRight = prevHtmlPaddingRight;
+  };
+}
+
+function collapsedChromeOffset(scroller: HTMLElement) {
+  const title = scroller.querySelector('.ra-title-bar') as HTMLElement | null;
+  const chips = scroller.querySelector('.ra-anchor-bar') as HTMLElement | null;
+  return (title?.offsetHeight ?? 0) + (chips?.offsetHeight ?? 0) + 12;
+}
+
+function scrollToAnalysisSection(id: string) {
+  const el = document.getElementById(id);
+  const scroller = document.querySelector(
+    '.run-analysis-scroll'
+  ) as HTMLElement | null;
+  if (!el || !scroller) return;
+  const reduced = prefersReducedMotion();
+  const behavior: 'auto' | 'smooth' = reduced ? 'auto' : 'smooth';
+  scroller.dataset.raJumping = '1';
+
+  const finish = () => {
+    if (id !== 'ra-overview') {
+      const latest = document.getElementById(id);
+      if (latest) {
+        const offset = collapsedChromeOffset(scroller);
+        const next = Math.max(
+          0,
+          latest.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top +
+            scroller.scrollTop -
+            offset
+        );
+        if (Math.abs(scroller.scrollTop - next) > 1) {
+          scroller.scrollTo({ top: next, behavior: 'auto' });
+        }
+      }
+    }
+    delete scroller.dataset.raJumping;
+  };
+
+  if (id === 'ra-overview') {
+    scroller.scrollTo({ top: 0, behavior });
+  } else {
+    const offset = collapsedChromeOffset(scroller);
+    const top = Math.max(
+      0,
+      el.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top +
+        scroller.scrollTop -
+        offset
+    );
+    scroller.scrollTo({ top, behavior });
+  }
+
+  if (behavior === 'auto') {
+    finish();
+    return;
+  }
+
+  let settled = false;
+  const once = () => {
+    if (settled) return;
+    settled = true;
+    scroller.removeEventListener('scrollend', once);
+    window.clearTimeout(timer);
+    finish();
+  };
+  const timer = window.setTimeout(once, 500);
+  scroller.addEventListener('scrollend', once);
+}
+
+function analysisAnchors(data: RunSplits, tr: Tr) {
+  const chart = data.chart;
+  const chartUsable = Boolean(chart && chart.d.length >= 2);
+  const seriesHas = (arr?: (number | null)[] | null) =>
+    Boolean(arr?.some((v) => has(v)));
+  const canShowSplits = data.splits.length > 0 || data.laps.length > 0;
+  const canShowForm =
+    chartUsable &&
+    (seriesHas(chart?.vo) ||
+      seriesHas(chart?.vr) ||
+      seriesHas(chart?.gct) ||
+      Boolean(
+        chart?.pace &&
+        chart?.cad &&
+        chart.pace.some(
+          (p, i) => has(p) && has(chart.cad![i]) && p > 0 && chart.cad![i]! > 0
+        )
+      ));
+  return {
+    canShowSplits,
+    anchors: (
+      [
+        { id: 'ra-overview', label: tr('概览', 'Overview') },
+        { id: 'ra-splits', label: tr('分段', 'Splits'), show: canShowSplits },
+        {
+          id: 'ra-pace',
+          label: tr('配速', 'Pace'),
+          show: chartUsable && seriesHas(chart?.pace),
+        },
+        {
+          id: 'ra-hr',
+          label: tr('心率', 'HR'),
+          show: chartUsable && seriesHas(chart?.hr),
+        },
+        {
+          id: 'ra-power',
+          label: tr('功率', 'Power'),
+          show: chartUsable && seriesHas(chart?.power),
+        },
+        {
+          id: 'ra-cadence',
+          label: tr('步频', 'Cadence'),
+          show: chartUsable && seriesHas(chart?.cad),
+        },
+        { id: 'ra-form', label: tr('形态', 'Form'), show: canShowForm },
+      ] as { id: string; label: string; show?: boolean }[]
+    ).filter((a) => a.show !== false),
+  };
 }
 
 function AnalysisBody({
@@ -452,83 +688,10 @@ function AnalysisBody({
 }) {
   const tr = useTr();
   const s = data.summary;
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    const scroller = document.querySelector('.run-analysis-scroll');
-    if (!el || !scroller) return;
-    const sticky = scroller.querySelector(
-      '.ra-anchor-bar'
-    ) as HTMLElement | null;
-    const offset = (sticky?.offsetHeight ?? 0) + 12;
-    const top =
-      el.getBoundingClientRect().top -
-      scroller.getBoundingClientRect().top +
-      scroller.scrollTop -
-      offset;
-    scroller.scrollTo({ top, behavior: 'smooth' });
-  };
-  // Chip visibility matches ChartStack / SplitsBlock: hide when no target.
-  const chart = data.chart;
-  const chartUsable = Boolean(chart && chart.d.length >= 2);
-  const seriesHas = (arr?: (number | null)[] | null) =>
-    Boolean(arr?.some((v) => has(v)));
-  const canShowSplits = data.splits.length > 0 || data.laps.length > 0;
-  const canShowForm =
-    chartUsable &&
-    (seriesHas(chart?.vo) ||
-      seriesHas(chart?.vr) ||
-      seriesHas(chart?.gct) ||
-      // Derived stride (same as AnalysisCharts enrichChart).
-      Boolean(
-        chart?.pace &&
-        chart?.cad &&
-        chart.pace.some(
-          (p, i) => has(p) && has(chart.cad![i]) && p > 0 && chart.cad![i]! > 0
-        )
-      ));
-  const anchors: { id: string; label: string; show?: boolean }[] = [
-    { id: 'ra-overview', label: tr('概览', 'Overview') },
-    { id: 'ra-splits', label: tr('分段', 'Splits'), show: canShowSplits },
-    {
-      id: 'ra-pace',
-      label: tr('配速', 'Pace'),
-      show: chartUsable && seriesHas(chart?.pace),
-    },
-    {
-      id: 'ra-hr',
-      label: tr('心率', 'HR'),
-      show: chartUsable && seriesHas(chart?.hr),
-    },
-    {
-      id: 'ra-power',
-      label: tr('功率', 'Power'),
-      show: chartUsable && seriesHas(chart?.power),
-    },
-    {
-      id: 'ra-cadence',
-      label: tr('步频', 'Cadence'),
-      show: chartUsable && seriesHas(chart?.cad),
-    },
-    { id: 'ra-form', label: tr('形态', 'Form'), show: canShowForm },
-  ].filter((a) => a.show !== false);
+  const { canShowSplits } = analysisAnchors(data, tr);
 
   return (
     <div>
-      <div className="ra-anchor-bar sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 md:-mx-6 md:px-6">
-        <ChipScrollRow contentClassName="gap-1.5" fadeFrom="var(--color-card)">
-          {anchors.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => scrollTo(a.id)}
-              className="shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] bg-[var(--color-sunken)] px-3 py-1 text-[11px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
-            >
-              {a.label}
-            </button>
-          ))}
-        </ChipScrollRow>
-      </div>
-
       <div className="space-y-4 pt-3">
         <div id="ra-overview">
           <MetricGrid data={data} tr={tr} />
@@ -621,7 +784,7 @@ function AnalysisSkeleton({
     <div
       className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
-      <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
+      <div className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 py-1.5">
             <h2
@@ -652,18 +815,20 @@ function AnalysisSkeleton({
         </div>
       </div>
       <div className="min-h-0 flex-auto px-4 py-3 md:px-6 md:py-4">
-        <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="min-w-0 space-y-2">
-              <Pulse className="h-5 w-14" />
-              <Pulse className="h-3 w-12" />
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 space-y-2">
-          <Pulse className="h-3 w-16" />
-          <Pulse className="h-2 w-full rounded-full" />
-          <Pulse className="h-2 w-full rounded-full" />
+        <div className="pt-3">
+          <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="min-w-0 space-y-2">
+                <Pulse className="h-5 w-14" />
+                <Pulse className="h-3 w-12" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 space-y-2">
+            <Pulse className="h-3 w-16" />
+            <Pulse className="h-2 w-full rounded-full" />
+            <Pulse className="h-2 w-full rounded-full" />
+          </div>
         </div>
       </div>
     </div>
@@ -684,45 +849,425 @@ function activityDateLabel(activity: Activity, locale: Locale): string {
   }
 }
 
-function Header({
+function AnalysisChrome({
   activity,
-  onClose,
-  tr,
   data,
+  tr,
+  onClose,
   anonymousTitles = false,
+  scroller,
 }: {
   activity: Activity;
-  onClose?: () => void;
+  data: RunSplits;
   tr: Tr;
-  data?: RunSplits | null;
+  onClose?: () => void;
   anonymousTitles?: boolean;
+  scroller: HTMLDivElement | null;
 }) {
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale, anonymousTitles);
   const date = activityDateLabel(activity, locale);
+  const { anchors } = analysisAnchors(data, tr);
+  const cells = primaryStatCells(data, tr);
+
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const titleBlockRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLDivElement>(null);
+  const placeholderRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const expandedRef = useRef<HTMLDivElement>(null);
+  const expandedCellRef = useRef<(HTMLDivElement | null)[]>([]);
+  const expandedValueRef = useRef<(HTMLParagraphElement | null)[]>([]);
+  const expandedUnitRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const collapsedCellRef = useRef<(HTMLDivElement | null)[]>([]);
+  const collapsedValueRef = useRef<(HTMLParagraphElement | null)[]>([]);
+  const collapsedUnitRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const flyingRef = useRef<HTMLDivElement>(null);
+  const flyingCellRef = useRef<(HTMLDivElement | null)[]>([]);
+  const flyingValueRef = useRef<(HTMLParagraphElement | null)[]>([]);
+  const flyingUnitRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const flyingLabelRef = useRef<(HTMLParagraphElement | null)[]>([]);
+  const flyingIconRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const deltaHRef = useRef(0);
+  const snappingRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current;
+    const placeholder = placeholderRef.current;
+    const spacer = spacerRef.current;
+    const expanded = expandedRef.current;
+    const titleRow = titleRef.current;
+    const titleBlock = titleBlockRef.current;
+    const slot = slotRef.current;
+    const closeWrap = closeRef.current;
+    const flying = flyingRef.current;
+    if (
+      !scroller ||
+      !chrome ||
+      !placeholder ||
+      !spacer ||
+      !expanded ||
+      !titleRow ||
+      !titleBlock ||
+      !slot ||
+      !flying
+    ) {
+      return;
+    }
+
+    const easeOut = (t: number) => 1 - (1 - t) ** 3;
+
+    const apply = () => {
+      const deltaH = expanded.offsetHeight;
+      deltaHRef.current = deltaH;
+      const raw = Math.max(0, scroller.scrollTop);
+      const p = deltaH <= 0 ? 0 : Math.min(1, raw / deltaH);
+      // placeholder + spacer stays ΔH so shrinking the hero doesn't
+      // change scrollHeight or get undone by scroll anchoring.
+      placeholder.style.height = `${deltaH * (1 - p)}px`;
+      spacer.style.height = `${deltaH * p}px`;
+
+      const visualP = prefersReducedMotion() ? (p < 0.5 ? 0 : 1) : p;
+      const rest = visualP === 0;
+
+      if (closeWrap) {
+        const shift = Math.max(
+          0,
+          (titleBlock.offsetHeight - closeWrap.offsetHeight) / 2
+        );
+        closeWrap.style.transform = `translateY(${lerp(0, shift, visualP)}px)`;
+      }
+
+      if (rest) {
+        expanded.style.visibility = 'visible';
+        flying.style.visibility = 'hidden';
+        return;
+      }
+
+      const chromeBox = chrome.getBoundingClientRect();
+      for (let i = 0; i < cells.length; i++) {
+        const from = expandedCellRef.current[i];
+        const to = collapsedCellRef.current[i];
+        const fly = flyingCellRef.current[i];
+        const flyValue = flyingValueRef.current[i];
+        const flyUnit = flyingUnitRef.current[i];
+        const flyLabel = flyingLabelRef.current[i];
+        const flyIcon = flyingIconRef.current[i];
+        const fromValue = expandedValueRef.current[i];
+        const toValue = collapsedValueRef.current[i];
+        const fromUnit = expandedUnitRef.current[i];
+        const toUnit = collapsedUnitRef.current[i];
+        if (!from || !to || !fly || !flyValue || !fromValue || !toValue) {
+          continue;
+        }
+
+        const fromBox = from.getBoundingClientRect();
+        const toBox = to.getBoundingClientRect();
+        fly.style.left = `${lerp(fromBox.left, toBox.left, visualP) - chromeBox.left}px`;
+        fly.style.top = `${lerp(fromBox.top, toBox.top, visualP) - chromeBox.top}px`;
+        fly.style.width = `${lerp(fromBox.width, toBox.width, visualP)}px`;
+
+        flyValue.style.fontSize = `${lerp(
+          parseFloat(getComputedStyle(fromValue).fontSize),
+          parseFloat(getComputedStyle(toValue).fontSize),
+          visualP
+        )}px`;
+
+        if (flyUnit && fromUnit && toUnit) {
+          const fromUnitCss = getComputedStyle(fromUnit);
+          const toUnitCss = getComputedStyle(toUnit);
+          flyUnit.style.fontSize = `${lerp(
+            parseFloat(fromUnitCss.fontSize),
+            parseFloat(toUnitCss.fontSize),
+            visualP
+          )}px`;
+          flyUnit.style.marginLeft = `${lerp(
+            parseFloat(fromUnitCss.marginLeft),
+            parseFloat(toUnitCss.marginLeft),
+            visualP
+          )}px`;
+        }
+
+        if (flyIcon) {
+          flyIcon.style.opacity = `${visualP}`;
+        }
+
+        if (flyLabel) {
+          const fromLabel = from.querySelector(
+            '[data-ra-label]'
+          ) as HTMLElement | null;
+          const fromMt = fromLabel
+            ? parseFloat(getComputedStyle(fromLabel).marginTop)
+            : 6;
+          flyLabel.style.marginTop = `${lerp(fromMt, 0, visualP)}px`;
+          flyLabel.style.opacity = `${Math.max(0, 1 - visualP)}`;
+          flyLabel.setAttribute(
+            'aria-hidden',
+            visualP >= 0.95 ? 'true' : 'false'
+          );
+        }
+      }
+      expanded.style.visibility = 'hidden';
+      flying.style.visibility = 'visible';
+    };
+
+    const animateScrollTo = (top: number, duration: number) => {
+      if (prefersReducedMotion()) {
+        scroller.scrollTo({ top, behavior: 'auto' });
+        return;
+      }
+      snappingRef.current = true;
+      scroller.dataset.raSnapping = '1';
+      const start = scroller.scrollTop;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - t0) / duration);
+        scroller.scrollTop = start + (top - start) * easeOut(t);
+        apply();
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          snappingRef.current = false;
+          delete scroller.dataset.raSnapping;
+        }
+      };
+      requestAnimationFrame(step);
+    };
+
+    const maybeSnap = () => {
+      if (snappingRef.current || scroller.dataset.raJumping) return;
+      if (prefersReducedMotion()) return;
+      const deltaH = deltaHRef.current;
+      const top = scroller.scrollTop;
+      if (deltaH <= 0 || top <= 0 || top >= deltaH) return;
+      const next = top / deltaH < 0.5 ? 0 : deltaH;
+      if (Math.abs(top - next) < 0.5) return;
+      animateScrollTo(next, 160);
+    };
+
+    apply();
+    const onScroll = () => apply();
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    scroller.addEventListener('scrollend', maybeSnap);
+    let settleTimer = 0;
+    const onScrollDebounced = () => {
+      if ('onscrollend' in scroller) return;
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(maybeSnap, 80);
+    };
+    scroller.addEventListener('scroll', onScrollDebounced, { passive: true });
+    const ro = new ResizeObserver(apply);
+    ro.observe(chrome);
+    ro.observe(expanded);
+    ro.observe(slot);
+    ro.observe(titleRow);
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    motion.addEventListener('change', apply);
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      scroller.removeEventListener('scroll', onScrollDebounced);
+      scroller.removeEventListener('scrollend', maybeSnap);
+      window.clearTimeout(settleTimer);
+      ro.disconnect();
+      motion.removeEventListener('change', apply);
+    };
+  }, [scroller, cells.length, title, date]);
+
+  const chipClass =
+    'shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] bg-[var(--color-sunken)] px-2.5 py-1 text-[11px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]';
+
   return (
-    <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 py-1.5">
-          <h2 className="truncate text-base font-bold md:text-lg" title={title}>
-            {title}
-          </h2>
-          {date ? (
-            <p className="mt-1 text-[12px] text-pretty text-[var(--color-muted)]">
-              {date}
-            </p>
-          ) : null}
+    <>
+      <div
+        ref={chromeRef}
+        className="sticky top-0 z-20 -mx-4 bg-[var(--color-card)] md:-mx-6"
+      >
+        <div className="@container border-b border-[var(--color-border)] px-4 pt-2 pb-3 md:px-6">
+          <div
+            ref={titleRef}
+            className="ra-title-bar relative z-[2] flex items-start gap-3"
+          >
+            <div ref={titleBlockRef} className="min-w-0 py-1.5">
+              <h2
+                className="truncate text-base font-bold md:text-lg"
+                title={title}
+              >
+                {title}
+              </h2>
+              {date ? (
+                <p className="mt-1 truncate text-[12px] text-pretty text-[var(--color-muted)]">
+                  {date}
+                </p>
+              ) : null}
+            </div>
+            <div ref={slotRef} className="relative min-w-0 flex-1 self-stretch">
+              <div
+                aria-hidden
+                className="pointer-events-none invisible absolute inset-0 flex items-center justify-end gap-3.5 @min-[40rem]:grid @min-[40rem]:grid-cols-3 @min-[40rem]:justify-stretch @min-[40rem]:gap-0"
+              >
+                {cells.map((c, i) => (
+                  <div
+                    key={c.key}
+                    ref={(el) => {
+                      collapsedCellRef.current[i] = el;
+                    }}
+                    className="flex items-center justify-center gap-1 whitespace-nowrap @min-[40rem]:w-full @min-[40rem]:gap-1.5"
+                  >
+                    <PrimaryStatIcon
+                      kind={c.key}
+                      className="size-3 shrink-0 text-[var(--color-muted)] @min-[40rem]:size-3.5"
+                    />
+                    <p
+                      ref={(el) => {
+                        collapsedValueRef.current[i] = el;
+                      }}
+                      className="metric text-[0.875rem] leading-none font-bold tracking-tight @min-[40rem]:text-[1.25rem]"
+                    >
+                      {c.value}
+                      {c.unit ? (
+                        <span
+                          ref={(el) => {
+                            collapsedUnitRef.current[i] = el;
+                          }}
+                          className="ml-0.5 text-[10px] font-medium text-[var(--color-muted)]"
+                        >
+                          {c.unit}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {onClose ? (
+              <div ref={closeRef} className="shrink-0">
+                <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
+              </div>
+            ) : (
+              <div ref={closeRef} className="hidden" />
+            )}
+          </div>
+          <div ref={placeholderRef} className="overflow-hidden">
+            <div ref={expandedRef}>
+              <div className="pt-3">
+                <div className="grid grid-cols-3 gap-3 @min-[40rem]:gap-10">
+                  {cells.map((c, i) => (
+                    <div
+                      key={c.key}
+                      ref={(el) => {
+                        expandedCellRef.current[i] = el;
+                      }}
+                      className="min-w-0 text-center"
+                    >
+                      <p
+                        ref={(el) => {
+                          expandedValueRef.current[i] = el;
+                        }}
+                        className="metric text-[1.65rem] leading-none font-bold tracking-tight @min-[40rem]:text-[2.125rem]"
+                      >
+                        {c.value}
+                        {c.unit ? (
+                          <span
+                            ref={(el) => {
+                              expandedUnitRef.current[i] = el;
+                            }}
+                            className="ml-1 text-xs font-medium text-[var(--color-muted)]"
+                          >
+                            {c.unit}
+                          </span>
+                        ) : null}
+                      </p>
+                      <p
+                        data-ra-label
+                        className="mt-1.5 text-[11px] leading-none text-[var(--color-muted)] @min-[40rem]:mt-2"
+                      >
+                        {c.label}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        {onClose ? (
-          <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
-        ) : null}
+        <div
+          ref={flyingRef}
+          className="pointer-events-none invisible absolute inset-0 z-[1] overflow-visible"
+        >
+          {cells.map((c, i) => (
+            <div
+              key={c.key}
+              ref={(el) => {
+                flyingCellRef.current[i] = el;
+              }}
+              className="absolute text-center"
+              aria-label={`${c.label} ${c.value}${c.unit ? ` ${c.unit}` : ''}`}
+            >
+              <div className="flex items-center justify-center gap-1 @min-[40rem]:gap-1.5">
+                <span
+                  ref={(el) => {
+                    flyingIconRef.current[i] = el;
+                  }}
+                  className="inline-flex opacity-0"
+                >
+                  <PrimaryStatIcon
+                    kind={c.key}
+                    className="size-3 shrink-0 text-[var(--color-muted)] @min-[40rem]:size-3.5"
+                  />
+                </span>
+                <p
+                  ref={(el) => {
+                    flyingValueRef.current[i] = el;
+                  }}
+                  className="metric leading-none font-bold tracking-tight"
+                >
+                  {c.value}
+                  {c.unit ? (
+                    <span
+                      ref={(el) => {
+                        flyingUnitRef.current[i] = el;
+                      }}
+                      className="font-medium text-[var(--color-muted)]"
+                    >
+                      {c.unit}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <p
+                ref={(el) => {
+                  flyingLabelRef.current[i] = el;
+                }}
+                className="text-[11px] leading-none text-[var(--color-muted)]"
+              >
+                {c.label}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="ra-anchor-bar relative z-[2] border-b border-[var(--color-border)] px-4 py-2 md:px-6">
+          <ChipScrollRow
+            contentClassName="gap-1.5"
+            fadeFrom="var(--color-card)"
+            showArrows={false}
+          >
+            {anchors.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => scrollToAnalysisSection(a.id)}
+                className={chipClass}
+              >
+                {a.label}
+              </button>
+            ))}
+          </ChipScrollRow>
+        </div>
       </div>
-      {data ? (
-        <div className="@container mt-3">
-          <PrimaryStats data={data} tr={tr} />
-        </div>
-      ) : null}
-    </div>
+      <div ref={spacerRef} aria-hidden className="pointer-events-none" />
+    </>
   );
 }
 
@@ -741,20 +1286,25 @@ function Loaded({
 }) {
   const data = use(promise);
   const tr = useTr();
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   if (!data) return null;
   return (
     <div
       className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
-      <Header
-        activity={activity}
-        onClose={onClose}
-        tr={tr}
-        data={data}
-        anonymousTitles={anonymousTitles}
-      />
-      <div className="run-analysis-scroll min-h-0 flex-auto overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
+      <div
+        ref={setScroller}
+        className="run-analysis-scroll min-h-0 flex-auto overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] [overflow-anchor:none] md:px-6"
+      >
         <div className="@container">
+          <AnalysisChrome
+            activity={activity}
+            data={data}
+            tr={tr}
+            onClose={onClose}
+            anonymousTitles={anonymousTitles}
+            scroller={scroller}
+          />
           <AnalysisBody
             data={data}
             activityDate={activity.start_date_local || activity.start_date}
@@ -881,8 +1431,7 @@ function Sheet({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPhase('leave');
     };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockPageScroll = lockPageScroll();
     window.addEventListener('keydown', onKey);
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
@@ -891,7 +1440,7 @@ function Sheet({
       });
     });
     return () => {
-      document.body.style.overflow = prev;
+      unlockPageScroll();
       window.removeEventListener('keydown', onKey);
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
@@ -919,7 +1468,7 @@ function Sheet({
       <div
         role="dialog"
         aria-modal="true"
-        className={`flex max-h-[92svh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.5rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[90svh] md:w-[min(1080px,calc(100vw-3rem))] md:origin-center md:rounded-[0.5rem] ${
+        className={`flex max-h-[92svh] w-full origin-bottom flex-col overflow-hidden rounded-t-[0.5rem] bg-[var(--color-card)] transition-[opacity,transform] ease-out md:max-h-[90svh] md:w-full md:max-w-[1080px] md:origin-center md:rounded-[0.5rem] ${
           visible
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-6 scale-[0.98] opacity-0 md:translate-y-2'

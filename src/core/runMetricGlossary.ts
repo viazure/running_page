@@ -1,35 +1,50 @@
-/** Short zh/en help for running-dynamics metrics (Garmin-style, light theme). */
+/** Short zh/en help for running-dynamics metrics. */
 
 export type GlossaryKey =
-  'gct' | 'vo' | 'vr' | 'cadence' | 'stride' | 'gap' | 'lthr' | 'power';
+  | 'gct'
+  | 'vo'
+  | 'vr'
+  | 'cadence'
+  | 'stride'
+  | 'gap'
+  | 'lthr'
+  | 'power'
+  | 'hrZones';
 
-export const METRIC_GLOSSARY: Record<
-  GlossaryKey,
-  { zh: string; en: string; titleZh: string; titleEn: string }
-> = {
+export type MetricGlossaryEntry = {
+  zh: string;
+  en: string;
+  titleZh: string;
+  titleEn: string;
+  /** Optional extra line under the definition. Form metrics leave this unset. */
+  howZh?: string;
+  howEn?: string;
+};
+
+export const METRIC_GLOSSARY: Record<GlossaryKey, MetricGlossaryEntry> = {
   gct: {
     titleZh: '触地时间',
     titleEn: 'Ground contact time',
-    zh: '每一步脚与地面接触的时长（毫秒）。通常越短越高效。',
-    en: 'How long each foot stays on the ground (ms). Shorter is usually more efficient.',
+    zh: '脚接触地面的时长，通常越短越省力。',
+    en: 'How long the foot stays on the ground. Shorter usually takes less effort.',
   },
   vo: {
     titleZh: '垂直振幅',
     titleEn: 'Vertical oscillation',
-    zh: '躯干上下起伏的幅度（厘米）。过大意味着多余上下晃动，浪费能量。',
-    en: 'How much your torso bounces up and down (cm). Extra bounce usually wastes energy.',
+    zh: '身体随每一步上下移动的幅度，通常越低越省力。',
+    en: 'How much the body moves up and down with each step. Lower usually takes less effort.',
   },
   vr: {
     titleZh: '垂直步幅比',
     titleEn: 'Vertical ratio',
-    zh: '垂直振幅相对步幅的百分比。把弹跳幅度按步长归一，便于跨配速比较。',
-    en: 'Vertical oscillation as a percent of stride length — bounce normalised by step length.',
+    zh: '垂直振幅占步幅的比例，通常越低越省力。',
+    en: 'Vertical oscillation as a share of stride length. Lower usually takes less effort.',
   },
   cadence: {
     titleZh: '步频',
     titleEn: 'Cadence',
-    zh: '每分钟步数（spm）。常见舒适区间约 160–180；并非越高越好，需配合步幅与配速。',
-    en: 'Steps per minute (spm). Many runners sit around 160–180; higher is not always better — match it to stride and pace.',
+    zh: '每分钟落步的次数，通常较快更省力。',
+    en: 'Steps per minute. A quicker cadence usually takes less effort.',
   },
   stride: {
     titleZh: '步幅',
@@ -54,5 +69,13 @@ export const METRIC_GLOSSARY: Record<
     titleEn: 'Power',
     zh: '跑步功率（瓦）。区间表仅在文件自带设备分区时显示。',
     en: 'Running power (W). Zone tables appear only when the file includes device power zones.',
+  },
+  hrZones: {
+    titleZh: '心率区间',
+    titleEn: 'Heart rate zones',
+    zh: '心率区间把这次跑步的心率分成几档。',
+    en: "Heart rate zones split this run's heart rate into bands.",
+    howZh: '每档显示你在该区间停留了多久。',
+    howEn: 'Each row shows how long you spent in that zone.',
   },
 };
