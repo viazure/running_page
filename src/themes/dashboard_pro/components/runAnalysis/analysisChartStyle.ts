@@ -8,9 +8,15 @@ export const ANALYSIS_AREA_STROKE_WIDTH = 2.5;
 export type AreaFillOpacities = { top: number; bottom: number };
 
 /** Single-chart area fill: one color, heavier at the data edge, a bit more open at the baseline. */
-export const ANALYSIS_AREA_FILL: AreaFillOpacities = { top: 0.52, bottom: 0.28 };
+export const ANALYSIS_AREA_FILL: AreaFillOpacities = {
+  top: 0.52,
+  bottom: 0.28,
+};
 /** Compare area fill: lighter so two fills do not muddy. Top edge stays 2.5px solid. */
-export const ANALYSIS_COMPARE_AREA_FILL: AreaFillOpacities = { top: 0.22, bottom: 0.12 };
+export const ANALYSIS_COMPARE_AREA_FILL: AreaFillOpacities = {
+  top: 0.22,
+  bottom: 0.12,
+};
 
 export function areaFillOpacities(compare: boolean): AreaFillOpacities {
   return compare ? ANALYSIS_COMPARE_AREA_FILL : ANALYSIS_AREA_FILL;
@@ -25,7 +31,7 @@ export function seriesStrokeWidth(isAreaSeries: boolean): number {
 export function usesHrZoneStroke(
   hrDrawStyle: 'fill' | 'zones',
   hasOverlay: boolean
-) : boolean {
+): boolean {
   return hrDrawStyle === 'zones' && !hasOverlay;
 }
 

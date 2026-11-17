@@ -29,7 +29,6 @@ import {
   splitDeltaClass,
   splitPaceAxis,
 } from '@/core/analysisPanelCopy';
-import { ChipScrollRow } from './ChipScrollRow';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -572,18 +571,18 @@ function AnalysisBody({
   return (
     <div>
       <div className="ra-anchor-bar sticky top-0 z-10 -mx-4 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-2 md:-mx-6 md:px-6">
-        <ChipScrollRow contentClassName="gap-1.5" fadeFrom="var(--color-card)">
+        <div className="flex flex-wrap gap-1.5">
           {anchors.map((a) => (
             <button
               key={a.id}
               type="button"
               onClick={() => scrollTo(a.id)}
-              className="shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] bg-[var(--color-sunken)] px-3 py-1 text-[11px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+              className="shrink-0 cursor-pointer rounded-full border border-[var(--color-border)] bg-[var(--color-sunken)] px-2.5 py-1 text-[11px] text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
             >
               {a.label}
             </button>
           ))}
-        </ChipScrollRow>
+        </div>
       </div>
 
       <div className="space-y-4 pt-3">
@@ -678,7 +677,7 @@ function AnalysisSkeleton({
     <div
       className={`card flex max-h-full min-h-0 flex-auto flex-col overflow-hidden ${className ?? ''}`}
     >
-      <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
+      <div className="sticky top-0 z-20 shrink-0 bg-[var(--color-card)] px-4 pt-2 pb-2 md:px-6">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 py-1.5">
             <h2
@@ -699,28 +698,32 @@ function AnalysisSkeleton({
             <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
           ) : null}
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="min-w-0 space-y-2 text-center">
-              <Pulse className="mx-auto h-7 w-16" />
-              <Pulse className="mx-auto h-3 w-10" />
-            </div>
-          ))}
-        </div>
       </div>
       <div className="min-h-0 flex-auto px-4 py-3 md:px-6 md:py-4">
-        <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="min-w-0 space-y-2">
-              <Pulse className="h-5 w-14" />
-              <Pulse className="h-3 w-12" />
-            </div>
-          ))}
+        <div className="border-b border-[var(--color-border)] pb-3">
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className="min-w-0 space-y-2 text-center">
+                <Pulse className="mx-auto h-7 w-16" />
+                <Pulse className="mx-auto h-3 w-10" />
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="mt-4 space-y-2">
-          <Pulse className="h-3 w-16" />
-          <Pulse className="h-2 w-full rounded-full" />
-          <Pulse className="h-2 w-full rounded-full" />
+        <div className="pt-3">
+          <div className="grid grid-cols-3 gap-x-3 gap-y-3.5 md:gap-x-8">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="min-w-0 space-y-2">
+                <Pulse className="h-5 w-14" />
+                <Pulse className="h-3 w-12" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 space-y-2">
+            <Pulse className="h-3 w-16" />
+            <Pulse className="h-2 w-full rounded-full" />
+            <Pulse className="h-2 w-full rounded-full" />
+          </div>
         </div>
       </div>
     </div>
@@ -745,20 +748,18 @@ function Header({
   activity,
   onClose,
   tr,
-  data,
   anonymousTitles = false,
 }: {
   activity: Activity;
   onClose?: () => void;
   tr: Tr;
-  data?: RunSplits | null;
   anonymousTitles?: boolean;
 }) {
   const { locale } = useLocale();
   const title = resolveActivityTitle(activity, locale, anonymousTitles);
   const date = activityDateLabel(activity, locale);
   return (
-    <div className="sticky top-0 z-20 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 pt-2 pb-3 md:px-6">
+    <div className="sticky top-0 z-20 shrink-0 bg-[var(--color-card)] px-4 pt-2 pb-2 md:px-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 py-1.5">
           <h2 className="truncate text-base font-bold md:text-lg" title={title}>
@@ -774,11 +775,6 @@ function Header({
           <CloseButton onClose={onClose} label={tr('关闭', 'Close')} />
         ) : null}
       </div>
-      {data ? (
-        <div className="@container mt-3">
-          <PrimaryStats data={data} tr={tr} />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -807,11 +803,13 @@ function Loaded({
         activity={activity}
         onClose={onClose}
         tr={tr}
-        data={data}
         anonymousTitles={anonymousTitles}
       />
       <div className="run-analysis-scroll min-h-0 flex-auto overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
         <div className="@container">
+          <div className="border-b border-[var(--color-border)] pt-3 pb-3">
+            <PrimaryStats data={data} tr={tr} />
+          </div>
           <AnalysisBody
             data={data}
             activityDate={activity.start_date_local || activity.start_date}
