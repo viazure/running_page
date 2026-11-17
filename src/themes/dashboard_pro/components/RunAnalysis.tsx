@@ -1,4 +1,11 @@
-import { Suspense, use, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  use,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { bookmarkFabClass, desktopCenteredFabClass } from './MapDockFab';
 import type { Activity } from '@/types';
@@ -14,6 +21,14 @@ import {
   type SplitRow,
 } from '@/core/splits';
 import { ChartStack } from './runAnalysis/AnalysisCharts';
+import {
+  SPLITS_BAR_FILL,
+  SPLITS_FAST_PACE_TEXT_CLASS,
+  SPLITS_PACE_COL_CLASS,
+  splitBarRatio,
+  splitDeltaClass,
+  splitPaceAxis,
+} from '@/core/analysisPanelCopy';
 import { ChipScrollRow } from './ChipScrollRow';
 
 type N = number | null | undefined;
@@ -236,14 +251,24 @@ function TeScale({
 }
 
 // ---------------------------------------------------------------- splits (Garmin-like)
-function Delta({ cur, prev, invert }: { cur: N; prev: N; invert?: boolean }) {
+function Delta({
+  cur,
+  prev,
+  invert,
+  kind,
+}: {
+  cur: N;
+  prev: N;
+  invert?: boolean;
+  kind: 'pace' | 'hr';
+}) {
   if (!has(cur) || !has(prev) || prev === 0) return null;
   const better = invert ? cur < prev : cur > prev;
   const worse = invert ? cur > prev : cur < prev;
   if (!better && !worse) return null;
   return (
     <span
-      className={`ml-0.5 text-[9px] ${better ? 'text-emerald-500' : 'text-rose-500'}`}
+      className={`ml-0.5 text-[9px] ${splitDeltaClass(kind, better)}`}
       aria-hidden
     >
       {better ? '▲' : '▼'}
@@ -263,7 +288,7 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
     .filter((r) => !r.partial && has(r.pace) && (r.distance ?? 0) >= 200)
     .map((r) => r.pace as number);
   const fast = paces.length ? Math.min(...paces) : 0;
-  const slow = paces.length ? Math.max(...paces) : 0;
+  const axis = splitPaceAxis(paces);
 
   return (
     <div>
@@ -297,20 +322,45 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
       {/* Garmin-style horizontal pace bars + table. Wide panel: side by side. */}
       <div className="@min-[48rem]:grid @min-[48rem]:grid-cols-2 @min-[48rem]:items-start @min-[48rem]:gap-6">
         <div className="mb-3 space-y-1 @min-[48rem]:mb-0 @min-[48rem]:space-y-0">
-          {/* Shared h-8 row box with table so data rows stay vertically aligned. */}
-          <div
-            aria-hidden
-            className="box-border hidden h-8 items-center border-b border-[var(--color-border)] @min-[48rem]:flex"
-          >
-            <span className="invisible text-[12px] font-medium">#</span>
+          {/* Compact pace scale above the bars; same h-8 box as the table header. */}
+          <div className="box-border flex h-8 items-center gap-2 border-b border-[var(--color-border)]">
+            <span className="w-4 shrink-0" aria-hidden />
+            <div className="relative h-full min-w-0 flex-1">
+              {axis
+                ? axis.ticks.map((tick, i) => {
+                    const ratio = splitBarRatio(tick, axis);
+                    const style: CSSProperties =
+                      i === 0
+                        ? { left: 0 }
+                        : i === axis.ticks.length - 1
+                          ? { right: 0 }
+                          : {
+                              left: `${ratio * 100}%`,
+                              transform: 'translateX(-50%)',
+                            };
+                    return (
+                      <span
+                        key={tick}
+                        className="metric absolute top-1/2 -translate-y-1/2 text-[10px] text-[var(--color-muted)]"
+                        style={style}
+                      >
+                        {formatPaceSeconds(tick)}
+                      </span>
+                    );
+                  })
+                : null}
+            </div>
+            <span
+              className={`metric invisible ${SPLITS_PACE_COL_CLASS}`}
+              aria-hidden
+            >
+              0'00"
+            </span>
           </div>
           {rows.map((r) => {
             const p = r.pace ?? 0;
             const tiny = (r.distance ?? 0) < 200;
-            const ratio =
-              slow > fast && has(r.pace)
-                ? Math.max(0, Math.min(1, 1 - (p - fast) / (slow - fast)))
-                : 0.5;
+            const ratio = axis && has(r.pace) ? splitBarRatio(p, axis) : 0.5;
             const isFast = has(r.pace) && p === fast && !r.partial && !tiny;
             return (
               <div
@@ -320,20 +370,22 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                 <span className="metric w-4 shrink-0 text-[var(--color-muted)]">
                   {r.index}
                 </span>
-                <div className="h-4 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
+                <div className="h-4 min-w-0 flex-1 overflow-hidden rounded-sm bg-[var(--color-sunken)]/80">
                   <div
                     className="h-full rounded-sm"
                     style={{
-                      width: `${25 + ratio * 75}%`,
-                      backgroundColor: 'var(--color-accent)',
-                      opacity: 0.35 + ratio * 0.55,
+                      width: `${ratio * 100}%`,
+                      background: SPLITS_BAR_FILL,
                     }}
                   />
                 </div>
                 <span
-                  className={`metric w-12 shrink-0 text-right ${isFast ? 'font-semibold text-[var(--color-run)]' : ''}`}
+                  className={`metric ${SPLITS_PACE_COL_CLASS} ${isFast ? `font-semibold ${SPLITS_FAST_PACE_TEXT_CLASS}` : ''}`}
                 >
                   {formatPaceSeconds(r.pace)}
+                  {isFast ? (
+                    <span className="ml-1 text-[10px]">{tr('快', 'Fast')}</span>
+                  ) : null}
                 </span>
               </div>
             );
@@ -381,14 +433,19 @@ function SplitsBlock({ data, tr }: { data: RunSplits; tr: Tr }) {
                       {formatClock(r.time)}
                     </td>
                     <td
-                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? 'font-semibold text-[var(--color-accent)]' : ''}`}
+                      className={`metric h-8 py-0 pr-2 align-middle whitespace-nowrap ${isFast ? `font-semibold ${SPLITS_FAST_PACE_TEXT_CLASS}` : ''}`}
                     >
                       {formatPaceSeconds(r.pace)}
-                      <Delta cur={r.pace} prev={prev?.pace} invert />
+                      <Delta
+                        cur={r.pace}
+                        prev={prev?.pace}
+                        invert
+                        kind="pace"
+                      />
                     </td>
                     <td className="metric h-8 py-0 pr-2 align-middle whitespace-nowrap">
                       {fmt(r.hr_avg)}
-                      <Delta cur={r.hr_avg} prev={prev?.hr_avg} />
+                      <Delta cur={r.hr_avg} prev={prev?.hr_avg} kind="hr" />
                     </td>
                   </tr>
                 );

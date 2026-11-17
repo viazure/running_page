@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -10,8 +11,6 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  cadenceZoneLabels,
-  cadenceZonesFromChart,
   formatClock,
   formatPaceSeconds,
   formatPaceZoneRange,
@@ -23,10 +22,14 @@ import {
 } from '@/core/splits';
 import {
   DYNAMICS_BAND_COLORS,
+  DYNAMICS_BAND_PERCENTILE_LABELS,
   cadenceGarminZonesFromChart,
+  cadenceZoneNameAndRange,
   dynamicsBandColor,
   dynamicsBandLabels,
   dynamicsBandRanges,
+  dynamicsLegendRange,
+  scatterMetricDomain,
   type DynamicsMetric,
 } from '@/core/runDynamicsBands';
 import {
@@ -36,6 +39,7 @@ import {
   type MotionKind,
 } from '@/core/runMotionStatus';
 import { METRIC_GLOSSARY, type GlossaryKey } from '@/core/runMetricGlossary';
+import { downsampleScatterIndices } from './scatterDownsample';
 import {
   bestPaceIndex,
   gradeAdjustedPaceSeries,
@@ -45,8 +49,6 @@ import {
 import {
   resolveHrZones,
   resolvePowerZones,
-  type HrZoneEmptyReason,
-  type HrZoneSource,
   type ResolvedHrZones,
 } from '@/core/runHrZones';
 import {
@@ -54,7 +56,25 @@ import {
   ANALYSIS_HR_ZONES,
   BIRTHDAY_MONTH,
 } from '@/core/config';
-import { messages } from '@/core/i18n';
+import {
+  ZONE_TABLE_GRID_CLASS,
+  hrZoneEmptyCaption,
+  hrZoneFilledCaption,
+  hrZoneTitle,
+} from '@/core/analysisPanelCopy';
+import { CompareMetricSelectors } from './CompareControls';
+import {
+  ANALYSIS_DYNAMICS_BAND_OPACITY,
+  ANALYSIS_FORM_DOT_CLASS,
+  ANALYSIS_FORM_DOT_OPACITY,
+  ANALYSIS_LINE_STROKE_WIDTH,
+  ANALYSIS_SERIES_COLORS,
+  areaFillOpacities,
+  chartAreaFills,
+  compareSeriesDrawing,
+  seriesStrokeWidth,
+  usesHrZoneStroke,
+} from './analysisChartStyle';
 
 type N = number | null | undefined;
 type Tr = (zh: string, en: string) => string;
@@ -70,9 +90,9 @@ const ZONE_COLORS = [
 
 /** Garmin-ish metric colors */
 const C = {
-  pace: '#3b82f6',
-  hr: '#ef4444',
-  power: '#a855f7',
+  pace: ANALYSIS_SERIES_COLORS.pace,
+  hr: ANALYSIS_SERIES_COLORS.hr,
+  power: ANALYSIS_SERIES_COLORS.power,
   cad: '#f97316',
   stride: '#14b8a6',
   vo: '#ec4899',
@@ -230,11 +250,9 @@ function domainOptsFor(
   | undefined {
   switch (key) {
     case 'stride':
-      // Design handoff: lock stride Y domain to 0.6–1.1 m.
-      return { floor: 0.6, fixed: [0.6, 1.1] };
     case 'cad':
-      // APP: ~90–190 spm so cadence cloud sits around the mean line
-      return { fixed: [90, 190] };
+      // Scatter series use scatterMetricDomain (stride 0→nice max; cadence 90–190 base).
+      return {};
     case 'pace':
       // s/km — clip sprint spikes / standstills for readable Y
       return { hardMin: 300, hardMax: 540 };
@@ -245,53 +263,6 @@ function domainOptsFor(
     default:
       return key === 'stride' ? { floor: 0 } : undefined;
   }
-}
-
-/** Dynamics charts: full series min/max so peaks are not clipped at the axis. */
-function scatterDomain(
-  values: number[],
-  avg: N,
-  opts?: {
-    floor?: number;
-    hardMin?: number;
-    hardMax?: number;
-    fixed?: [number, number];
-  }
-): [number, number] {
-  if (opts?.fixed) return opts.fixed;
-  let lo = Math.min(...values);
-  let hi = Math.max(...values);
-  if (has(avg)) {
-    lo = Math.min(lo, avg);
-    hi = Math.max(hi, avg);
-  }
-  // Robust-ish clamp for physiological ranges before padding.
-  if (opts?.hardMin != null || opts?.hardMax != null) {
-    const sorted = [...values].sort((a, b) => a - b);
-    const q = (p: number) =>
-      sorted[
-        Math.min(
-          sorted.length - 1,
-          Math.max(0, Math.round(p * (sorted.length - 1)))
-        )
-      ];
-    if (opts.hardMin != null) lo = Math.max(q(0.02), opts.hardMin);
-    if (opts.hardMax != null) hi = Math.min(q(0.98), opts.hardMax);
-    if (has(avg)) {
-      lo = Math.min(lo, avg);
-      hi = Math.max(hi, avg);
-    }
-  }
-  if (hi - lo < 1e-6) {
-    lo -= 1;
-    hi += 1;
-  }
-  const pad = (hi - lo) * 0.07;
-  lo = lo - pad;
-  hi = hi + pad;
-  if (opts?.floor != null) lo = Math.max(lo, opts.floor);
-  if (hi <= lo) hi = lo + 1;
-  return [lo, hi];
 }
 
 function tickValues(lo: number, hi: number, n: number): number[] {
@@ -472,26 +443,6 @@ function formatZoneRange(
   return `≥ ${Math.round(lo)}`;
 }
 
-function hrZoneCopy(key: keyof typeof messages.zh, tr: Tr): string {
-  return tr(messages.zh[key], messages.en[key]);
-}
-
-function hrZoneCaption(
-  source: HrZoneSource,
-  emptyReason: HrZoneEmptyReason | undefined,
-  tr: Tr
-): string {
-  if (source === 'device') return hrZoneCopy('hrZoneTipDevice', tr);
-  if (source === 'lthr') return hrZoneCopy('hrZoneTipLthr', tr);
-  if (source === 'maxhr_age') return hrZoneCopy('hrZoneTipMaxHrAge', tr);
-  if (emptyReason === 'no_hr_data')
-    return hrZoneCopy('hrZoneEmptyNoHrData', tr);
-  return [
-    hrZoneCopy('hrZoneEmptyNoBaseline', tr),
-    hrZoneCopy('hrZoneEmptyNoBaselineHint', tr),
-  ].join(tr(' ', ' '));
-}
-
 function HrZoneEmpty({ title, caption }: { title: string; caption: string }) {
   return (
     <div>
@@ -504,29 +455,24 @@ function HrZoneEmpty({ title, caption }: { title: string; caption: string }) {
 }
 
 function HrZoneFooter({ resolved, tr }: { resolved: ResolvedHrZones; tr: Tr }) {
-  const caption = hrZoneCaption(resolved.source, resolved.emptyReason, tr);
   if (!resolved.zone) {
     return (
-      <HrZoneEmpty title={hrZoneCopy('hrZoneTitle', tr)} caption={caption} />
+      <HrZoneEmpty
+        title={hrZoneTitle(tr)}
+        caption={hrZoneEmptyCaption(resolved.emptyReason, tr)}
+      />
     );
   }
   return (
     <ZoneTable
-      title={
-        resolved.estimated
-          ? hrZoneCopy('hrZoneTitleEstimated', tr)
-          : hrZoneCopy('hrZoneTitle', tr)
-      }
+      title={hrZoneTitle(tr)}
       zone={resolved.zone}
       colors={[...ZONE_COLORS]}
       unit="bpm"
       tr={tr}
-      caption={caption}
-      estimatedTip={
-        resolved.source === 'maxhr_age'
-          ? hrZoneCopy('hrZoneTipMaxHrAge', tr)
-          : undefined
-      }
+      caption={hrZoneFilledCaption(resolved.estimated, tr)}
+      helpKey="hrZones"
+      hideEstimatedBadge
     />
   );
 }
@@ -538,8 +484,10 @@ function ZoneTable({
   unit,
   tr,
   labels,
+  ranges,
   caption,
-  estimatedTip,
+  helpKey,
+  hideEstimatedBadge,
 }: {
   title: string;
   zone: ZoneInfo;
@@ -547,22 +495,24 @@ function ZoneTable({
   unit: string;
   tr: Tr;
   labels?: string[];
+  ranges?: string[];
   caption?: string;
-  estimatedTip?: string;
+  helpKey?: GlossaryKey;
+  hideEstimatedBadge?: boolean;
 }) {
   const secs = zone.seconds;
   const total = secs.reduce((a, b) => a + b, 0);
   if (!total) return null;
-  // Zones not configured on the device (HR % of max, chart-derived pace).
   const estimated = /estimated|derived/.test(zone.calc_type ?? '');
   const hb = zone.high_boundary ?? [];
   const rows = secs.map((sec, i) => {
     const lo = i === 0 ? null : hb[i - 1];
     const hi = hb[i];
-    const range =
+    const computed =
       unit === '/km'
         ? formatPaceZoneRange(lo, hi, i)
         : formatZoneRange(unit, lo, hi, i);
+    const range = ranges?.[i] ?? computed;
     const name = labels?.[i] ?? (i === 0 ? '<Z1' : `Z${i}`);
     return {
       i,
@@ -573,25 +523,15 @@ function ZoneTable({
       color: colors[Math.min(i, colors.length - 1)],
     };
   });
-  // Keep near-zero rows collapsed: zero is None, nonzero is Trace.
+  const rangeUnit = unit === '/km' || unit === 'spm' ? '' : ` ${unit}`;
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <p className="flex items-center gap-1.5 text-[13px] font-semibold">
           {title}
-          {estimated ? (
-            <span
-              className="rounded bg-[var(--color-sunken)] px-1.5 py-px text-[10px] font-normal text-[var(--color-muted)]"
-              title={
-                estimatedTip ??
-                (zone.calc_type === 'percent_max_hr_age_estimated'
-                  ? hrZoneCopy('hrZoneTipMaxHrAge', tr)
-                  : tr(
-                      '设备未提供区间，按本次数据估算',
-                      'No device zones; estimated from this activity'
-                    ))
-              }
-            >
+          {helpKey ? <MetricHelp k={helpKey} tr={tr} /> : null}
+          {estimated && !hideEstimatedBadge ? (
+            <span className="rounded bg-[var(--color-sunken)] px-1.5 py-px text-[10px] font-normal text-[var(--color-muted)]">
               {tr('估算', 'Estimated')}
             </span>
           ) : null}
@@ -621,79 +561,67 @@ function ZoneTable({
       <div className="space-y-2">
         {rows.map((r) => {
           const nearZero = r.pct < 0.5 || r.sec < 5;
-          if (nearZero) {
-            return (
-              <div
-                key={r.i}
-                className={`grid items-center gap-2 text-[11px] ${
-                  unit === '/km'
-                    ? 'grid-cols-[7.25rem_1fr_auto]'
-                    : unit === 'spm'
-                      ? 'grid-cols-[5.5rem_1fr_auto]'
-                      : 'grid-cols-[4.5rem_1fr_auto]'
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className="flex items-center gap-1.5 font-medium text-[var(--color-muted)]">
-                    {unit === 'spm' ? (
-                      <span
-                        className="inline-block size-2 shrink-0 rounded-full bg-[var(--color-border)]"
-                        aria-hidden
-                      />
-                    ) : null}
-                    {r.name}
-                  </p>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]/50" />
-                <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
-                  {r.sec > 0 ? tr('少量', 'Trace') : tr('未进入', 'None')}
-                </div>
-              </div>
-            );
-          }
           return (
             <div
               key={r.i}
-              className={`grid items-center gap-2 text-[11px] ${
-                unit === '/km'
-                  ? 'grid-cols-[7.25rem_1fr_auto]'
-                  : unit === 'spm'
-                    ? 'grid-cols-[5.5rem_1fr_auto]'
-                    : 'grid-cols-[4.5rem_1fr_auto]'
-              }`}
+              className={`grid items-center gap-2 text-[11px] ${ZONE_TABLE_GRID_CLASS}`}
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-1.5 font-medium text-[var(--color-text)]">
+                <p
+                  className={`flex items-center gap-1.5 overflow-hidden font-medium whitespace-nowrap ${
+                    nearZero
+                      ? 'text-[var(--color-muted)]'
+                      : 'text-[var(--color-text)]'
+                  }`}
+                >
                   {unit === 'spm' ? (
                     <span
-                      className="inline-block size-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: r.color }}
+                      className={`inline-block size-2 shrink-0 rounded-full ${
+                        nearZero ? 'bg-[var(--color-border)]' : ''
+                      }`}
+                      style={
+                        nearZero ? undefined : { backgroundColor: r.color }
+                      }
                       aria-hidden
                     />
                   ) : null}
                   {r.name}
                 </p>
                 {r.range ? (
-                  <p className="truncate text-[10px] text-[var(--color-muted)]">
+                  <p className="truncate text-[10px] whitespace-nowrap text-[var(--color-muted)]">
                     {r.range}
-                    {unit === '/km' || unit === 'spm' ? '' : ` ${unit}`}
+                    {rangeUnit}
                   </p>
                 ) : null}
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.max(2, r.pct)}%`,
-                    backgroundColor: r.color,
-                  }}
-                />
-              </div>
+              {nearZero ? (
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]/50" />
+              ) : (
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-sunken)]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.max(2, r.pct)}%`,
+                      backgroundColor: r.color,
+                    }}
+                  />
+                </div>
+              )}
               <div className="metric w-[4.75rem] text-right text-[var(--color-muted)]">
-                {formatClock(r.sec)}
-                <span className="ml-1 text-[var(--color-text)]">
-                  {Math.round(r.pct)}%
-                </span>
+                {nearZero ? (
+                  r.sec > 0 ? (
+                    tr('少量', 'Trace')
+                  ) : (
+                    tr('未进入', 'None')
+                  )
+                ) : (
+                  <>
+                    {formatClock(r.sec)}
+                    <span className="ml-1 text-[var(--color-text)]">
+                      {Math.round(r.pct)}%
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -717,13 +645,12 @@ const GLOSSARY_DYNAMICS: Partial<Record<GlossaryKey, DynamicsMetric>> = {
   cadence: 'cadence',
 };
 
-const BAND_QUALITY = [
-  { zh: '很好', en: 'Excellent' },
-  { zh: '较好', en: 'Good' },
-  { zh: '中等', en: 'Average' },
-  { zh: '偏弱', en: 'Fair' },
-  { zh: '较弱', en: 'Poor' },
-] as const;
+const BAND_UNIT: Partial<Record<GlossaryKey, string>> = {
+  gct: 'ms',
+  vo: 'cm',
+  vr: '%',
+  cadence: 'spm',
+};
 
 function MetricHelp({
   k,
@@ -746,10 +673,10 @@ function MetricHelp({
   const bandRows = dynKey
     ? dynamicsBandLabels(dynKey).map((row, i) => ({
         ...row,
-        quality: BAND_QUALITY[i],
+        quality: DYNAMICS_BAND_PERCENTILE_LABELS[i],
       }))
     : null;
-  const tipWidth = bandRows ? 260 : 224;
+  const tipWidth = bandRows ? 280 : 224;
 
   useEffect(() => {
     if (!open) return;
@@ -840,6 +767,11 @@ function MetricHelp({
               <span className="block text-[var(--color-muted)]">
                 {tr(g.zh, g.en)}
               </span>
+              {g.howZh ? (
+                <span className="mt-1.5 block text-[var(--color-muted)]">
+                  {tr(g.howZh, g.howEn ?? '')}
+                </span>
+              ) : null}
               {note ? (
                 <span className="mt-1.5 block border-t border-[var(--color-border)] pt-1.5 text-[var(--color-muted)]">
                   {note}
@@ -857,11 +789,16 @@ function MetricHelp({
                         style={{ background: row.color }}
                         aria-hidden
                       />
-                      <span>
+                      <span className="whitespace-nowrap">
                         {tr(row.quality.zh, row.quality.en)}
                         <span className="text-[var(--color-muted)]">
                           {' '}
-                          · {row.label}
+                          ·{' '}
+                          {dynamicsLegendRange(
+                            dynKey as DynamicsMetric,
+                            row.label,
+                            BAND_UNIT[k] ?? ''
+                          )}
                         </span>
                       </span>
                     </li>
@@ -1042,8 +979,7 @@ function HoverReadout({
           </span>
           <span
             ref={valRef}
-            className="text-base font-semibold"
-            style={{ color: def.color }}
+            className="text-base font-semibold text-[var(--color-text)]"
           >
             --
           </span>{' '}
@@ -1056,8 +992,7 @@ function HoverReadout({
             {overlay.title}{' '}
             <span
               ref={ovalRef}
-              className="font-semibold"
-              style={{ color: overlay.color }}
+              className="font-semibold text-[var(--color-text)]"
             >
               --
             </span>{' '}
@@ -1158,7 +1093,6 @@ const MetricCard = memo(function MetricCard({
   prominent = false,
   overlay,
   overlayIsArea = false,
-  onSwapOverlay,
   compareChips,
   headerControls,
   titleNode,
@@ -1179,7 +1113,6 @@ const MetricCard = memo(function MetricCard({
   overlay?: TrendDef | null;
   /** When true, overlay draws as area and primary as line. */
   overlayIsArea?: boolean;
-  onSwapOverlay?: () => void;
   compareChips?: ReactNode;
   headerControls?: ReactNode;
   /** Replaces the plain title text (e.g. pace variant dropdown). */
@@ -1196,6 +1129,7 @@ const MetricCard = memo(function MetricCard({
     scrubbing: boolean;
     pointerId: number;
   } | null>(null);
+  const gradUid = useId().replace(/:/g, '');
   const ys = useMemo(() => {
     if (def.kind === 'scatter') return def.series;
     if (def.kind === 'hr-area') return def.series;
@@ -1224,7 +1158,7 @@ const MetricCard = memo(function MetricCard({
     const domainOpts = domainOptsFor(def.key, def.unit);
     const [lo, hi] =
       def.kind === 'scatter'
-        ? scatterDomain(valid, def.avg ?? null, domainOpts)
+        ? scatterMetricDomain(def.key, valid, def.avg ?? null)
         : domain(valid, true, domainOpts);
     const clippedOutliers = domainOpts?.fixed
       ? false
@@ -1235,8 +1169,10 @@ const MetricCard = memo(function MetricCard({
     const ih = CHART_H - PAD.t - PAD.b;
     const px = (x: number) => PAD.l + ((x - x0) / (x1 - x0 || 1)) * iw;
     const py = (v: number) => {
-      const c = Math.min(hi, Math.max(lo, v));
-      const t = (c - lo) / (hi - lo);
+      // Scatter domains already include every sample plus padding; do not
+      // pin points to the axis edge. Other series still clip outliers.
+      const c = def.kind === 'scatter' ? v : Math.min(hi, Math.max(lo, v));
+      const t = (c - lo) / (hi - lo || 1);
       return def.invert ? PAD.t + t * ih : PAD.t + (1 - t) * ih;
     };
     const yCount = def.kind === 'scatter' ? 4 : 3;
@@ -1257,11 +1193,7 @@ const MetricCard = memo(function MetricCard({
     if (!overlay || !oys || ovalid.length < 2 || !geom) return null;
     const [lo, hi] =
       overlay.kind === 'scatter'
-        ? scatterDomain(
-            ovalid,
-            overlay.avg ?? null,
-            domainOptsFor(overlay.key, overlay.unit)
-          )
+        ? scatterMetricDomain(overlay.key, ovalid, overlay.avg ?? null)
         : domain(ovalid, true, domainOptsFor(overlay.key, overlay.unit));
     const ih = CHART_H - PAD.t - PAD.b;
     const py = (v: number) => {
@@ -1410,10 +1342,6 @@ const MetricCard = memo(function MetricCard({
         });
         if (segPen && cur) dynSegs.push({ d: cur, color });
       }
-      const validIdx: number[] = [];
-      ys.forEach((v, i) => {
-        if (has(v)) validIdx.push(i);
-      });
       const maxDots = 1200;
       const pushDot = (i: number, yVal: number) => {
         const color =
@@ -1424,38 +1352,8 @@ const MetricCard = memo(function MetricCard({
           color,
         });
       };
-      if (validIdx.length <= maxDots) {
-        for (const i of validIdx) {
-          pushDot(i, ys[i] as number);
-        }
-      } else {
-        // Bucket by x so dots span the full domain; always pin first & last.
-        const inner = Math.max(1, maxDots - 2);
-        const buckets: number[][] = Array.from({ length: inner }, () => []);
-        const x0 = xs[validIdx[0]];
-        const x1 = xs[validIdx[validIdx.length - 1]];
-        const span = x1 - x0 || 1;
-        const first = validIdx[0];
-        const last = validIdx[validIdx.length - 1];
-        for (const i of validIdx) {
-          if (i === first || i === last) continue;
-          let b = Math.floor(((xs[i] - x0) / span) * inner);
-          if (b < 0) b = 0;
-          if (b >= inner) b = inner - 1;
-          buckets[b].push(i);
-        }
-        pushDot(first, ys[first] as number);
-        for (const group of buckets) {
-          if (!group.length) continue;
-          const mid = group[Math.floor(group.length / 2)];
-          const samples = group
-            .map((i) => ys[i])
-            .filter((v): v is number => has(v))
-            .sort((a, b) => a - b);
-          const y = samples[Math.floor(samples.length / 2)];
-          pushDot(mid, y);
-        }
-        pushDot(last, ys[last] as number);
+      for (const i of downsampleScatterIndices(xs, ys, maxDots)) {
+        pushDot(i, ys[i] as number);
       }
     } else if (def.kind === 'hr-area') {
       let cur = '';
@@ -1483,6 +1381,7 @@ const MetricCard = memo(function MetricCard({
       });
       if (pen && cur) hrSegs.push({ d: cur, color });
       if (hrDrawStyle === 'fill') {
+        linePath = buildLine(ys, geom.py);
         let area = '';
         let ap = false;
         ys.forEach((v, i) => {
@@ -1505,25 +1404,22 @@ const MetricCard = memo(function MetricCard({
     }
 
     // Dual-metric overlay: bottom area + top line (roles swappable).
-    // hr-area joins this path so HR-as-primary gets a solid area (not zone strokes).
+    // Keep a solid-color outline on the area series. HR has no linePath
+    // fallback, so clearing primaryLine used to leave it fill-only.
     let primaryLine = linePath;
-    let primaryArea = areaPath;
+    // Do not seed this from areaPath: a lone hr-area fill would then
+    // also paint with the compare fill.
+    let primaryArea = '';
     let overlayLine = '';
     let overlayArea = '';
     if (overlay && oys && ogeom && def.kind !== 'scatter') {
       const pLine = buildLine(ys, geom.py);
       const oLine = buildLine(oys, ogeom.py);
-      if (overlayIsArea) {
-        overlayArea = buildArea(oLine);
-        primaryLine = pLine;
-        primaryArea = '';
-        overlayLine = '';
-      } else {
-        primaryArea = buildArea(pLine);
-        primaryLine = '';
-        overlayLine = oLine;
-        overlayArea = '';
-      }
+      const drawing = compareSeriesDrawing(overlayIsArea);
+      primaryLine = drawing.primaryHasLine ? pLine : '';
+      primaryArea = drawing.primaryHasArea ? buildArea(pLine) : '';
+      overlayLine = drawing.overlayHasLine ? oLine : '';
+      overlayArea = drawing.overlayHasArea ? buildArea(oLine) : '';
     } else if (overlay && oys && ogeom) {
       // Scatter primary: draw overlay as line on right axis.
       overlayLine = buildLine(oys, ogeom.py);
@@ -1576,6 +1472,17 @@ const MetricCard = memo(function MetricCard({
     overlayArea,
     avgY,
   } = paths;
+  const areaFills = chartAreaFills(Boolean(overlay));
+  const singleAreaGradId = `an-area-${gradUid}`;
+  const comparePrimaryGradId = `an-area-p-${gradUid}`;
+  const compareOverlayGradId = `an-area-o-${gradUid}`;
+  const primaryIsArea = overlay
+    ? Boolean(!overlayIsArea && def.kind !== 'scatter')
+    : def.kind === 'area' || (def.kind === 'hr-area' && hrDrawStyle === 'fill');
+  const overlayIsAreaSeries = Boolean(overlay && overlayIsArea);
+  const showHrZoneStroke = usesHrZoneStroke(hrDrawStyle, Boolean(overlay));
+  const singleFill = areaFillOpacities(false);
+  const compareFill = areaFillOpacities(true);
 
   const indexAtClientX = (clientX: number, el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
@@ -1687,14 +1594,12 @@ const MetricCard = memo(function MetricCard({
                     style={{ background: def.color }}
                   />
                   {def.title}
-                  <span className="text-[10px] font-normal text-[var(--color-muted)]">
-                    {overlayIsArea
-                      ? tr('折线·主', 'Line · primary')
-                      : tr('面积·主', 'Area · primary')}
+                  <span className="text-[11px] font-normal text-[var(--color-muted)]">
+                    {def.unit}
                   </span>
                 </span>
                 <span className="text-[11px] font-normal text-[var(--color-muted)]">
-                  +
+                  /
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span
@@ -1702,10 +1607,8 @@ const MetricCard = memo(function MetricCard({
                     style={{ background: overlay.color }}
                   />
                   {overlay.title}
-                  <span className="text-[10px] font-normal text-[var(--color-muted)]">
-                    {overlayIsArea
-                      ? tr('面积·叠', 'Area · overlay')
-                      : tr('折线·叠', 'Line · overlay')}
+                  <span className="text-[11px] font-normal text-[var(--color-muted)]">
+                    {overlay.unit}
                   </span>
                 </span>
               </>
@@ -1738,21 +1641,12 @@ const MetricCard = memo(function MetricCard({
                 {def.unit}
               </span>
             ) : null}
-            {overlay && onSwapOverlay ? (
-              <button
-                type="button"
-                onClick={onSwapOverlay}
-                className="ml-1 cursor-pointer rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-normal text-[var(--color-muted)] hover:text-[var(--color-text)]"
-              >
-                {tr('对调面积/折线', 'Swap area/line')}
-              </button>
-            ) : null}
           </p>
           {headerControls}
           <div className="mt-1 flex flex-wrap items-baseline gap-x-4">
             {has(def.avg) || has(avgVal) ? (
               <p className="metric text-lg leading-none font-semibold @min-[40rem]:text-xl">
-                <span style={{ color: meanColor }}>
+                <span className="text-[var(--color-text)]">
                   {def.format((def.avg ?? avgVal) as number)}
                 </span>
                 <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">
@@ -1799,6 +1693,14 @@ const MetricCard = memo(function MetricCard({
         className={`grid gap-x-1.5 ${overlay ? 'grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]' : 'grid-cols-[2.5rem_minmax(0,1fr)]'} ${plotH}`}
       >
         <div className="relative">
+          {overlay ? (
+            <span
+              className="absolute -top-2.5 right-0 text-[10px] leading-none"
+              style={{ color: def.color }}
+            >
+              {def.unit}
+            </span>
+          ) : null}
           {geom.ticks.map((tick) => (
             <span
               key={`y-${tick.label}`}
@@ -1823,6 +1725,68 @@ const MetricCard = memo(function MetricCard({
             preserveAspectRatio="none"
             className="block h-full w-full overflow-visible"
           >
+            <defs>
+              {areaFills.useSingleArea ? (
+                <linearGradient
+                  id={singleAreaGradId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={def.color}
+                    stopOpacity={singleFill.top}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={def.color}
+                    stopOpacity={singleFill.bottom}
+                  />
+                </linearGradient>
+              ) : null}
+              {areaFills.useComparePrimaryArea ? (
+                <linearGradient
+                  id={comparePrimaryGradId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={def.color}
+                    stopOpacity={compareFill.top}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={def.color}
+                    stopOpacity={compareFill.bottom}
+                  />
+                </linearGradient>
+              ) : null}
+              {areaFills.useCompareOverlayArea && overlay ? (
+                <linearGradient
+                  id={compareOverlayGradId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={overlay.color}
+                    stopOpacity={compareFill.top}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={overlay.color}
+                    stopOpacity={compareFill.bottom}
+                  />
+                </linearGradient>
+              ) : null}
+            </defs>
             {geom.ticks.map((tick) => (
               <line
                 key={`grid-${tick.label}`}
@@ -1843,26 +1807,25 @@ const MetricCard = memo(function MetricCard({
                 width={CHART_W - PAD.l - PAD.r}
                 height={b.h}
                 fill={b.color}
-                opacity={0.08}
+                opacity={ANALYSIS_DYNAMICS_BAND_OPACITY}
               />
             ))}
             {/* soft trend fill removed — scatter stays dots-only */}
-            {primaryArea ? (
-              <path d={primaryArea} fill={def.color} opacity={0.16} />
+            {primaryArea && areaFills.useComparePrimaryArea ? (
+              <path d={primaryArea} fill={`url(#${comparePrimaryGradId})`} />
             ) : null}
-            {overlayArea && overlay ? (
-              <path d={overlayArea} fill={overlay.color} opacity={0.16} />
+            {overlayArea && areaFills.useCompareOverlayArea ? (
+              <path d={overlayArea} fill={`url(#${compareOverlayGradId})`} />
             ) : null}
-            {areaPath && !overlay ? (
-              <path d={areaPath} fill={def.color} opacity={0.16} />
+            {areaPath && areaFills.useSingleArea ? (
+              <path d={areaPath} fill={`url(#${singleAreaGradId})`} />
             ) : null}
-            {!overlay
+            {areaFills.useSingleArea
               ? areaSegs.map((d) => (
                   <path
                     key={`area-seg-${d.slice(0, 48)}`}
                     d={d}
-                    fill={def.color}
-                    opacity={0.16}
+                    fill={`url(#${singleAreaGradId})`}
                   />
                 ))
               : null}
@@ -1879,14 +1842,14 @@ const MetricCard = memo(function MetricCard({
                 vectorEffect="non-scaling-stroke"
               />
             ) : null}
-            {def.kind === 'hr-area' && !overlay
+            {showHrZoneStroke
               ? hrSegs.map((s) => (
                   <path
                     key={`${s.color}-${s.d.slice(0, 24)}`}
                     d={s.d}
                     fill="none"
                     stroke={s.color}
-                    strokeWidth={2.25}
+                    strokeWidth={ANALYSIS_LINE_STROKE_WIDTH}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     vectorEffect="non-scaling-stroke"
@@ -1900,11 +1863,10 @@ const MetricCard = memo(function MetricCard({
                 d={primaryLine || linePath}
                 fill="none"
                 stroke={def.color}
-                strokeWidth={overlay && !overlayIsArea ? 1.5 : 2.25}
+                strokeWidth={seriesStrokeWidth(primaryIsArea)}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
-                opacity={overlay && !overlayIsArea ? 0.85 : 1}
               />
             ) : null}
             {overlayLine && overlay ? (
@@ -1912,7 +1874,7 @@ const MetricCard = memo(function MetricCard({
                 d={overlayLine}
                 fill="none"
                 stroke={overlay.color}
-                strokeWidth={2.25}
+                strokeWidth={seriesStrokeWidth(overlayIsAreaSeries)}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
@@ -1935,12 +1897,12 @@ const MetricCard = memo(function MetricCard({
             ? dots.map((d) => (
                 <span
                   key={`dot-${d.color}-${d.x.toFixed(2)}-${d.y.toFixed(2)}`}
-                  className="pointer-events-none absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  className={ANALYSIS_FORM_DOT_CLASS}
                   style={{
                     left: `${(d.x / CHART_W) * 100}%`,
                     top: `${(d.y / CHART_H) * 100}%`,
                     background: d.color,
-                    opacity: 0.92,
+                    opacity: ANALYSIS_FORM_DOT_OPACITY,
                   }}
                 />
               ))
@@ -1957,14 +1919,17 @@ const MetricCard = memo(function MetricCard({
         </div>
         {overlay && ogeom ? (
           <div className="relative">
+            <span
+              className="absolute -top-2.5 left-0 text-[10px] leading-none"
+              style={{ color: overlay.color }}
+            >
+              {overlay.unit}
+            </span>
             {ogeom.ticks.map((tick) => (
               <span
                 key={`oy-${tick.label}`}
                 className="metric absolute left-0 -translate-y-1/2 text-[10px] leading-none text-[var(--color-muted)]"
-                style={{
-                  top: `${(tick.y / CHART_H) * 100}%`,
-                  color: overlay.color,
-                }}
+                style={{ top: `${(tick.y / CHART_H) * 100}%` }}
               >
                 {tick.label}
               </span>
@@ -2210,9 +2175,10 @@ export function ChartStack({
     ? {
         seconds: garminCad.seconds,
         high_boundary: null,
-        calc_type: 'garmin_percentile_cadence',
+        calc_type: 'cadence_percentile',
       }
-    : cadenceZonesFromChart(chart.cad, chart.t);
+    : null;
+  const cadZoneRows = cadenceZoneNameAndRange(tr);
 
   const hrResolved = resolveHrZones({
     fit: data.zones?.hr,
@@ -2260,13 +2226,6 @@ export function ChartStack({
       ? byKey[overlayKey]
       : null;
 
-  const chipClass = (active: boolean) =>
-    `cursor-pointer rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-      active
-        ? 'border-transparent bg-[var(--color-sunken)] font-medium text-[var(--color-text)]'
-        : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
-    }`;
-
   return (
     <div className="space-y-3">
       <MotionStatusBar data={data} tr={tr} />
@@ -2279,7 +2238,7 @@ export function ChartStack({
             onClick={() => (compareOn ? setCompareOn(false) : enableCompare())}
             className={`cursor-pointer rounded-full border px-3 py-1 text-[11px] transition-colors ${
               compareOn
-                ? 'border-transparent bg-[var(--color-sunken)] font-medium text-[var(--color-text)]'
+                ? 'border-transparent bg-[var(--color-run)]/15 font-medium text-[var(--color-run)]'
                 : 'border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)]'
             }`}
           >
@@ -2312,48 +2271,16 @@ export function ChartStack({
 
       {compareOn && comparePrimary ? (
         <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
-          <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
-                {tr('主指标', 'Primary')}
-              </span>
-              {shown.map((x) => (
-                <button
-                  key={`p-${x.key}`}
-                  type="button"
-                  aria-pressed={primaryKey === x.key}
-                  disabled={x.key === overlayKey}
-                  onClick={() => {
-                    setPrimaryKey(x.key);
-                    setOverlayIsArea(false);
-                  }}
-                  className={`${chipClass(primaryKey === x.key)} disabled:cursor-not-allowed disabled:opacity-40`}
-                >
-                  {x.title}
-                </button>
-              ))}
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="shrink-0 text-[10px] text-[var(--color-muted)]">
-                {tr('叠加', 'Overlay')}
-              </span>
-              {shown.map((x) => (
-                <button
-                  key={`o-${x.key}`}
-                  type="button"
-                  aria-pressed={overlayKey === x.key}
-                  disabled={x.key === primaryKey}
-                  onClick={() => {
-                    setOverlayKey(x.key);
-                    setOverlayIsArea(false);
-                  }}
-                  className={`${chipClass(overlayKey === x.key)} disabled:cursor-not-allowed disabled:opacity-40`}
-                >
-                  {x.title}
-                </button>
-              ))}
-            </div>
-          </div>
+          <CompareMetricSelectors
+            options={shown.map((x) => ({ key: x.key, title: x.title }))}
+            state={{ primaryKey, overlayKey, overlayIsArea }}
+            onChange={(next) => {
+              setPrimaryKey(next.primaryKey);
+              setOverlayKey(next.overlayKey);
+              setOverlayIsArea(next.overlayIsArea);
+            }}
+            tr={tr}
+          />
           {compareOverlay ? (
             <MetricCard
               tr={tr}
@@ -2366,7 +2293,6 @@ export function ChartStack({
               prominent
               overlay={compareOverlay}
               overlayIsArea={overlayIsArea}
-              onSwapOverlay={() => setOverlayIsArea((v) => !v)}
               hrDrawStyle={comparePrimary.key === 'hr' ? hrStyle : 'fill'}
               bestIndex={comparePrimary.key === 'pace' ? bestIdx : null}
               zoneBounds={
@@ -2498,7 +2424,8 @@ export function ChartStack({
                       colors={[...DYNAMICS_BAND_COLORS]}
                       unit="spm"
                       tr={tr}
-                      labels={garminCad?.labels ?? cadenceZoneLabels()}
+                      labels={cadZoneRows.map((r) => r.name)}
+                      ranges={cadZoneRows.map((r) => r.range)}
                     />
                   ) : d.key === 'power' && powerZone ? (
                     <ZoneTable
