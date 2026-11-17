@@ -39,7 +39,7 @@ export const SPLITS_BAR_FILL = `linear-gradient(90deg, ${SPLITS_BAR_FILL_STOPS.m
   (s) =>
     `color-mix(in srgb, var(--color-run) ${Math.round(s.opacity * 100)}%, transparent) ${Math.round(s.offset * 100)}%`
 ).join(', ')})`;
-/** Pace column width: room for a pace plus the 快 mark. */
+/** Pace column width on the split bars. */
 export const SPLITS_PACE_COL_CLASS = 'w-16 shrink-0 text-right';
 
 /** Pace arrows stay evaluative: green when faster, red when slower. */

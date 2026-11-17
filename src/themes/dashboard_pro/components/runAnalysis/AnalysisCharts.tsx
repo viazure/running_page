@@ -1690,7 +1690,7 @@ const MetricCard = memo(function MetricCard({
         />
       </div>
       <div
-        className={`grid gap-x-1.5 ${overlay ? 'grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]' : 'grid-cols-[2.5rem_minmax(0,1fr)]'} ${plotH}`}
+        className={`grid gap-x-1.5 ${overlay ? 'grid-cols-[2rem_minmax(0,1fr)_2rem]' : 'grid-cols-[2rem_minmax(0,1fr)]'} ${plotH}`}
       >
         <div className="relative">
           {overlay ? (
@@ -1938,7 +1938,7 @@ const MetricCard = memo(function MetricCard({
         ) : null}
       </div>
       <div
-        className={`mt-1 grid gap-x-1.5 ${overlay ? 'grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]' : 'grid-cols-[2.5rem_minmax(0,1fr)]'}`}
+        className={`mt-1 grid gap-x-1.5 ${overlay ? 'grid-cols-[2rem_minmax(0,1fr)_2rem]' : 'grid-cols-[2rem_minmax(0,1fr)]'}`}
       >
         <div />
         <div className="relative mt-1 h-3.5">

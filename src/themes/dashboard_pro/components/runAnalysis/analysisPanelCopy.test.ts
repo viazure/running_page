@@ -146,7 +146,9 @@ describe('splits bars use running orange', () => {
     assert.match(src, /SPLITS_FAST_PACE_TEXT_CLASS/);
     assert.match(src, /splitPaceAxis/);
     assert.match(src, /splitBarRatio/);
-    assert.match(src, /tr\('快', 'Fast'\)/);
+    assert.match(src, /tr\('本趟最快', 'fastest split'\)/);
+    assert.match(src, /sr-only/);
+    assert.doesNotMatch(src, /tr\('快', 'Fast'\)/);
     assert.doesNotMatch(src, /25 \+ ratio \* 75/);
     assert.doesNotMatch(src, /opacity: 0\.35 \+ ratio \* 0\.55/);
     assert.doesNotMatch(src, /backgroundColor: 'var\(--color-accent\)'/);
