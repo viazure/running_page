@@ -91,11 +91,11 @@ export function useSummaryAggregates(
   capabilities: Capabilities;
   loading: boolean;
 } {
-  const [aggregates, setAggregates] = useState<SummaryAggregates | null>(
+  const [aggregates, setAggregates] = useState<SummaryAggregates | null>(() =>
     getLoadedAggregates()
   );
   const [loading, setLoading] = useState(
-    !getLoadedAggregates() && !unavailable
+    () => !getLoadedAggregates() && !unavailable
   );
 
   useEffect(() => {

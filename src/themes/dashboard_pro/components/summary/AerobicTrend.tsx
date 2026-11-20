@@ -30,7 +30,6 @@ export function AerobicTrend({
   decouplingMonthly,
   cadenceMonthly,
   focusYear = null,
-  locale,
   tr,
 }: {
   vo2max: { date: string; value: number }[];
@@ -38,7 +37,6 @@ export function AerobicTrend({
   cadenceMonthly: { key: string; median: number | null }[];
   /** YYYY, or null → last {@link ALL_YEARS_CHART_MONTHS} months. */
   focusYear?: string | null;
-  locale: string;
   tr: (zh: string, en: string) => string;
 }) {
   const vo2Rows = useMemo(() => {

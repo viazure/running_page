@@ -27,7 +27,9 @@ import {
 } from '../../../../core/analysisPanelCopy.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const tr = (zh: string, en: string) => zh;
+// The suite only asserts the Chinese copy; English strings are passed through
+// for signature compatibility, so `en` stays unused on purpose.
+const tr = (zh: string, _en: string) => zh;
 
 describe('heart-rate zone copy', () => {
   it('has no under-title caption for device zones, and only “区间为估算” when estimated', () => {

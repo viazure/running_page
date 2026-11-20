@@ -1129,7 +1129,7 @@ const MetricCard = memo(function MetricCard({
     scrubbing: boolean;
     pointerId: number;
   } | null>(null);
-  const gradUid = useId().replace(/:/g, '');
+  const gradientId = useId().replace(/:/g, '');
   const ys = useMemo(() => {
     if (def.kind === 'scatter') return def.series;
     if (def.kind === 'hr-area') return def.series;
@@ -1473,9 +1473,9 @@ const MetricCard = memo(function MetricCard({
     avgY,
   } = paths;
   const areaFills = chartAreaFills(Boolean(overlay));
-  const singleAreaGradId = `an-area-${gradUid}`;
-  const comparePrimaryGradId = `an-area-p-${gradUid}`;
-  const compareOverlayGradId = `an-area-o-${gradUid}`;
+  const singleAreaGradId = `an-area-${gradientId}`;
+  const comparePrimaryGradId = `an-area-p-${gradientId}`;
+  const compareOverlayGradId = `an-area-o-${gradientId}`;
   const primaryIsArea = overlay
     ? Boolean(!overlayIsArea && def.kind !== 'scatter')
     : def.kind === 'area' || (def.kind === 'hr-area' && hrDrawStyle === 'fill');
