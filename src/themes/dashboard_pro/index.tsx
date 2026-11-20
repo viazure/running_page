@@ -332,8 +332,10 @@ function DashboardProContent({
     return () => {
       cancelled = true;
     };
-    // year is read to decide a switch; omitting it avoids a setYear loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `year` is read only to decide whether to switch; including it would loop
+    // (this effect calls setYear). Both lint plugins report the same rule, so
+    // both need suppressing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [runHashKey, activities, activitiesWithTracks, page, onNavigateHome, t]);
 
   const filtered = useFilteredActivities(activities, filter, year);

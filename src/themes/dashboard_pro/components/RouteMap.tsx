@@ -454,13 +454,6 @@ export function RouteMap({
     };
   });
 
-  const restoreSelectedLine = (map: mapboxgl.Map) => {
-    if (map.getLayer('selected')) {
-      map.setPaintProperty('selected', 'line-opacity', 0.9);
-    }
-    removeChaseHighlight(map);
-  };
-
   const resolveOrbitCoords = (): Coordinate[] | null => {
     const selected = selectedCoordsRef.current;
     if (selected && selected.length >= 2) return selected;

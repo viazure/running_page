@@ -490,7 +490,6 @@ function SummaryInner({ onBack }: SummaryPageProps) {
                     decouplingMonthly={aggregates.decouplingMonthly}
                     cadenceMonthly={aggregates.cadenceMonthly}
                     focusYear={isAllYears ? null : activeYearKey}
-                    locale={locale}
                     tr={tr}
                   />
                 </CapabilityGate>

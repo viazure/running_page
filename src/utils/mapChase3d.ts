@@ -3,7 +3,6 @@ import { haversine, type Coordinate } from './routeAnimation';
 import {
   CHASE_BEARING_TAU_MS,
   CHASE_PITCH_ZOOM_TAU_2D_MS,
-  CHASE_PITCH_ZOOM_TAU_MS,
   chaseFollowCenter,
   clampChaseDt,
   nextChase3dPose,

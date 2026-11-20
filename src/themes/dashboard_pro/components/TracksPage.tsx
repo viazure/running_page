@@ -213,9 +213,9 @@ function TrackMap({
   onPlaybackChange?: (playing: boolean) => void;
 }) {
   const { locale, t } = useLocale();
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const mapReady = useRef(false);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const mapReadyRef = useRef(false);
   const activityRef = useRef(activity);
   const activitiesRef = useRef(activities);
   const lightsOffRef = useRef(lightsOff);
@@ -389,8 +389,8 @@ function TrackMap({
   const updateRoutesRef = useRef<() => void>(() => {});
   useLayoutEffect(() => {
     updateRoutesRef.current = () => {
-      const m = map.current;
-      if (!m || !mapReady.current) return;
+      const m = mapRef.current;
+      if (!m || !mapReadyRef.current) return;
       const act = activityRef.current;
       const acts = activitiesRef.current;
       const privacy = lightsOffRef.current;
@@ -520,8 +520,8 @@ function TrackMap({
 
   useEffect(() => {
     refitViewRef.current = () => {
-      const m = map.current;
-      if (!m?.isStyleLoaded() || !mapReady.current) return;
+      const m = mapRef.current;
+      if (!m?.isStyleLoaded() || !mapReadyRef.current) return;
       const act = activityRef.current;
       const coords = selectedCoordsRef.current;
       const privacy = lightsOffRef.current;
@@ -573,7 +573,7 @@ function TrackMap({
   };
 
   const handleToggle3d = () => {
-    const m = map.current;
+    const m = mapRef.current;
     const coords = resolveOrbitCoords();
     if (!m || !coords || !canOffer3d) return;
     const next = !view3dRef.current;
@@ -601,7 +601,7 @@ function TrackMap({
   };
 
   const handleToggleChase = () => {
-    const m = map.current;
+    const m = mapRef.current;
     const act = activityRef.current;
     const coords = selectedCoordsRef.current;
     if (!m || !act || !coords || !canOfferPlayback) return;
@@ -716,7 +716,7 @@ function TrackMap({
       videoCaptureRef.current.stop();
       return;
     }
-    const m = map.current;
+    const m = mapRef.current;
     if (!m || !chasing) return;
     let restoreViewport: (() => void) | undefined;
     try {
@@ -764,7 +764,7 @@ function TrackMap({
           });
         },
         prepareEndCard: async () => {
-          const live = map.current;
+          const live = mapRef.current;
           const coords = selectedCoordsRef.current;
           if (!live || !coords || coords.length < 2) return;
           chaseRef.current.showFullRoute();
@@ -786,7 +786,7 @@ function TrackMap({
           });
         },
         getMarkerPoints: () => {
-          const live = map.current;
+          const live = mapRef.current;
           const coords = selectedCoordsRef.current;
           const canvas = live?.getCanvas();
           if (!live || !coords || coords.length < 2 || !canvas) return null;
@@ -841,7 +841,7 @@ function TrackMap({
       if (!shouldRestoreTrail) {
         restoreViewport?.();
       } else {
-        const live = map.current;
+        const live = mapRef.current;
         if (live) {
           restoreOverviewLine(live);
           restoreSelectedHighlight(live);
@@ -859,7 +859,7 @@ function TrackMap({
         const gen = ++trailRestoreGenRef.current;
         void (async () => {
           restore?.();
-          const m = map.current;
+          const m = mapRef.current;
           if (!m) return;
           try {
             await waitForMapIdle(m, 1500);
@@ -869,7 +869,8 @@ function TrackMap({
           await new Promise<void>((r) =>
             requestAnimationFrame(() => requestAnimationFrame(() => r()))
           );
-          if (trailRestoreGenRef.current !== gen || map.current !== m) return;
+          if (trailRestoreGenRef.current !== gen || mapRef.current !== m)
+            return;
           // Clear animKey so updateRoutes cannot early-return while orbit runs.
           animKeyRef.current = null;
           orbitRef.current.stop();
@@ -897,8 +898,8 @@ function TrackMap({
   // in the committed tree (avoids settle/orbit early-return wiping the trail).
   useLayoutEffect(() => {
     if (trailRestoreGen === 0 || chasing) return;
-    if (!mapReady.current) return;
-    const m = map.current;
+    if (!mapReadyRef.current) return;
+    const m = mapRef.current;
     if (!m?.isStyleLoaded()) return;
     animKeyRef.current = null;
     orbitRef.current.stop();
@@ -910,7 +911,7 @@ function TrackMap({
   // Desktop: no card grow — do not resize mid-flyTo (start pin drift).
   const wasChasingRef = useRef(false);
   useEffect(() => {
-    const m = map.current;
+    const m = mapRef.current;
     if (!m) return;
     const ending = wasChasingRef.current && !chasing;
     const starting = !wasChasingRef.current && chasing;
@@ -989,10 +990,10 @@ function TrackMap({
   }, [chasing, isFullscreen, canOfferPlayback, t]);
 
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainerRef.current) return;
     if (MAPBOX_TOKEN) mapboxgl.accessToken = MAPBOX_TOKEN;
 
-    mapReady.current = false;
+    mapReadyRef.current = false;
     styleIdleRef.current = false;
     animKeyRef.current = null;
     setMapStatus('loading');
@@ -1003,7 +1004,7 @@ function TrackMap({
     let mapInstance: mapboxgl.Map;
     try {
       mapInstance = new mapboxgl.Map({
-        container: mapContainer.current,
+        container: mapContainerRef.current,
         style,
         center: [108, 35],
         zoom: 3,
@@ -1020,7 +1021,7 @@ function TrackMap({
       setMapStatus('error');
       return;
     }
-    map.current = mapInstance;
+    mapRef.current = mapInstance;
 
     if (!useBlank) {
       mapInstance.addControl(
@@ -1087,8 +1088,8 @@ function TrackMap({
       if (
         timedOut ||
         styleSettled ||
-        !map.current ||
-        map.current !== mapInstance
+        !mapRef.current ||
+        mapRef.current !== mapInstance
       )
         return;
       if (mapInstance.isStyleLoaded()) return;
@@ -1109,7 +1110,7 @@ function TrackMap({
     }, MAP_STYLE_LOAD_TIMEOUT_MS);
 
     const onError = (event: mapboxgl.ErrorEvent) => {
-      if (map.current !== mapInstance) return;
+      if (mapRef.current !== mapInstance) return;
       if (isMapboxAuthError(event.error)) {
         fallBackBasemap('Mapbox auth failed; falling back to next basemap');
       }
@@ -1125,7 +1126,7 @@ function TrackMap({
       if (!originalEvent) return;
       if (chaseRef.current.isAnimating() || orbitRef.current.isAnimating())
         return;
-      if (map.current !== mapInstance) return;
+      if (mapRef.current !== mapInstance) return;
       try {
         if (
           mapInstance.getLayer('all-routes') ||
@@ -1139,26 +1140,26 @@ function TrackMap({
     };
 
     mapInstance.on('style.load', () => {
-      if (map.current !== mapInstance) return;
+      if (mapRef.current !== mapInstance) return;
       if (!timedOut) {
         styleSettled = true;
         settled = true;
         window.clearTimeout(timer);
       }
-      mapReady.current = true;
+      mapReadyRef.current = true;
       setMapStatus('ready');
       styleIdleRef.current = false;
       // Blank privacy styles can already be idle inside this event, so draw now.
       updateRoutesRef.current();
       mapInstance.once('idle', () => {
-        if (map.current !== mapInstance) return;
+        if (mapRef.current !== mapInstance) return;
         styleIdleRef.current = true;
         updateRoutesRef.current();
       });
     });
     if (mapInstance.isStyleLoaded()) {
       setMapStatus('ready');
-      mapReady.current = true;
+      mapReadyRef.current = true;
       updateRoutesRef.current();
     }
     mapInstance.on('dragend', onUserCameraChange);
@@ -1179,7 +1180,7 @@ function TrackMap({
       resizeMap();
       requestAnimationFrame(resizeMap);
     });
-    if (mapContainer.current) ro.observe(mapContainer.current);
+    if (mapContainerRef.current) ro.observe(mapContainerRef.current);
     const onDockSettled = () => {
       resizeMap();
       requestAnimationFrame(resizeMap);
@@ -1206,10 +1207,10 @@ function TrackMap({
       mapInstance.off('rotateend', onUserCameraChange);
       mapInstance.off('pitchend', onUserCameraChange);
       mapInstance.remove();
-      if (map.current === mapInstance) {
-        map.current = null;
+      if (mapRef.current === mapInstance) {
+        mapRef.current = null;
       }
-      mapReady.current = false;
+      mapReadyRef.current = false;
       styleIdleRef.current = false;
       animKeyRef.current = null;
     };
@@ -1217,10 +1218,10 @@ function TrackMap({
 
   useEffect(() => {
     setNeedsRecenter(false);
-    const m = map.current;
+    const m = mapRef.current;
     // Do not wait for map 'idle': 3D orbit jumpTo keeps the map busy forever,
     // so a styleIdle gate would drop activity switches after 3D is enabled.
-    if (!mapReady.current || !m?.isStyleLoaded()) return;
+    if (!mapReadyRef.current || !m?.isStyleLoaded()) return;
     // Yield a frame so the thumb selection ring paints before decode/flyTo.
     const raf = window.requestAnimationFrame(() => {
       updateRoutesRef.current();
@@ -1229,15 +1230,15 @@ function TrackMap({
   }, [activity, activities]);
 
   useEffect(() => {
-    if (!map.current?.isStyleLoaded()) return;
-    applyLightsOff(map.current, lightsOff);
-    if (map.current.getLayer('all-routes') && !activityRef.current) {
-      map.current.setPaintProperty(
+    if (!mapRef.current?.isStyleLoaded()) return;
+    applyLightsOff(mapRef.current, lightsOff);
+    if (mapRef.current.getLayer('all-routes') && !activityRef.current) {
+      mapRef.current.setPaintProperty(
         'all-routes',
         'line-width',
         lightsOff ? 2 : 1.2
       );
-      map.current.setPaintProperty(
+      mapRef.current.setPaintProperty(
         'all-routes',
         'line-opacity',
         lightsOff ? 0.85 : 0.5
@@ -1300,7 +1301,7 @@ function TrackMap({
           ) : null}
         </div>
       ) : null}
-      <div ref={mapContainer} className="h-full w-full" />
+      <div ref={mapContainerRef} className="h-full w-full" />
       {mapStatus === 'error' ? (
         <div className="route-map-empty z-10" role="status">
           {t('mapBasemapFailed')}
