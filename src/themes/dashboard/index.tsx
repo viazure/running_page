@@ -14,6 +14,7 @@ import {
   getAvailableYears,
   extractProvince,
   getActivityData,
+  preloadActivityData,
 } from '@/hooks/useActivities';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocale } from '@/hooks/useLocale';
@@ -49,6 +50,10 @@ const pageFromPath = (): Page =>
           .replace(/\/$/, '') === 'tracks'
       ? 'tracks'
       : 'home';
+
+// This theme renders the full bundled `activities.json`; start the fetch at
+// module scope so it overlaps parsing. dashboard_pro skips it (lite payload).
+void preloadActivityData();
 
 function Dashboard() {
   const routeSectionRef = useRef<HTMLDivElement>(null);

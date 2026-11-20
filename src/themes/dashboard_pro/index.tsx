@@ -82,16 +82,32 @@ const RunAnalysisLauncher = lazy(() =>
 );
 
 /**
- * Prefetch secondary pages so home → summary/tracks does not flash Suspense.
- * Deferred to idle time: the first paint must not compete with map/chart chunks.
- * Falls back to a timeout where requestIdleCallback is unavailable (Safari).
+ * Navigation-intent prefetch: hover / focus on a header item starts that page's
+ * chunk so the click does not wait. Tracks is included here on purpose — intent
+ * is the only signal allowed to pull mapbox-gl before navigation.
  */
-function scheduleIdlePrefetch(): void {
-  if (typeof window === 'undefined') return;
-  const run = () => {
-    void loadSummaryPage();
-    void loadTracksPage();
-  };
+function prefetchPage(page: Page): void {
+  if (page === 'summary') void loadSummaryPage();
+  else if (page === 'tracks') void loadTracksPage();
+}
+
+/**
+ * Defer the summary prefetch until the user actually engages with the page.
+ *
+ * `requestIdleCallback` alone is not a delay: on a light first paint the browser
+ * is idle within a few hundred ms, so an unconditional idle prefetch still pulled
+ * the summary chunk (recharts, ~340KB) during first load. Waiting for the first
+ * real interaction keeps that weight out of the initial page while still leaving
+ * the chunk warm by the time a click on 汇总 happens.
+ *
+ * Tracks is never prefetched automatically: its chunk pulls mapbox-gl (~1.7MB
+ * raw), which must not compete with the home first paint.
+ */
+const INTERACTION_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+
+function scheduleIdlePrefetch(): () => void {
+  if (typeof window === 'undefined') return () => {};
+
   const ric = (
     window as Window & {
       requestIdleCallback?: (
@@ -100,14 +116,33 @@ function scheduleIdlePrefetch(): void {
       ) => number;
     }
   ).requestIdleCallback;
-  if (typeof ric === 'function') {
-    ric(run, { timeout: 2500 });
-    return;
-  }
-  window.setTimeout(run, 1200);
-}
 
-scheduleIdlePrefetch();
+  const runWhenIdle = () => {
+    const run = () => void loadSummaryPage();
+    if (typeof ric === 'function') {
+      ric(run, { timeout: 3000 });
+      return;
+    }
+    window.setTimeout(run, 1500);
+  };
+
+  let armed = true;
+  const onFirstInteraction = () => {
+    if (!armed) return;
+    armed = false;
+    cleanup();
+    runWhenIdle();
+  };
+  const cleanup = () => {
+    for (const event of INTERACTION_EVENTS) {
+      window.removeEventListener(event, onFirstInteraction);
+    }
+  };
+  for (const event of INTERACTION_EVENTS) {
+    window.addEventListener(event, onFirstInteraction, { passive: true });
+  }
+  return cleanup;
+}
 
 type Page = 'home' | 'tracks' | 'summary';
 
@@ -644,25 +679,27 @@ function DashboardProContent({
         )}
       </div>
       <Suspense fallback={null}>
-        <RunAnalysisLauncher
-          activity={selectedActivity}
-          open={analysisOpen}
-          onOpen={openAnalysis}
-          onClose={closeAnalysis}
-          onOpenChange={setAnalysisOpen}
-          anonymousTitles={useAnonymousTitles}
-        />
-        {hashNotice ? (
-          <div
-            role="status"
-            className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[80] flex justify-center px-4"
-          >
-            <p className="max-w-md rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm shadow-lg">
-              {hashNotice}
-            </p>
-          </div>
+        {selectedActivity ? (
+          <RunAnalysisLauncher
+            activity={selectedActivity}
+            open={analysisOpen}
+            onOpen={openAnalysis}
+            onClose={closeAnalysis}
+            onOpenChange={setAnalysisOpen}
+            anonymousTitles={useAnonymousTitles}
+          />
         ) : null}
       </Suspense>
+      {hashNotice ? (
+        <div
+          role="status"
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[80] flex justify-center px-4"
+        >
+          <p className="max-w-md rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm shadow-lg">
+            {hashNotice}
+          </p>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -681,6 +718,10 @@ function DashboardProInner() {
   useEffect(() => {
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
   }, [locale]);
+
+  // Warm the summary chunk after the first real interaction (idle from there),
+  // so it never competes with the home first paint.
+  useEffect(() => scheduleIdlePrefetch(), []);
 
   const navigate = (next: Page) => {
     // Keep previous page painted while lazy chunks resolve (avoids Suspense flash).
@@ -705,6 +746,7 @@ function DashboardProInner() {
         toggleTheme={toggle}
         page={page}
         onNavigate={navigate}
+        onPrefetch={prefetchPage}
         enablePrivacyUnlock={CAN_PRIVACY_UNLOCK}
         showSummary
       />
