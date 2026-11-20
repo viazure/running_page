@@ -483,22 +483,19 @@ function useActivityListMeasurements(
   const sampleResizeObserverRef = useRef<ResizeObserver | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
 
-  const itemsPerRowStore = useMemo(
-    () => createSnapshotStore(embedded ? (interval === 'day' ? 2 : 1) : 0),
-    // once per mount — embed defaults avoid a 0-column / viewport-tall first paint
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+  // Mount-only lazy init: embed defaults avoid a 0-column / viewport-tall first
+  // paint, and later `embedded`/`interval` changes must not rebuild the store.
+  const [itemsPerRowStore] = useState(() =>
+    createSnapshotStore(embedded ? (interval === 'day' ? 2 : 1) : 0)
   );
   const cardWidthStore = useMemo(
     () => createSnapshotStore(itemWidth),
     [itemWidth]
   );
   const rowHeightStore = useMemo(() => createSnapshotStore(360), []);
-  const listHeightStore = useMemo(
-    () => createSnapshotStore(embedded ? 320 : getInitialListHeight()),
-    // once per mount — embed must not start at window.innerHeight-40
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+  // Mount-only lazy init: embed must not start at window.innerHeight-40.
+  const [listHeightStore] = useState(() =>
+    createSnapshotStore(embedded ? 320 : getInitialListHeight())
   );
 
   const itemsPerRow = useSyncExternalStore(
@@ -1105,7 +1102,8 @@ const ActivityListInner: React.FC<
 }) => {
   const { t, locale } = useLocale();
   const cs = embedded ? embedStyles : styles;
-  const [intervalState, setInterval] = useState<IntervalType>(initialInterval);
+  const [intervalState, setIntervalState] =
+    useState<IntervalType>(initialInterval);
   // Embedded Pro Summary owns period pills via initialInterval. Keep interval
   // controlled so day->Life never paints a stale Day card grid while the host
   // drops `.summary-day-classic` (overflow/width thrash = visible shrink).
@@ -1130,8 +1128,6 @@ const ActivityListInner: React.FC<
   const dayYearSeededRef = useRef(
     defaultSelectedYear(getAvailableActivityYears(activityData)) != null
   );
-  // Already decided: stay on null unless user picks a year chip.
-  const lifeYearSeededRef = useRef(true);
   const lifeCaptureRef = useRef<HTMLDivElement>(null);
   const [lifeExporting, setLifeExporting] = useState(false);
   const lifeExportingRef = useRef(false);
@@ -1253,7 +1249,9 @@ const ActivityListInner: React.FC<
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [interval, selectedYear, availableYears]);
+    // `setSelectedYear` is a useCallback keyed by interval/yearControlled, so it
+    // is stable here; listing it keeps the arrow-key handler on the live setter.
+  }, [interval, selectedYear, availableYears, setSelectedYear]);
 
   const handleHomeClick = () => {
     if (onBack) {
@@ -1275,7 +1273,7 @@ const ActivityListInner: React.FC<
     if (newInterval === 'day') {
       void loadRoutePreview();
     }
-    setInterval(newInterval);
+    setIntervalState(newInterval);
   }
 
   const dataListFull = useMemo(() => {
@@ -1292,10 +1290,21 @@ const ActivityListInner: React.FC<
   /** Pro Summary day: page like PeriodCompare so first paint stays light. */
   const DAY_PAGE = 15;
   const dayPaged = embedded && interval === 'day';
-  const [dayLimit, setDayLimit] = useState(DAY_PAGE);
-  useEffect(() => {
-    if (dayPaged) setDayLimit(DAY_PAGE);
-  }, [dayPaged, selectedYear, sportType]);
+  // Paging limit is keyed by the list scope (year + sport + paged-ness). A scope
+  // change derives back to the first page during render instead of resetting it
+  // from an effect, which would cascade an extra render on every switch.
+  const dayPageScope = dayPaged ? `${selectedYear ?? ''}|${sportType}` : '';
+  const [dayPage, setDayPage] = useState({
+    scope: dayPageScope,
+    limit: DAY_PAGE,
+  });
+  const dayLimit = dayPage.scope === dayPageScope ? dayPage.limit : DAY_PAGE;
+  const growDayLimit = useCallback(() => {
+    setDayPage((prev) => ({
+      scope: dayPageScope,
+      limit: (prev.scope === dayPageScope ? prev.limit : DAY_PAGE) + DAY_PAGE,
+    }));
+  }, [dayPageScope]);
 
   const dataList = useMemo(() => {
     if (!dayPaged) return dataListFull;
@@ -1875,7 +1884,7 @@ const ActivityListInner: React.FC<
                   <button
                     type="button"
                     className={cs.loadMoreBtn}
-                    onClick={() => setDayLimit((n) => n + DAY_PAGE)}
+                    onClick={growDayLimit}
                   >
                     {locale === 'zh' ? '加载更多' : 'Load more'} ({dayLimit}/
                     {dataListFull.length})

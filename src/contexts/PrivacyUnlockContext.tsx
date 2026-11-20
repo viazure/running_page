@@ -1,7 +1,7 @@
 import React, {
   createContext,
   useCallback,
-  useContext,
+  use,
   useEffect,
   useRef,
   useState,
@@ -26,11 +26,11 @@ const PrivacyUnlockContext = createContext<{
 }>({ isUnlocked: false, toggleUnlock: () => {} });
 
 export function usePrivacyUnlock(): boolean {
-  return useContext(PrivacyUnlockContext).isUnlocked;
+  return use(PrivacyUnlockContext).isUnlocked;
 }
 
 export function usePrivacyUnlockToggle(): () => void {
-  return useContext(PrivacyUnlockContext).toggleUnlock;
+  return use(PrivacyUnlockContext).toggleUnlock;
 }
 
 /** Normalize key for sequence match: Arrow keys as-is, letters lowercase */
@@ -53,7 +53,7 @@ function logUnlockHintOnce() {
 }
 
 export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
-  const [isUnlocked, setUnlocked] = useState(getStored);
+  const [isUnlocked, setIsUnlocked] = useState(getStored);
   const bufferRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,7 +64,7 @@ export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
 
   const persist = useCallback((value: boolean) => {
     const wasUnlocked = getStored();
-    setUnlocked(value);
+    setIsUnlocked(value);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem(STORAGE_KEY, value ? 'true' : 'false');
     }
@@ -128,9 +128,5 @@ export function PrivacyUnlockProvider({ children }: React.PropsWithChildren) {
     [isUnlocked, toggleUnlock]
   );
 
-  return (
-    <PrivacyUnlockContext.Provider value={value}>
-      {children}
-    </PrivacyUnlockContext.Provider>
-  );
+  return <PrivacyUnlockContext value={value}>{children}</PrivacyUnlockContext>;
 }
