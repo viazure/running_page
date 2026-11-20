@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
@@ -92,10 +92,23 @@ export function StatsCards({
   const weekGoalMins = goal.unit === 'time' ? goal.weekly : 0;
 
   // Current year stats (for yearly goal).
-  // Wrapped in useMemo: `new Date()` during render is impure (SSR/StrictMode can
-  // disagree between passes) and recomputed the whole goal block on every
-  // render. Anchored to the day so it stays stable within a render session.
-  const now = useMemo(() => new Date(), []);
+  // Anchor "today" in state so render stays pure (no `new Date()` each pass).
+  // Retick at local midnight so a tab left open overnight still rolls the
+  // day / streak / YoY-to-date math — empty-deps useMemo would freeze forever.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = new Date();
+    const nextMidnight = new Date(
+      t.getFullYear(),
+      t.getMonth(),
+      t.getDate() + 1
+    );
+    const id = window.setTimeout(
+      () => setNow(new Date()),
+      nextMidnight.getTime() - Date.now() + 50
+    );
+    return () => clearTimeout(id);
+  }, [now]);
   const currentYear = year ?? now.getFullYear();
   // Past years follow the same month/weekday as today. Current year and All stay on now.
   const viewingPastYear = year != null && year !== now.getFullYear();
