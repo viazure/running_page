@@ -159,13 +159,16 @@
   border-color: var(--color-accent);
 }
 
+/* Portaled to <body> with position: fixed. The summary panels are scroll
+ * containers, so an absolutely positioned bubble was clipped by the panel edge
+ * (the lower cards lost 290-685px of it). Coordinates come from JS. */
 .info-tip-pop {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 90;
   width: max-content;
-  max-width: min(22rem, 80vw);
+  /* Keep a long sentence readable, but never overflow a narrow phone once the
+   * viewport padding is subtracted. */
+  max-width: min(22rem, calc(100vw - 1.5rem));
   padding: 8px 10px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -173,23 +176,25 @@
   color: var(--color-text);
   font-size: 11px;
   line-height: 1.55;
+  text-align: left;
+  overflow-wrap: anywhere;
   box-shadow: var(--shadow-card);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease;
+  pointer-events: none;
+  animation: info-tip-in 0.12s ease-out;
 }
 
-.info-tip:hover .info-tip-pop,
-.info-tip:focus-within .info-tip-pop {
-  opacity: 1;
-  visibility: visible;
+@keyframes info-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-@media (max-width: 640px) {
+@media (prefers-reduced-motion: reduce) {
   .info-tip-pop {
-    left: auto;
-    right: 0;
-    max-width: 78vw;
+    animation: none;
   }
 }
 
