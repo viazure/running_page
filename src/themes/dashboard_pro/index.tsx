@@ -245,7 +245,12 @@ function DashboardProContent({
       onNavigateHome();
     }
 
-    const activity = activities.find((a) => a.run_id === hash.runId);
+    // Prefer the sidecar-merged list. Lite rows keep summary_polyline: null;
+    // selectActivity writes #run_<id>, which re-enters this effect — looking up
+    // lite would strip GPS from every click (routeFallback on every run).
+    const activity =
+      activitiesWithTracks.find((a) => a.run_id === hash.runId) ??
+      activities.find((a) => a.run_id === hash.runId);
     if (!activity) {
       setHashNotice(t('runHashNotFound'));
       setAnalysisOpen(false);
@@ -258,7 +263,12 @@ function DashboardProContent({
     if (y != null && year !== y) setYear(y);
 
     applyingHashRef.current = true;
-    setSelectedActivity(activity);
+    setSelectedActivity((prev) =>
+      prev?.run_id === activity.run_id &&
+      prev.summary_polyline === activity.summary_polyline
+        ? prev
+        : activity
+    );
     queueMicrotask(() => {
       applyingHashRef.current = false;
     });
@@ -289,7 +299,7 @@ function DashboardProContent({
     };
     // year is read to decide a switch; omitting it avoids a setYear loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runHashKey, activities, page, onNavigateHome, t]);
+  }, [runHashKey, activities, activitiesWithTracks, page, onNavigateHome, t]);
 
   const filtered = useFilteredActivities(activities, filter, year);
   const modules = DASHBOARD_PRO_MODULES;

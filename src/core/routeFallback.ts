@@ -3,6 +3,8 @@ import polyline from '@mapbox/polyline';
 type MappedActivity = {
   start_date_local: string;
   summary_polyline?: string | null;
+  /** Lite payload flag: GPS exists in the track sidecar even when polyline is null. */
+  has_gps?: boolean;
 };
 
 const routeCache = new WeakMap<
@@ -44,6 +46,10 @@ export function routeForActivity<T extends MappedActivity>(
   activities: readonly T[]
 ): T | null {
   if (hasRoute(selected)) return selected;
+  // Lite rows keep summary_polyline: null but set has_gps when the sidecar has
+  // geometry. Do not fall back to an older run — that shows a false "No GPS"
+  // banner until (or instead of) the merge.
+  if (selected.has_gps) return selected;
   let latest: T | null = null;
   let latestLocal = '';
   for (const activity of activities) {
