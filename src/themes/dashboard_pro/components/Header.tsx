@@ -15,6 +15,11 @@ interface HeaderProps {
   activities?: Activity[];
   page: Page;
   onNavigate: (p: Page) => void;
+  /**
+   * Preload the target page's chunk on pointer/focus intent. Optional: pages
+   * that are already bundled, or themes without a split, simply omit it.
+   */
+  onPrefetch?: (p: Page) => void;
   /** Enable logo multi-tap privacy unlock (still navigates home on click) */
   enablePrivacyUnlock?: boolean;
   /** Include Summary nav item (dashboard_pro). Default false. */
@@ -132,6 +137,7 @@ export function Header({
   toggleTheme,
   page,
   onNavigate,
+  onPrefetch,
   enablePrivacyUnlock = false,
   showSummary = false,
 }: HeaderProps) {
@@ -242,6 +248,8 @@ export function Header({
               type="button"
               key={item.page}
               onClick={() => onNavigate(item.page)}
+              onPointerEnter={() => onPrefetch?.(item.page)}
+              onFocus={() => onPrefetch?.(item.page)}
               className={`cursor-pointer border-0 bg-transparent p-0 text-sm transition-colors ${
                 item.page === page
                   ? 'font-medium text-[var(--color-accent)]'
@@ -324,6 +332,7 @@ export function Header({
                 type="button"
                 key={item.page}
                 onClick={() => handleNav(item.page)}
+                onPointerDown={() => onPrefetch?.(item.page)}
                 className={`rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
                   item.page === page
                     ? 'bg-[var(--color-accent)]/10 font-medium text-[var(--color-accent)]'

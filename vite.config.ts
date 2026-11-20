@@ -152,7 +152,10 @@ export default defineConfig({
   },
   build: {
     manifest: true,
-    modulePreload: false,
+    // modulePreload deliberately left at the Vite default (true): the theme
+    // chunk imports a dozen sibling chunks, and without preload links the
+    // browser only discovers them after parsing, turning first paint into a
+    // serial waterfall. Verified with PATH_PREFIX=/ and a sub-path build.
     outDir: './dist',
   },
 });

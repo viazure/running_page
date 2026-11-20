@@ -4,6 +4,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import Index from './pages/index';
 import { useTheme } from './hooks/useTheme';
+import { preloadActivityData } from '@/hooks/useActivities';
+
+// This theme renders the full bundled `activities.json`; start the fetch here so
+// it overlaps chunk parsing. dashboard_pro deliberately skips this (it reads the
+// much smaller lite payload through its own loader).
+void preloadActivityData();
 
 const Summary = lazy(() => import('./pages/summary'));
 
