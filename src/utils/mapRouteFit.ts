@@ -102,10 +102,9 @@ const easeInOutCubic = (t: number): number =>
 /**
  * Camera that frames a route at a readable scale.
  *
- * `maxZoom` is the ceiling for short runs: without it a 5 km loop fills the
- * card with two blocks. It is deliberately close to street level — the point
- * is to see the route, and the *transition* is what has to stay gentle, not
- * the final zoom.
+ * `padding` / `maxZoom` match the pre-existing behaviour exactly: lowering
+ * `maxZoom` (even by 0.5, ≈1.41× smaller) made every selected route render one
+ * size smaller than the deployed site.
  */
 function routeCameraFor(
   map: mapboxgl.Map,
@@ -115,8 +114,8 @@ function routeCameraFor(
   const bounds = boundsFromCoords(coords);
   if (!bounds) return null;
   const camera = map.cameraForBounds(bounds, {
-    padding: opts?.padding ?? 56,
-    maxZoom: opts?.maxZoom ?? 13.5,
+    padding: opts?.padding ?? 50,
+    maxZoom: opts?.maxZoom ?? 14,
   });
   if (!camera || camera.zoom == null || !camera.center) return null;
   return { center: mapboxgl.LngLat.convert(camera.center), zoom: camera.zoom };
