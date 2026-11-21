@@ -210,31 +210,43 @@ function DashboardProContent({
   const analysisEntryRef = useRef<'external' | 'internal' | null>(null);
   const applyingHashRef = useRef(false);
   const lastAppliedHashKeyRef = useRef('');
+  /**
+   * Set for a heatmap pick: keep the current year filter instead of narrowing
+   * 「全部」to the picked run's year (that shrinks the heatmap card and jumps the
+   * page). Camera framing is handled adaptively in RouteMap and needs no flag.
+   */
+  const keepYearFilterRef = useRef(false);
 
-  const selectActivity = useCallback((next: Activity | null) => {
-    if (applyingHashRef.current) {
+  const selectActivity = useCallback(
+    (next: Activity | null, opts?: { keepYearFilter?: boolean }) => {
+      if (!applyingHashRef.current) {
+        keepYearFilterRef.current = opts?.keepYearFilter === true;
+      }
+      if (applyingHashRef.current) {
+        setSelectedActivity(next);
+        return;
+      }
       setSelectedActivity(next);
-      return;
-    }
-    setSelectedActivity(next);
-    if (!next) {
-      setAnalysisOpen(false);
-      analysisEntryRef.current = null;
-      clearRunHash();
-      return;
-    }
-    const current = readRunHash();
-    if (current?.analysis && current.runId !== next.run_id) {
-      setAnalysisOpen(false);
-      analysisEntryRef.current = null;
-    }
-    if (current?.runId === next.run_id && !current.analysis) return;
-    writeRunHash(
-      next.run_id,
-      false,
-      current?.runId === next.run_id ? 'replace' : 'push'
-    );
-  }, []);
+      if (!next) {
+        setAnalysisOpen(false);
+        analysisEntryRef.current = null;
+        clearRunHash();
+        return;
+      }
+      const current = readRunHash();
+      if (current?.analysis && current.runId !== next.run_id) {
+        setAnalysisOpen(false);
+        analysisEntryRef.current = null;
+      }
+      if (current?.runId === next.run_id && !current.analysis) return;
+      writeRunHash(
+        next.run_id,
+        false,
+        current?.runId === next.run_id ? 'replace' : 'push'
+      );
+    },
+    []
+  );
 
   const openAnalysis = useCallback(() => {
     if (!selectedActivity) return;
@@ -295,7 +307,12 @@ function DashboardProContent({
     }
 
     const y = activityYear(activity.start_date_local);
-    if (y != null && year !== y) setYear(y);
+    // A heatmap pick keeps the year filter as-is: narrowing「全部」to a single
+    // year drops the heatmap's multi-year rows and the card visibly shrinks.
+    const keepYear = keepYearFilterRef.current && year === null;
+    if (y != null && year !== y && !keepYear) {
+      setYear(y);
+    }
 
     applyingHashRef.current = true;
     setSelectedActivity((prev) =>

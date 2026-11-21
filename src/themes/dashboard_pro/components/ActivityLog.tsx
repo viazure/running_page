@@ -175,10 +175,16 @@ export function ActivityLog({
 
   useEffect(() => {
     if (!selectedActivity) return;
-    const row = logRef.current?.querySelector(
+    // Keyboard navigation focuses the log; only then nudge the row into view.
+    // Heatmap / calendar selection must not move the page or table layout.
+    if (document.activeElement !== logRef.current) return;
+    const root = logRef.current;
+    if (!root) return;
+    const row = root.querySelector(
       `[data-run-id="${selectedActivity.run_id}"]`
     );
-    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [selectedActivity, page]);
 
   const yearOptions: Array<number | null> = [null, ...years];
@@ -361,14 +367,29 @@ export function ActivityLog({
 
       {isPro ? (
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <table className="w-max min-w-full border-collapse text-sm md:w-full">
+          {/*
+            table-fixed + col widths: selecting a row used to add border-l-2 and
+            let auto-layout reflow columns, so the table visibly changed size
+            when clicking different dates.
+          */}
+          <table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">
+            <colgroup>
+              {/* Fixed % widths — selecting rows must not reflow columns. */}
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '28%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '8%' }} />
+            </colgroup>
             <thead>
               <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-                <th className="w-[5.75rem] py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:w-[10.5rem] md:pr-6 md:pl-5">
+                <th className="py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:pr-6 md:pl-5">
                   {t('date')}
                 </th>
                 <th
-                  className={`pr-2 pb-3 font-medium whitespace-nowrap md:w-[1%] md:pr-3 ${
+                  className={`pr-2 pb-3 font-medium whitespace-nowrap md:pr-3 ${
                     showTypeContent ? '' : 'hidden md:table-cell'
                   }`}
                 >
@@ -376,9 +397,7 @@ export function ActivityLog({
                     {t('type')}
                   </span>
                 </th>
-                <th className="max-w-[5.5rem] min-w-0 pr-3 pb-3 font-medium md:w-auto md:max-w-[12rem]">
-                  {t('name')}
-                </th>
+                <th className="min-w-0 pr-3 pb-3 font-medium">{t('name')}</th>
                 <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
                   {t('distance')}
                 </th>
@@ -396,19 +415,26 @@ export function ActivityLog({
             <tbody>
               {pageData.map((a) => {
                 const date = formatRowDate(a.start_date_local);
+                const selected = selectedActivity?.run_id === a.run_id;
                 return (
                   <tr
                     key={a.run_id}
                     data-run-id={a.run_id}
                     onClick={() => toggleSelect(a)}
                     className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
-                      selectedActivity?.run_id === a.run_id
-                        ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
+                      selected
+                        ? 'bg-[var(--color-accent)]/10'
                         : 'hover:bg-[var(--color-bg)]'
                     }`}
-                    aria-selected={selectedActivity?.run_id === a.run_id}
+                    aria-selected={selected}
                   >
-                    <td className="w-[5.75rem] py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:w-[10.5rem] md:pr-6 md:pl-5 md:whitespace-nowrap">
+                    <td
+                      className={`py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:pr-6 md:pl-5 md:whitespace-nowrap ${
+                        selected
+                          ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                          : ''
+                      }`}
+                    >
                       <span className="flex flex-col leading-tight md:hidden">
                         <span className="text-[10px] tracking-wide opacity-70">
                           {date.ymd}
@@ -420,7 +446,7 @@ export function ActivityLog({
                       </span>
                     </td>
                     <td
-                      className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:w-[1%] md:pr-3 ${
+                      className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:pr-3 ${
                         showTypeContent ? '' : 'hidden md:table-cell'
                       }`}
                     >
@@ -431,7 +457,7 @@ export function ActivityLog({
                         {typeIcon(a.type)} {typeLabel(a.type, t)}
                       </span>
                     </td>
-                    <td className="max-w-[5.5rem] min-w-0 truncate py-3 pr-3 md:max-w-[14rem] md:pr-4">
+                    <td className="min-w-0 truncate py-3 pr-3 md:pr-4">
                       {getTitle ? getTitle(a) : a.name || t('run')}
                     </td>
                     <td className="metric py-3 pr-3 font-medium whitespace-nowrap md:pr-4">
@@ -479,12 +505,18 @@ export function ActivityLog({
                   onClick={() => toggleSelect(a)}
                   className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
                     selectedActivity?.run_id === a.run_id
-                      ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
+                      ? 'bg-[var(--color-accent)]/10'
                       : 'hover:bg-[var(--color-bg)]'
                   }`}
                   aria-selected={selectedActivity?.run_id === a.run_id}
                 >
-                  <td className="py-3 text-[var(--color-muted)]">
+                  <td
+                    className={`py-3 text-[var(--color-muted)] ${
+                      selectedActivity?.run_id === a.run_id
+                        ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                        : ''
+                    }`}
+                  >
                     {a.start_date_local.slice(0, 16).replace('T', ' ')}
                   </td>
                   <td className="py-3">

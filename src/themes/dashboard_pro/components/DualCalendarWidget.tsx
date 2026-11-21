@@ -237,23 +237,17 @@ export function DualCalendarWidget({
   const [viewMode, setViewMode] = useState<ViewMode>('distance');
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  // Follow the selected activity's month. Re-runs when the calendar or the
-  // selection changes, so selecting a run while the user is browsing another
-  // month cannot leave the calendar stranded on a month with no selection.
+  // Jump to the selected run's month when the selection itself changes
+  // (heatmap / log / deep link). Do NOT depend on viewYear/viewMonth — that
+  // snapped the calendar back on every prev/next click while a run stayed
+  // selected, so other months' activities could not be reached.
+  const selectedStartLocal = selectedActivity?.start_date_local;
   useEffect(() => {
-    if (!selectedActivity) return;
-    const d = new Date(selectedActivity.start_date_local);
+    if (selectedStartLocal == null) return;
+    const d = new Date(selectedStartLocal);
     if (Number.isNaN(d.getTime())) return;
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    if (y !== viewYear || m !== viewMonth) onViewChange(y, m);
-  }, [
-    selectedActivity,
-    selectedActivity?.run_id,
-    viewYear,
-    viewMonth,
-    onViewChange,
-  ]);
+    onViewChange(d.getFullYear(), d.getMonth());
+  }, [selectedStartLocal, onViewChange]);
 
   const selectedDay = useMemo(() => {
     if (!selectedActivity) return null;
@@ -402,7 +396,7 @@ export function DualCalendarWidget({
   return (
     <div className="card flex w-full min-w-0 flex-col p-5 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="flex min-w-0 flex-1 items-baseline gap-2 text-lg font-bold whitespace-nowrap text-[var(--color-text)]">
+        <h3 className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-lg font-bold whitespace-nowrap text-[var(--color-text)]">
           <button
             type="button"
             aria-expanded={pickerOpen}
@@ -412,12 +406,12 @@ export function DualCalendarWidget({
           >
             {monthStr}
           </button>
-          <span className="text-sm font-normal text-[var(--color-muted)] tabular-nums">
+          <span className="min-w-0 truncate text-sm font-normal text-[var(--color-muted)] tabular-nums">
             {formatDistance(monthDistance)} km
           </span>
         </h3>
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <div className="relative z-10 flex shrink-0 items-center gap-2 sm:gap-3">
           <div className="flex gap-1 rounded-lg bg-[var(--color-sunken)] p-1">
             <button
               type="button"
@@ -610,7 +604,13 @@ export function DualCalendarWidget({
                         />
                       </svg>
                     ) : null}
-                    <DayHoverCard day={d.day} distanceM={d.distance} />
+                    {/* No GPS yet / indoor: keep distance visible so route mode isn't blank. */}
+                    <DayHoverCard
+                      day={d.day}
+                      distanceM={d.distance}
+                      always={!routePoints}
+                      selected={isSelected}
+                    />
                   </>
                 )}
               </button>

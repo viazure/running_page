@@ -15,7 +15,10 @@ interface HeatmapProps {
   /** Selected year, or null for "all years". */
   year: number | null;
   filter: SportFilter;
-  onSelectActivity?: (a: Activity | null) => void;
+  onSelectActivity?: (
+    a: Activity | null,
+    opts?: { keepYearFilter?: boolean }
+  ) => void;
   /** Year tab clicks update the parent filter. `null` = 全部. */
   onYearChange?: (year: number | null) => void;
 }
@@ -588,7 +591,11 @@ export function ContributionHeatmap({
                         title={titleText}
                         onClick={() => {
                           if (day.activities.length > 0)
-                            onSelectActivity?.(day.activities[0]);
+                            // Do not narrow「全部」to one year: the heatmap card
+                            // would lose its multi-year rows and the page jumps.
+                            onSelectActivity?.(day.activities[0], {
+                              keepYearFilter: true,
+                            });
                         }}
                       />
                     );

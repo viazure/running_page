@@ -95,23 +95,97 @@ export function waitForMapIdle(
   });
 }
 
-/** Fit camera to a single selected route (dashboard RouteMap). */
+/** Smooth start and stop — a hard ease reads as the view being yanked. */
+const easeInOutCubic = (t: number): number =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+/**
+ * Camera that frames a route at a readable scale.
+ *
+ * `maxZoom` is the ceiling for short runs: without it a 5 km loop fills the
+ * card with two blocks. It is deliberately close to street level — the point
+ * is to see the route, and the *transition* is what has to stay gentle, not
+ * the final zoom.
+ */
+function routeCameraFor(
+  map: mapboxgl.Map,
+  coords: Coordinate[],
+  opts?: { padding?: number; maxZoom?: number }
+): { center: mapboxgl.LngLat; zoom: number } | null {
+  const bounds = boundsFromCoords(coords);
+  if (!bounds) return null;
+  const camera = map.cameraForBounds(bounds, {
+    padding: opts?.padding ?? 56,
+    maxZoom: opts?.maxZoom ?? 13.5,
+  });
+  if (!camera || camera.zoom == null || !camera.center) return null;
+  return { center: mapboxgl.LngLat.convert(camera.center), zoom: camera.zoom };
+}
+
+/**
+ * Frame a single selected route with one adaptive camera move.
+ *
+ * A fixed duration felt like a dive when jumping from a national overview to
+ * street level, while capping `maxZoom` lower left short runs as a dot — both
+ * traded away something the user wanted. So the destination is always the
+ * readable frame; only the *duration* scales with how far the camera travels.
+ * A pick inside the current view barely moves, which keeps repeat taps on the
+ * same city from feeling like the page jumped.
+ *
+ * Single `easeTo` (not easeTo + fitBounds): the two used to stack and the
+ * interrupted first leg read as the view being pulled down.
+ *
+ * `force` skips the "already framed" shortcut — explicit re-centre actions and
+ * post-resize refits must always reposition, even when the route is in view.
+ */
 export function fitMapToSelectedRoute(
   map: mapboxgl.Map,
   coords: Coordinate[],
-  privacy: boolean
+  privacy: boolean,
+  opts?: { force?: boolean }
 ): void {
-  const bounds = boundsFromCoords(coords);
-  if (!bounds) return;
+  const camera = routeCameraFor(map, coords);
+  if (!camera) return;
+
+  map.stop();
+
+  if (privacy) {
+    map.easeTo({
+      center: camera.center,
+      zoom: camera.zoom,
+      pitch: 0,
+      bearing: 0,
+      duration: 200,
+    });
+    return;
+  }
+
+  const zoomSpan = Math.abs(camera.zoom - map.getZoom());
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  let travel = Number.POSITIVE_INFINITY;
+  try {
+    const from = map.project(map.getCenter());
+    const to = map.project(camera.center);
+    travel = Math.hypot(to.x - from.x, to.y - from.y);
+  } catch {
+    /* style/projection not ready — fall through and move */
+  }
+  const travelLimit = Math.min(width || 1, height || 1) * 0.12;
+
+  // Already framed: leave the camera alone. The highlight, log row and calendar
+  // day are the feedback; a no-op animation would look like nothing happened.
+  if (!opts?.force && zoomSpan < 0.3 && travel < travelLimit) return;
+
+  const duration =
+    zoomSpan >= 5 ? 1000 : zoomSpan >= 3 ? 820 : zoomSpan >= 1.5 ? 640 : 480;
+
   map.easeTo({
+    center: camera.center,
+    zoom: camera.zoom,
     pitch: 0,
     bearing: 0,
-    duration: privacy ? 200 : 400,
-  });
-  map.fitBounds(bounds, {
-    padding: 50,
-    maxZoom: 14,
-    duration: privacy ? 200 : 500,
+    duration,
+    easing: easeInOutCubic,
   });
 }
 
@@ -155,15 +229,18 @@ export function fitMapToRouteOverview(
     [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
   );
 
+  // One move (pitch/bearing reset is part of it) — easeTo + fitBounds used to
+  // run back to back and the interrupted first leg felt like a downward yank.
+  const camera = map.cameraForBounds(bounds, { padding: 30, maxZoom: 13 });
+  if (!camera || camera.zoom == null || !camera.center) return;
+  map.stop();
   map.easeTo({
+    center: mapboxgl.LngLat.convert(camera.center),
+    zoom: camera.zoom,
     pitch: 0,
     bearing: 0,
-    duration: privacy ? 200 : 400,
-  });
-  map.fitBounds(bounds, {
-    padding: 30,
-    maxZoom: 13,
-    duration: privacy ? 200 : 500,
+    duration: privacy ? 200 : 600,
+    easing: easeInOutCubic,
   });
 }
 

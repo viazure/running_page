@@ -594,7 +594,15 @@ function TrackMap({
     }
     flattenView(m);
     if (selectedCoordsRef.current && selectedCoordsRef.current.length >= 2) {
-      fitMapToSelectedRoute(m, selectedCoordsRef.current, lightsOffRef.current);
+      // Leaving 3D is an explicit camera action — refit even if already framed.
+      fitMapToSelectedRoute(
+        m,
+        selectedCoordsRef.current,
+        lightsOffRef.current,
+        {
+          force: true,
+        }
+      );
     } else {
       fitTrackMapOverview(m, activitiesRef.current, lightsOffRef.current);
     }
@@ -950,7 +958,10 @@ function TrackMap({
             if (view3dRef.current) {
               startOrbitIfNeeded(m, coords);
             } else {
-              fitMapToSelectedRoute(m, coords, lightsOffRef.current);
+              // Canvas just resized — recompute the frame regardless.
+              fitMapToSelectedRoute(m, coords, lightsOffRef.current, {
+                force: true,
+              });
             }
           },
           grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0

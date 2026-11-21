@@ -269,6 +269,18 @@ export function RouteMap({
     }
   };
 
+  /**
+   * Drop 3D terrain + orbit without touching the camera, for callers that are
+   * about to fit. `flattenView` above also eases the camera flat, so pairing it
+   * with a fit produced two competing animations that read as a downward yank.
+   * Order matches `flattenView`: orbit always stops, terrain clears only when
+   * chase playback is not driving it.
+   */
+  const clear3d = (map: mapboxgl.Map) => {
+    orbitRef.current.stop();
+    if (!chaseRef.current.isAnimating()) clearMapTerrain(map);
+  };
+
   const startOrbitIfNeeded = (
     map: mapboxgl.Map,
     coords: Coordinate[],
@@ -347,7 +359,7 @@ export function RouteMap({
         if (view3dRef.current && !showingFallback && can3d) {
           startOrbitIfNeeded(map, coords, { immediate: true });
         } else {
-          flattenView(map);
+          clear3d(map);
           fitMapToSelectedRoute(map, coords, lightsOffRef.current);
         }
         applyLightsOff(map, lightsOffRef.current);
@@ -416,7 +428,7 @@ export function RouteMap({
       if (view3dRef.current && can3d && orbitCoords.length > 0) {
         startOrbitIfNeeded(map, orbitCoords, { immediate: true });
       } else {
-        flattenView(map);
+        clear3d(map);
         fitMapToRouteOverview(map, acts, lightsOffRef.current);
       }
       applyLightsOff(map, lightsOffRef.current);
@@ -433,13 +445,16 @@ export function RouteMap({
         if (view3dRef.current && can3d) {
           startOrbitIfNeeded(map, coords);
         } else {
-          fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+          // Explicit "re-centre" must move even if the route is already in view.
+          fitMapToSelectedRoute(map, coords, lightsOffRef.current, {
+            force: true,
+          });
         }
       } else if (view3dRef.current && can3d) {
         const orbitCoords = overviewOrbitCoords(activitiesRef.current);
         if (orbitCoords.length > 0) startOrbitIfNeeded(map, orbitCoords);
         else {
-          flattenView(map);
+          clear3d(map);
           fitMapToRouteOverview(
             map,
             activitiesRef.current,
@@ -447,7 +462,7 @@ export function RouteMap({
           );
         }
       } else {
-        flattenView(map);
+        clear3d(map);
         fitMapToRouteOverview(map, activitiesRef.current, lightsOffRef.current);
       }
       setNeedsRecenter(false);
@@ -836,7 +851,11 @@ export function RouteMap({
             if (view3dRef.current) {
               startOrbitIfNeeded(map, coords);
             } else {
-              fitMapToSelectedRoute(map, coords, lightsOffRef.current);
+              // Canvas just resized — the frame must be recomputed regardless
+              // of how close the old camera looked.
+              fitMapToSelectedRoute(map, coords, lightsOffRef.current, {
+                force: true,
+              });
             }
           },
           grow ? PLAYBACK_LAYOUT_EXIT_RESIZE_MS - PLAYBACK_LAYOUT_SETTLE_MS : 0
