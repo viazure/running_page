@@ -371,12 +371,19 @@ function DashboardProContent({
 
   /** Same filter, but with sidecar geometry for map rendering. */
   const provinceFilteredTracks = useMemo(() => {
-    if (provinceFiltered === filtered) return activitiesWithTracks;
+    // Geometry lives on the sidecar-merged list, so ids are re-looked up here.
+    //
+    // This must NOT shortcut to `activitiesWithTracks` merely because no
+    // province is selected: that list is unfiltered by year, and doing so made
+    // the year tabs and the sport filter do nothing to the log, heatmap and
+    // stats. Only shortcut when nothing is filtered at all.
+    const unfiltered = year == null && filter === 'all' && !selectedProvince;
+    if (unfiltered) return activitiesWithTracks;
     const byId = new Map(
       activitiesWithTracks.map((a) => [a.run_id, a] as const)
     );
     return provinceFiltered.map((a) => byId.get(a.run_id) ?? a);
-  }, [provinceFiltered, filtered, activitiesWithTracks]);
+  }, [provinceFiltered, activitiesWithTracks, year, filter, selectedProvince]);
 
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
