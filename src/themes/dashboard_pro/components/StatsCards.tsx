@@ -1,4 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
@@ -41,24 +49,85 @@ function GoalHeading({
   label: string;
   hint?: string;
 }) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+
+  /**
+   * The goal cards live inside `overflow-x-hidden` grids, which browsers turn
+   * into scroll containers on the other axis too — an absolutely positioned
+   * bubble above the title was clipped to a thin white sliver. Portal it to
+   * <body> with fixed coordinates instead, same approach as InfoTip.
+   */
+  const place = useCallback(() => {
+    const anchor = anchorRef.current;
+    const pop = popRef.current;
+    if (!anchor || !pop) return;
+    const rect = anchor.getBoundingClientRect();
+    const width = pop.offsetWidth;
+    const height = pop.offsetHeight;
+    const pad = 8;
+    const left = Math.max(
+      pad,
+      Math.min(rect.left, window.innerWidth - width - pad)
+    );
+    const aboveTop = rect.top - height - 6;
+    const top = aboveTop >= pad ? aboveTop : rect.bottom + 6;
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place, hint]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => place();
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [open, place]);
+
   return (
     <div
+      ref={anchorRef}
       className="group/period relative rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
       tabIndex={hint ? 0 : undefined}
       aria-label={hint ? `${label} ${hint}` : undefined}
+      onPointerEnter={(event) => {
+        if (hint && event.pointerType === 'mouse') setOpen(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') setOpen(false);
+      }}
+      onFocus={() => {
+        if (hint) setOpen(true);
+      }}
+      onBlur={() => setOpen(false)}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false);
+      }}
     >
       <p className={className}>
         {icon}
         <span className="min-w-0 truncate">{label}</span>
       </p>
-      {hint ? (
-        <span
-          role="tooltip"
-          className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 hidden rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-normal whitespace-nowrap text-[var(--color-text)] normal-case tabular-nums shadow-md group-focus-within/period:block group-hover/period:block"
-        >
-          {hint}
-        </span>
-      ) : null}
+      {hint && open
+        ? createPortal(
+            <div
+              ref={popRef}
+              role="tooltip"
+              className="pointer-events-none fixed z-[90] rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-normal whitespace-nowrap text-[var(--color-text)] normal-case tabular-nums shadow-md"
+            >
+              {hint}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
