@@ -216,12 +216,17 @@ function DashboardProContent({
    * page). Camera framing is handled adaptively in RouteMap and needs no flag.
    */
   const keepYearFilterRef = useRef(false);
+  /** One-shot: the next ActivityLog render came from a `#run_<id>` deep link. */
+  const revealFromHashRef = useRef(false);
+  /** Latest selected run id, readable from effects that omit it as a dep. */
+  const selectedRunIdRef = useRef<number | null>(null);
 
   const selectActivity = useCallback(
     (next: Activity | null, opts?: { keepYearFilter?: boolean }) => {
       if (!applyingHashRef.current) {
         keepYearFilterRef.current = opts?.keepYearFilter === true;
       }
+      selectedRunIdRef.current = next?.run_id ?? null;
       if (applyingHashRef.current) {
         setSelectedActivity(next);
         return;
@@ -315,6 +320,14 @@ function DashboardProContent({
     }
 
     applyingHashRef.current = true;
+    // Only a hash the user did not just create themselves counts as a deep
+    // link. `selectActivity` writes the hash right before selection, so the
+    // current selection already matches it and no reveal is wanted; a URL
+    // opened from outside leaves them different.
+    if (selectedRunIdRef.current !== hash.runId) {
+      revealFromHashRef.current = true;
+    }
+    selectedRunIdRef.current = hash.runId;
     setSelectedActivity((prev) =>
       prev?.run_id === activity.run_id &&
       prev.summary_polyline === activity.summary_polyline
@@ -475,6 +488,7 @@ function DashboardProContent({
         onSelectActivity={selectActivity}
         filter={filter}
         getTitle={activityTitle}
+        revealFromHashRef={revealFromHashRef}
         pageSize={ACTIVITY_LOG_PAGE_SIZE}
         variant="pro"
       />

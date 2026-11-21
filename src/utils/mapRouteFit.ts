@@ -102,9 +102,14 @@ const easeInOutCubic = (t: number): number =>
 /**
  * Camera that frames a route at a readable scale.
  *
- * `padding` / `maxZoom` match the pre-existing behaviour exactly: lowering
- * `maxZoom` (even by 0.5, ≈1.41× smaller) made every selected route render one
- * size smaller than the deployed site.
+ * `padding` is the inset the route is fitted into: smaller padding means the
+ * route fills more of the card. It was 50 (upstream), which left a lot of empty
+ * space around short loops.
+ *
+ * `maxZoom` caps how far in a short route is allowed to zoom. The old 14 only
+ * affected runs under ~1 km, and left them at roughly a fifth of the card, so
+ * it is raised here to 15.5 — long routes are unaffected because their own
+ * bounds already need a lower zoom.
  */
 function routeCameraFor(
   map: mapboxgl.Map,
@@ -114,8 +119,8 @@ function routeCameraFor(
   const bounds = boundsFromCoords(coords);
   if (!bounds) return null;
   const camera = map.cameraForBounds(bounds, {
-    padding: opts?.padding ?? 50,
-    maxZoom: opts?.maxZoom ?? 14,
+    padding: opts?.padding ?? 40,
+    maxZoom: opts?.maxZoom ?? 15.5,
   });
   if (!camera || camera.zoom == null || !camera.center) return null;
   return { center: mapboxgl.LngLat.convert(camera.center), zoom: camera.zoom };

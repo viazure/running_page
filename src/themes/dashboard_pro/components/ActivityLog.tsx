@@ -5,6 +5,7 @@ import {
   useRef,
   useSyncExternalStore,
   type KeyboardEvent,
+  type MutableRefObject,
 } from 'react';
 import type { Activity, SportFilter } from '@/types';
 import { formatDuration, formatPace } from '@/hooks/useActivities';
@@ -26,6 +27,12 @@ interface ActivityLogProps {
   pageSize?: PageSizeConfig;
   /** Default = upstream table. Pass `'pro'` for compact mobile/pro layout. */
   variant?: 'default' | 'pro';
+  /**
+   * Set to `true` by the parent when the current selection came from a
+   * `#run_<id>` deep link, so the log reveals that row exactly once. The ref is
+   * consumed (reset to false) on read; manual picks leave it false.
+   */
+  revealFromHashRef?: MutableRefObject<boolean>;
 }
 
 const DEFAULT_PAGE_SIZE = 16;
@@ -104,6 +111,7 @@ export function ActivityLog({
   onSelectActivity,
   filter: _filter = 'all',
   getTitle,
+  revealFromHashRef,
   pageSize: pageSizeConfig,
   variant = 'default',
 }: ActivityLogProps) {
@@ -174,32 +182,15 @@ export function ActivityLog({
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
   /**
-   * Deep links (#run_<id>) reveal their row once, then never again; in-page
+   * Deep links (`#run_<id>`) reveal their row once, then never again; in-page
    * picks (heatmap / calendar / log) never scroll the page.
    *
-   * "Came from a deep link" is inferred from "the user has not interacted yet":
-   * a hash is applied within a few hundred ms of load, before any pointer,
-   * wheel or key event, while every manual pick follows one.
+   * The parent owns that knowledge: it knows when a selection came from the
+   * URL hash rather than from a click, and hands over a one-shot flag here.
+   * Inferring it locally from input events or mount timing both misfired — the
+   * former breaks on touch and synthetic clicks, the latter on slow loads.
    */
-  const userInteractedRef = useRef(false);
   const revealedRunIdRef = useRef<Activity['run_id'] | null>(null);
-  useEffect(() => {
-    const mark = () => {
-      userInteractedRef.current = true;
-    };
-    window.addEventListener('pointerdown', mark, { capture: true, once: true });
-    window.addEventListener('keydown', mark, { capture: true, once: true });
-    window.addEventListener('wheel', mark, {
-      capture: true,
-      once: true,
-      passive: true,
-    });
-    return () => {
-      window.removeEventListener('pointerdown', mark, true);
-      window.removeEventListener('keydown', mark, true);
-      window.removeEventListener('wheel', mark, true);
-    };
-  }, []);
 
   useEffect(() => {
     if (!selectedActivity) return;
@@ -209,16 +200,15 @@ export function ActivityLog({
       `[data-run-id="${selectedActivity.run_id}"]`
     );
     if (!row) return;
-    const fromDeepLink = !userInteractedRef.current;
+    const fromDeepLink = revealFromHashRef?.current === true;
+    if (fromDeepLink && revealFromHashRef) revealFromHashRef.current = false;
     const keyboardNav = document.activeElement === logRef.current;
     if (!fromDeepLink && !keyboardNav) return;
     // One reveal per run: the paging effect may re-run this after `page` moves.
-    if (fromDeepLink) {
-      if (revealedRunIdRef.current === selectedActivity.run_id) return;
-      revealedRunIdRef.current = selectedActivity.run_id;
-    }
+    if (revealedRunIdRef.current === selectedActivity.run_id) return;
+    revealedRunIdRef.current = selectedActivity.run_id;
     row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [selectedActivity, page]);
+  }, [selectedActivity, page, revealFromHashRef]);
 
   const yearOptions: Array<number | null> = [null, ...years];
 
