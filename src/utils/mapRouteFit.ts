@@ -123,14 +123,57 @@ function routeCameraFor(
 }
 
 /**
+ * True when re-fitting would be a no-op the user cannot perceive.
+ *
+ * Two independent conditions, both required:
+ *
+ * 1. The target zoom is already what we would set (±0.5). A very short run
+ *    hitting the `maxZoom` ceiling makes `cameraForBounds` return 13.49 while
+ *    the map sits at 13.5, so an exact match is too strict.
+ * 2. The whole route is inside the viewport with a margin.
+ *
+ * Relying on (2) alone was wrong: from a national overview a 5 km route is
+ * also "inside the viewport", so a pick there did nothing at all. Relying on
+ * (1) alone was wrong too: same zoom but a different city still needs a pan.
+ */
+function isRouteAlreadyFramed(
+  map: mapboxgl.Map,
+  camera: { zoom: number },
+  coords: Coordinate[]
+): boolean {
+  if (Math.abs(camera.zoom - map.getZoom()) >= 0.5) return false;
+  const bounds = boundsFromCoords(coords);
+  if (!bounds) return false;
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  if (!width || !height) return false;
+  // Generous margin: the fit itself uses 56px padding.
+  const marginX = width * 0.08;
+  const marginY = height * 0.08;
+  try {
+    const nw = map.project(bounds.getNorthWest());
+    const se = map.project(bounds.getSouthEast());
+    const minX = Math.min(nw.x, se.x);
+    const maxX = Math.max(nw.x, se.x);
+    const minY = Math.min(nw.y, se.y);
+    const maxY = Math.max(nw.y, se.y);
+    return (
+      minX > marginX &&
+      maxX < width - marginX &&
+      minY > marginY &&
+      maxY < height - marginY
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Frame a single selected route with one adaptive camera move.
  *
  * A fixed duration felt like a dive when jumping from a national overview to
  * street level, while capping `maxZoom` lower left short runs as a dot — both
  * traded away something the user wanted. So the destination is always the
  * readable frame; only the *duration* scales with how far the camera travels.
- * A pick inside the current view barely moves, which keeps repeat taps on the
- * same city from feeling like the page jumped.
  *
  * Single `easeTo` (not easeTo + fitBounds): the two used to stack and the
  * interrupted first leg read as the view being pulled down.
@@ -160,21 +203,11 @@ export function fitMapToSelectedRoute(
     return;
   }
 
-  const zoomSpan = Math.abs(camera.zoom - map.getZoom());
-  const { clientWidth: width, clientHeight: height } = map.getContainer();
-  let travel = Number.POSITIVE_INFINITY;
-  try {
-    const from = map.project(map.getCenter());
-    const to = map.project(camera.center);
-    travel = Math.hypot(to.x - from.x, to.y - from.y);
-  } catch {
-    /* style/projection not ready — fall through and move */
-  }
-  const travelLimit = Math.min(width || 1, height || 1) * 0.12;
+  // Already framed: leave the camera alone. The selection highlight, log row
+  // and calendar day already confirm the pick; re-fitting would only jitter.
+  if (!opts?.force && isRouteAlreadyFramed(map, camera, coords)) return;
 
-  // Already framed: leave the camera alone. The highlight, log row and calendar
-  // day are the feedback; a no-op animation would look like nothing happened.
-  if (!opts?.force && zoomSpan < 0.3 && travel < travelLimit) return;
+  const zoomSpan = Math.abs(camera.zoom - map.getZoom());
 
   const duration =
     zoomSpan >= 5 ? 1000 : zoomSpan >= 3 ? 820 : zoomSpan >= 1.5 ? 640 : 480;

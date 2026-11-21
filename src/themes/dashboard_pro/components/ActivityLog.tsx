@@ -173,17 +173,50 @@ export function ActivityLog({
     }
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
+  /**
+   * Deep links (#run_<id>) reveal their row once, then never again; in-page
+   * picks (heatmap / calendar / log) never scroll the page.
+   *
+   * "Came from a deep link" is inferred from "the user has not interacted yet":
+   * a hash is applied within a few hundred ms of load, before any pointer,
+   * wheel or key event, while every manual pick follows one.
+   */
+  const userInteractedRef = useRef(false);
+  const revealedRunIdRef = useRef<Activity['run_id'] | null>(null);
+  useEffect(() => {
+    const mark = () => {
+      userInteractedRef.current = true;
+    };
+    window.addEventListener('pointerdown', mark, { capture: true, once: true });
+    window.addEventListener('keydown', mark, { capture: true, once: true });
+    window.addEventListener('wheel', mark, {
+      capture: true,
+      once: true,
+      passive: true,
+    });
+    return () => {
+      window.removeEventListener('pointerdown', mark, true);
+      window.removeEventListener('keydown', mark, true);
+      window.removeEventListener('wheel', mark, true);
+    };
+  }, []);
+
   useEffect(() => {
     if (!selectedActivity) return;
-    // Keyboard navigation focuses the log; only then nudge the row into view.
-    // Heatmap / calendar selection must not move the page or table layout.
-    if (document.activeElement !== logRef.current) return;
     const root = logRef.current;
     if (!root) return;
     const row = root.querySelector(
       `[data-run-id="${selectedActivity.run_id}"]`
     );
     if (!row) return;
+    const fromDeepLink = !userInteractedRef.current;
+    const keyboardNav = document.activeElement === logRef.current;
+    if (!fromDeepLink && !keyboardNav) return;
+    // One reveal per run: the paging effect may re-run this after `page` moves.
+    if (fromDeepLink) {
+      if (revealedRunIdRef.current === selectedActivity.run_id) return;
+      revealedRunIdRef.current = selectedActivity.run_id;
+    }
     row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [selectedActivity, page]);
 

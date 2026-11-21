@@ -360,6 +360,8 @@ export function RouteMap({
           startOrbitIfNeeded(map, coords, { immediate: true });
         } else {
           clear3d(map);
+          // A pick that lands inside the current frame keeps the camera put:
+          // the highlight, log row and calendar day are the feedback.
           fitMapToSelectedRoute(map, coords, lightsOffRef.current);
         }
         applyLightsOff(map, lightsOffRef.current);
