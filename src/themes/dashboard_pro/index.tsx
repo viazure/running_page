@@ -632,10 +632,9 @@ function DashboardProContent({
             <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
               <ContributionHeatmap
                 activities={activitiesWithTracks}
-                year={year}
+                initialYear={year}
                 filter={filter}
                 onSelectActivity={selectActivity}
-                onYearChange={setYear}
               />
             </div>
           ) : null}
