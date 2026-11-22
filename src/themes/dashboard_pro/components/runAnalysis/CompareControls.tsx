@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useFixedPopover } from '../../hooks/useFixedPopover';
 import {
   ANALYSIS_OVERFLOW_BUTTON_CLASS,
   ANALYSIS_SELECT_CHEVRON,
@@ -69,6 +71,12 @@ function CompareOverflowMenu({ onSwap, tr }: { onSwap: () => void; tr: Tr }) {
   const itemRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
+  // The menu used to be `absolute top-full` inside the analysis scroll pane
+  // (`overflow-x-hidden overflow-y-auto`), so opening it near the bottom of the
+  // pane clipped it. The shared hook portals it to <body> and flips it above
+  // the button when there is no room below.
+  const { popRef: menuRef } = useFixedPopover(buttonRef, open, { gap: 4 });
+
   useEffect(() => {
     if (!open) return;
     itemRef.current?.focus();
@@ -80,9 +88,12 @@ function CompareOverflowMenu({ onSwap, tr }: { onSwap: () => void; tr: Tr }) {
       }
     };
     const onPointer = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      // The menu is portaled to <body>, so it is NOT inside rootRef — checking
+      // rootRef alone would treat a click on a menu item as an outside click.
+      const inTrigger = rootRef.current?.contains(target);
+      const inMenu = menuRef.current?.contains(target);
+      if (!inTrigger && !inMenu) setOpen(false);
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPointer);
@@ -90,7 +101,7 @@ function CompareOverflowMenu({ onSwap, tr }: { onSwap: () => void; tr: Tr }) {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onPointer);
     };
-  }, [open]);
+  }, [open, menuRef]);
 
   return (
     <div className="relative shrink-0" ref={rootRef}>
@@ -106,27 +117,31 @@ function CompareOverflowMenu({ onSwap, tr }: { onSwap: () => void; tr: Tr }) {
       >
         ⋯
       </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute top-full left-0 z-20 mt-1 min-w-[11rem] rounded-md border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-[var(--shadow-card)]"
-        >
-          <button
-            ref={itemRef}
-            type="button"
-            role="menuitem"
-            className="block w-full cursor-pointer px-3 py-2 text-left text-[12px] text-[var(--color-text)] outline-none hover:bg-[var(--color-sunken)] focus-visible:bg-[var(--color-sunken)]"
-            onClick={() => {
-              onSwap();
-              setOpen(false);
-              buttonRef.current?.focus();
-            }}
-          >
-            {tr('对调面积/折线', 'Swap area/line')}
-          </button>
-        </div>
-      ) : null}
+      {open
+        ? createPortal(
+            <div
+              ref={menuRef}
+              id={menuId}
+              role="menu"
+              className="fixed z-[90] min-w-[11rem] rounded-md border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-[var(--shadow-card)]"
+            >
+              <button
+                ref={itemRef}
+                type="button"
+                role="menuitem"
+                className="block w-full cursor-pointer px-3 py-2 text-left text-[12px] text-[var(--color-text)] outline-none hover:bg-[var(--color-sunken)] focus-visible:bg-[var(--color-sunken)]"
+                onClick={() => {
+                  onSwap();
+                  setOpen(false);
+                  buttonRef.current?.focus();
+                }}
+              >
+                {tr('对调面积/折线', 'Swap area/line')}
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

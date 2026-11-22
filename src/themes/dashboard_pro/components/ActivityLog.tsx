@@ -5,6 +5,7 @@ import {
   useRef,
   useSyncExternalStore,
   type KeyboardEvent,
+  type MutableRefObject,
 } from 'react';
 import type { Activity, SportFilter } from '@/types';
 import { formatDuration, formatPace } from '@/hooks/useActivities';
@@ -26,6 +27,12 @@ interface ActivityLogProps {
   pageSize?: PageSizeConfig;
   /** Default = upstream table. Pass `'pro'` for compact mobile/pro layout. */
   variant?: 'default' | 'pro';
+  /**
+   * Set to `true` by the parent when the current selection came from a
+   * `#run_<id>` deep link, so the log reveals that row exactly once. The ref is
+   * consumed (reset to false) on read; manual picks leave it false.
+   */
+  revealFromHashRef?: MutableRefObject<boolean>;
 }
 
 const DEFAULT_PAGE_SIZE = 16;
@@ -104,6 +111,7 @@ export function ActivityLog({
   onSelectActivity,
   filter: _filter = 'all',
   getTitle,
+  revealFromHashRef,
   pageSize: pageSizeConfig,
   variant = 'default',
 }: ActivityLogProps) {
@@ -173,13 +181,34 @@ export function ActivityLog({
     }
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
+  /**
+   * Deep links (`#run_<id>`) reveal their row once, then never again; in-page
+   * picks (heatmap / calendar / log) never scroll the page.
+   *
+   * The parent owns that knowledge: it knows when a selection came from the
+   * URL hash rather than from a click, and hands over a one-shot flag here.
+   * Inferring it locally from input events or mount timing both misfired — the
+   * former breaks on touch and synthetic clicks, the latter on slow loads.
+   */
+  const revealedRunIdRef = useRef<Activity['run_id'] | null>(null);
+
   useEffect(() => {
     if (!selectedActivity) return;
-    const row = logRef.current?.querySelector(
+    const root = logRef.current;
+    if (!root) return;
+    const row = root.querySelector(
       `[data-run-id="${selectedActivity.run_id}"]`
     );
-    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [selectedActivity, page]);
+    if (!row) return;
+    const fromDeepLink = revealFromHashRef?.current === true;
+    if (fromDeepLink && revealFromHashRef) revealFromHashRef.current = false;
+    const keyboardNav = document.activeElement === logRef.current;
+    if (!fromDeepLink && !keyboardNav) return;
+    // One reveal per run: the paging effect may re-run this after `page` moves.
+    if (revealedRunIdRef.current === selectedActivity.run_id) return;
+    revealedRunIdRef.current = selectedActivity.run_id;
+    row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [selectedActivity, page, revealFromHashRef]);
 
   const yearOptions: Array<number | null> = [null, ...years];
 
@@ -360,102 +389,148 @@ export function ActivityLog({
       </div>
 
       {isPro ? (
-        <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-          <table className="w-max min-w-full border-collapse text-sm md:w-full">
-            <thead>
-              <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-                <th className="w-[5.75rem] py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:w-[10.5rem] md:pr-6 md:pl-5">
-                  {t('date')}
-                </th>
-                <th
-                  className={`pr-2 pb-3 font-medium whitespace-nowrap md:w-[1%] md:pr-3 ${
-                    showTypeContent ? '' : 'hidden md:table-cell'
-                  }`}
-                >
-                  <span className={showTypeContent ? undefined : 'invisible'}>
-                    {t('type')}
-                  </span>
-                </th>
-                <th className="max-w-[5.5rem] min-w-0 pr-3 pb-3 font-medium md:w-auto md:max-w-[12rem]">
-                  {t('name')}
-                </th>
-                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                  {t('distance')}
-                </th>
-                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                  {t('duration')}
-                </th>
-                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                  {t('pace')}
-                </th>
-                <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
-                  {t('hr')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageData.map((a) => {
-                const date = formatRowDate(a.start_date_local);
-                return (
-                  <tr
-                    key={a.run_id}
-                    data-run-id={a.run_id}
-                    onClick={() => toggleSelect(a)}
-                    className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
-                      selectedActivity?.run_id === a.run_id
-                        ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
-                        : 'hover:bg-[var(--color-bg)]'
+        /*
+          Mobile shows five columns at rest — date, name, distance, duration,
+          pace — and scrolls horizontally to reveal heart rate. Six columns in
+          ~360px forced 9-10px text and left no breathing room, while four left
+          an awkward gap; five fits comfortably at a normal size.
+
+          The min-width below `md` is what creates that resting layout: the table
+          is wider than the card, so the first five columns fill the visible area
+          and heart rate sits just beyond the right edge.
+
+          No negative margin here. The old `-mx-4 px-4` pair gave the scroller its
+          own 16px padding, which browsers count as scrollable extent: the
+          container rested at `scrollLeft = 16` and nudged sideways on selection.
+          The card's own padding already provides the inset.
+
+          From `md` up every column is visible and the type column reappears.
+          `table-fixed` + explicit `colgroup` widths are kept so selecting a row
+          cannot reflow the columns (that used to make the table change size
+          between dates).
+        */
+        <div className="relative min-w-0">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[25rem] table-fixed border-collapse text-sm md:min-w-[36rem]">
+              <colgroup>
+                {/* Below md these widths describe a 400px table inside a ~356px
+                    viewport: date/name/distance/duration/pace land in view,
+                    heart rate is the scroll-revealed one. */}
+                <col style={{ width: '19%' }} />
+                <col
+                  className="hidden md:table-column"
+                  style={{ width: '10%' }}
+                />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '18%' }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
+                  <th className="py-0 pr-3 pb-3 pl-2.5 font-medium whitespace-nowrap md:pr-6 md:pl-5">
+                    {t('date')}
+                  </th>
+                  <th
+                    className={`pr-2 pb-3 font-medium whitespace-nowrap md:pr-3 ${
+                      showTypeContent ? '' : 'hidden md:table-cell'
                     }`}
-                    aria-selected={selectedActivity?.run_id === a.run_id}
                   >
-                    <td className="w-[5.75rem] py-3 pr-3 pl-3 text-sm text-[var(--color-muted)] md:w-[10.5rem] md:pr-6 md:pl-5 md:whitespace-nowrap">
-                      <span className="flex flex-col leading-tight md:hidden">
-                        <span className="text-[10px] tracking-wide opacity-70">
-                          {date.ymd}
-                        </span>
-                        <span className="metric">{date.time}</span>
-                      </span>
-                      <span className="hidden whitespace-nowrap md:inline">
-                        {date.full}
-                      </span>
-                    </td>
-                    <td
-                      className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:w-[1%] md:pr-3 ${
-                        showTypeContent ? '' : 'hidden md:table-cell'
+                    <span className={showTypeContent ? undefined : 'invisible'}>
+                      {t('type')}
+                    </span>
+                  </th>
+                  <th className="min-w-0 pr-3 pb-3 font-medium">{t('name')}</th>
+                  <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                    {t('distance')}
+                  </th>
+                  <th className="pr-3 pb-3 font-medium whitespace-nowrap md:pr-4">
+                    {t('duration')}
+                  </th>
+                  <th className="pr-2 pb-3 font-medium whitespace-nowrap md:pr-4">
+                    {t('pace')}
+                  </th>
+                  <th className="pr-2 pb-3 font-medium whitespace-nowrap md:pr-4">
+                    {t('hr')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageData.map((a) => {
+                  const date = formatRowDate(a.start_date_local);
+                  const selected = selectedActivity?.run_id === a.run_id;
+                  return (
+                    <tr
+                      key={a.run_id}
+                      data-run-id={a.run_id}
+                      onClick={() => toggleSelect(a)}
+                      className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
+                        selected
+                          ? 'bg-[var(--color-accent)]/10'
+                          : 'hover:bg-[var(--color-bg)]'
                       }`}
+                      aria-selected={selected}
                     >
-                      <span
-                        className={showTypeContent ? undefined : 'invisible'}
-                        aria-hidden={!showTypeContent}
+                      <td
+                        className={`py-3 pr-3 pl-2.5 text-sm text-[var(--color-muted)] md:pr-6 md:pl-5 md:whitespace-nowrap ${
+                          selected
+                            ? // The accent rule is drawn with an inset shadow, which
+                              // occupies no space. Keeping `pl-2.5` in both states
+                              // leaves room between the rule and the date without
+                              // shifting the text when a row is selected.
+                              'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                            : ''
+                        }`}
                       >
-                        {typeIcon(a.type)} {typeLabel(a.type, t)}
-                      </span>
-                    </td>
-                    <td className="max-w-[5.5rem] min-w-0 truncate py-3 pr-3 md:max-w-[14rem] md:pr-4">
-                      {getTitle ? getTitle(a) : a.name || t('run')}
-                    </td>
-                    <td className="metric py-3 pr-3 font-medium whitespace-nowrap md:pr-4">
-                      {(a.distance / 1000).toFixed(1)}
-                      <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
-                        km
-                      </span>
-                    </td>
-                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
-                      {formatDuration(a.moving_time)}
-                    </td>
-                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
-                      {formatPace(a.average_speed)}
-                    </td>
-                    <td className="py-3 pr-3 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
-                      {a.average_heartrate
-                        ? Math.round(a.average_heartrate)
-                        : '--'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        <span className="flex flex-col leading-tight md:hidden">
+                          <span className="text-[11px] whitespace-nowrap tabular-nums">
+                            {date.ymd}
+                          </span>
+                          <span className="metric">{date.time}</span>
+                        </span>
+                        <span className="hidden whitespace-nowrap md:inline">
+                          {date.full}
+                        </span>
+                      </td>
+                      <td
+                        className={`py-3 pr-2 whitespace-nowrap text-[var(--color-muted)] md:pr-3 ${
+                          showTypeContent ? '' : 'hidden md:table-cell'
+                        }`}
+                      >
+                        <span
+                          className={showTypeContent ? undefined : 'invisible'}
+                          aria-hidden={!showTypeContent}
+                        >
+                          {typeIcon(a.type)} {typeLabel(a.type, t)}
+                        </span>
+                      </td>
+                      <td className="min-w-0 truncate py-3 pr-2 pl-1 md:pr-4">
+                        {getTitle ? getTitle(a) : a.name || t('run')}
+                      </td>
+                      <td className="metric py-3 pr-1 font-medium whitespace-nowrap md:pr-4">
+                        {(a.distance / 1000).toFixed(1)}
+                        <span className="ml-0.5 text-[9px] font-normal text-[var(--color-muted)] md:ml-1 md:text-xs">
+                          km
+                        </span>
+                      </td>
+                      <td className="py-3 pr-1 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                        {formatDuration(a.moving_time)}
+                      </td>
+                      <td className="py-3 pr-1 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                        {formatPace(a.average_speed)}
+                      </td>
+                      <td className="py-3 pr-0.5 whitespace-nowrap text-[var(--color-muted)] md:pr-4">
+                        {a.average_heartrate
+                          ? Math.round(a.average_heartrate)
+                          : '--'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -479,12 +554,18 @@ export function ActivityLog({
                   onClick={() => toggleSelect(a)}
                   className={`cursor-pointer border-b border-[var(--color-border)]/30 transition-colors ${
                     selectedActivity?.run_id === a.run_id
-                      ? 'border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent)]/10'
+                      ? 'bg-[var(--color-accent)]/10'
                       : 'hover:bg-[var(--color-bg)]'
                   }`}
                   aria-selected={selectedActivity?.run_id === a.run_id}
                 >
-                  <td className="py-3 text-[var(--color-muted)]">
+                  <td
+                    className={`py-3 text-[var(--color-muted)] ${
+                      selectedActivity?.run_id === a.run_id
+                        ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                        : ''
+                    }`}
+                  >
                     {a.start_date_local.slice(0, 16).replace('T', ' ')}
                   </td>
                   <td className="py-3">

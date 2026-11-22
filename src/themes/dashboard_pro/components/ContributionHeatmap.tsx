@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import type { Activity, SportFilter } from '@/types';
 import {
@@ -12,12 +12,17 @@ import { ChipScrollRow } from './ChipScrollRow';
 
 interface HeatmapProps {
   activities: Activity[];
-  /** Selected year, or null for "all years". */
-  year: number | null;
+  /**
+   * Year to open on. The heatmap then owns its year from here on: it is
+   * deliberately NOT kept in sync with the log / stats filter, so flipping one
+   * does not move the other (and does not resize this card).
+   */
+  initialYear: number | null;
   filter: SportFilter;
-  onSelectActivity?: (a: Activity | null) => void;
-  /** Year tab clicks update the parent filter. `null` = 全部. */
-  onYearChange?: (year: number | null) => void;
+  onSelectActivity?: (
+    a: Activity | null,
+    opts?: { keepYearFilter?: boolean }
+  ) => void;
 }
 
 // Map any activity type to the 4 display categories
@@ -245,21 +250,18 @@ function buildYearGrid(
 
 export function ContributionHeatmap({
   activities,
-  year: defaultYear,
+  initialYear,
   filter,
   onSelectActivity,
-  onYearChange,
 }: HeatmapProps) {
   const { t, locale } = useLocale();
   const allYears = getAvailableYears(activities);
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(() =>
-    toSelectedYear(defaultYear)
+    toSelectedYear(initialYear)
   );
-  // Fully sync from parent year (ActivityLog / Stats). Single source of truth:
-  // null = 全部 (multi-year), number = that calendar year.
-  useEffect(() => {
-    setSelectedYear(toSelectedYear(defaultYear));
-  }, [defaultYear]);
+  // Intentionally NOT synced to the parent filter: the heatmap keeps whatever
+  // year the user picked here, so switching the log's year does not resize this
+  // card or move the rest of the page.
   const captureRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -331,7 +333,6 @@ export function ContributionHeatmap({
 
   const handleSelectYear = (yr: number | 'all') => {
     setSelectedYear(yr);
-    onYearChange?.(yr === 'all' ? null : yr);
   };
 
   const handleExport = async () => {
@@ -493,7 +494,13 @@ export function ContributionHeatmap({
         </div>
       </div>
 
-      {/* Year grid(s) */}
+      {/*
+        "All years" shows every year in full — the whole point of that mode is
+        seeing the entire history at a glance, so it must not be capped or
+        scrolled (an earlier max-height + overflow turned it into a small
+        window that defeated the purpose). The card therefore does grow when
+        switching from one year to all, which is the intended trade.
+      */}
       <div
         className={
           selectedYear === 'all' ? 'heatmap-all-years space-y-8' : 'space-y-6'
@@ -588,7 +595,11 @@ export function ContributionHeatmap({
                         title={titleText}
                         onClick={() => {
                           if (day.activities.length > 0)
-                            onSelectActivity?.(day.activities[0]);
+                            // Do not narrow「全部」to one year: the heatmap card
+                            // would lose its multi-year rows and the page jumps.
+                            onSelectActivity?.(day.activities[0], {
+                              keepYearFilter: true,
+                            });
                         }}
                       />
                     );

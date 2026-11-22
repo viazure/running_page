@@ -95,23 +95,134 @@ export function waitForMapIdle(
   });
 }
 
-/** Fit camera to a single selected route (dashboard RouteMap). */
+/** Smooth start and stop — a hard ease reads as the view being yanked. */
+const easeInOutCubic = (t: number): number =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+/**
+ * Camera that frames a route at a readable scale.
+ *
+ * `padding` is the inset the route is fitted into: smaller padding means the
+ * route fills more of the card. It was 50 (upstream), which left a lot of empty
+ * space around short loops.
+ *
+ * `maxZoom` caps how far in a short route is allowed to zoom. The old 14 only
+ * affected runs under ~1 km, and left them at roughly a fifth of the card, so
+ * it is raised here to 15.5 — long routes are unaffected because their own
+ * bounds already need a lower zoom.
+ */
+function routeCameraFor(
+  map: mapboxgl.Map,
+  coords: Coordinate[],
+  opts?: { padding?: number; maxZoom?: number }
+): { center: mapboxgl.LngLat; zoom: number } | null {
+  const bounds = boundsFromCoords(coords);
+  if (!bounds) return null;
+  const camera = map.cameraForBounds(bounds, {
+    padding: opts?.padding ?? 40,
+    maxZoom: opts?.maxZoom ?? 15.5,
+  });
+  if (!camera || camera.zoom == null || !camera.center) return null;
+  return { center: mapboxgl.LngLat.convert(camera.center), zoom: camera.zoom };
+}
+
+/**
+ * True when re-fitting would be a no-op the user cannot perceive.
+ *
+ * Two independent conditions, both required:
+ *
+ * 1. The target zoom is already what we would set (±0.5). A very short run
+ *    hitting the `maxZoom` ceiling makes `cameraForBounds` return 13.49 while
+ *    the map sits at 13.5, so an exact match is too strict.
+ * 2. The whole route is inside the viewport with a margin.
+ *
+ * Relying on (2) alone was wrong: from a national overview a 5 km route is
+ * also "inside the viewport", so a pick there did nothing at all. Relying on
+ * (1) alone was wrong too: same zoom but a different city still needs a pan.
+ */
+function isRouteAlreadyFramed(
+  map: mapboxgl.Map,
+  camera: { zoom: number },
+  coords: Coordinate[]
+): boolean {
+  if (Math.abs(camera.zoom - map.getZoom()) >= 0.5) return false;
+  const bounds = boundsFromCoords(coords);
+  if (!bounds) return false;
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  if (!width || !height) return false;
+  // Generous margin: the fit itself uses 56px padding.
+  const marginX = width * 0.08;
+  const marginY = height * 0.08;
+  try {
+    const nw = map.project(bounds.getNorthWest());
+    const se = map.project(bounds.getSouthEast());
+    const minX = Math.min(nw.x, se.x);
+    const maxX = Math.max(nw.x, se.x);
+    const minY = Math.min(nw.y, se.y);
+    const maxY = Math.max(nw.y, se.y);
+    return (
+      minX > marginX &&
+      maxX < width - marginX &&
+      minY > marginY &&
+      maxY < height - marginY
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Frame a single selected route with one adaptive camera move.
+ *
+ * A fixed duration felt like a dive when jumping from a national overview to
+ * street level, while capping `maxZoom` lower left short runs as a dot — both
+ * traded away something the user wanted. So the destination is always the
+ * readable frame; only the *duration* scales with how far the camera travels.
+ *
+ * Single `easeTo` (not easeTo + fitBounds): the two used to stack and the
+ * interrupted first leg read as the view being pulled down.
+ *
+ * `force` skips the "already framed" shortcut — explicit re-centre actions and
+ * post-resize refits must always reposition, even when the route is in view.
+ */
 export function fitMapToSelectedRoute(
   map: mapboxgl.Map,
   coords: Coordinate[],
-  privacy: boolean
+  privacy: boolean,
+  opts?: { force?: boolean }
 ): void {
-  const bounds = boundsFromCoords(coords);
-  if (!bounds) return;
+  const camera = routeCameraFor(map, coords);
+  if (!camera) return;
+
+  map.stop();
+
+  if (privacy) {
+    map.easeTo({
+      center: camera.center,
+      zoom: camera.zoom,
+      pitch: 0,
+      bearing: 0,
+      duration: 200,
+    });
+    return;
+  }
+
+  // Already framed: leave the camera alone. The selection highlight, log row
+  // and calendar day already confirm the pick; re-fitting would only jitter.
+  if (!opts?.force && isRouteAlreadyFramed(map, camera, coords)) return;
+
+  const zoomSpan = Math.abs(camera.zoom - map.getZoom());
+
+  const duration =
+    zoomSpan >= 5 ? 1000 : zoomSpan >= 3 ? 820 : zoomSpan >= 1.5 ? 640 : 480;
+
   map.easeTo({
+    center: camera.center,
+    zoom: camera.zoom,
     pitch: 0,
     bearing: 0,
-    duration: privacy ? 200 : 400,
-  });
-  map.fitBounds(bounds, {
-    padding: 50,
-    maxZoom: 14,
-    duration: privacy ? 200 : 500,
+    duration,
+    easing: easeInOutCubic,
   });
 }
 
@@ -155,15 +266,18 @@ export function fitMapToRouteOverview(
     [lngs[lngs.length - 1 - trimCount], lats[lats.length - 1 - trimCount]]
   );
 
+  // One move (pitch/bearing reset is part of it) — easeTo + fitBounds used to
+  // run back to back and the interrupted first leg felt like a downward yank.
+  const camera = map.cameraForBounds(bounds, { padding: 30, maxZoom: 13 });
+  if (!camera || camera.zoom == null || !camera.center) return;
+  map.stop();
   map.easeTo({
+    center: mapboxgl.LngLat.convert(camera.center),
+    zoom: camera.zoom,
     pitch: 0,
     bearing: 0,
-    duration: privacy ? 200 : 400,
-  });
-  map.fitBounds(bounds, {
-    padding: 30,
-    maxZoom: 13,
-    duration: privacy ? 200 : 500,
+    duration: privacy ? 200 : 600,
+    easing: easeInOutCubic,
   });
 }
 

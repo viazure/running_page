@@ -46,10 +46,41 @@ export interface DashboardProModules {
 }
 
 export interface DashboardProConfig {
-  /** 首页 Latest 紧凑条；默认 false */
-  show_latest?: boolean;
   modules?: Partial<DashboardProModules>;
+  /**
+   * 首页目标卡的显示顺序。缺省为 `yearly, monthly, weekly, streak`。
+   * 只影响排列，不影响任何统计口径；不在列表里的卡片仍然会显示（追加在末尾），
+   * 未知名称会被忽略。
+   */
+  stats_order?: StatsCardKey[];
+  /**
+   * 哪张目标卡作为 hero（独占一整行、字号更大）。会永远排在最前。
+   *
+   * 只取第一个。可选值：yearly / monthly / weekly —— streak（连续记录）不支持，
+   * 它的内容是「数字 + 一周七天」，独占整行时要么挤在左边留一大片空白，要么
+   * 被迫拉成七个小格子，两种都难看，所以它始终以紧凑网格卡渲染。
+   *
+   * 传 [] 则所有卡片等权并排、无 hero（默认值）。
+   */
+  stats_hero?: StatsCardKey[];
 }
+
+/** 目标卡标识，用于 `stats_order` / `stats_hero`。 */
+export type StatsCardKey = 'yearly' | 'monthly' | 'weekly' | 'streak';
+
+/**
+ * Cards that may render as the full-width hero row.
+ *
+ * `streak` is excluded on purpose: its content is a number plus a seven-day
+ * strip, which either bunches into the left corner with a large empty area
+ * beside it, or has to be stretched into seven wide tiles. Neither reads well
+ * at full width, so it always renders as a compact grid tile.
+ */
+export const STATS_HERO_ALLOWED: StatsCardKey[] = [
+  'yearly',
+  'monthly',
+  'weekly',
+];
 
 interface AppConfig {
   locale: Locale;
@@ -118,9 +149,71 @@ const DEFAULT_DASHBOARD_PRO_MODULES: DashboardProModules = {
 
 const rawDashboardPro = config.dashboard_pro ?? {};
 
-/** Homepage Latest strip (1–3 compact rows). Default off. */
-export const DASHBOARD_PRO_SHOW_LATEST: boolean =
-  rawDashboardPro.show_latest === true;
+/**
+ * Homepage goal-card order and hero selection.
+ *
+ * `stats_hero` decides which cards get a full-width row; everything else falls
+ * into the grid in `stats_order` sequence. Keeping these as card *names* rather
+ * than a layout enum means every card can be a hero, and order is free — the
+ * old `stats_layout: weekly-hero | grid-4` could only express two fixed shapes.
+ */
+const STATS_CARD_KEYS: StatsCardKey[] = [
+  'yearly',
+  'monthly',
+  'weekly',
+  'streak',
+];
+
+function parseStatsCardKeys(
+  raw: unknown,
+  fallback: StatsCardKey[]
+): StatsCardKey[] {
+  if (!Array.isArray(raw)) return fallback;
+  const seen = new Set<StatsCardKey>();
+  const out: StatsCardKey[] = [];
+  for (const item of raw) {
+    const key = String(item).trim().toLowerCase() as StatsCardKey;
+    if (!STATS_CARD_KEYS.includes(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+/** Default order: year → month → week → streak. */
+const DEFAULT_STATS_ORDER = STATS_CARD_KEYS;
+
+export const DASHBOARD_PRO_STATS_ORDER: StatsCardKey[] = (() => {
+  const parsed = parseStatsCardKeys(rawDashboardPro.stats_order, []);
+  if (parsed.length === 0) return DEFAULT_STATS_ORDER;
+  // Cards omitted from the config still render — append them in default order.
+  for (const key of STATS_CARD_KEYS) {
+    if (!parsed.includes(key)) parsed.push(key);
+  }
+  return parsed;
+})();
+
+/**
+ * Default: no hero. Every goal card starts as an equal grid tile, and the
+ * project's own config picks which one (if any) should be emphasised.
+ */
+const DEFAULT_STATS_HERO: StatsCardKey[] = [];
+
+/**
+ * The single hero card, if any.
+ *
+ * Two rules beyond the raw config:
+ * - only the first entry counts: a hero is one emphasised row, and listing
+ *   several would stack full-width rows and push everything below far down;
+ * - only `STATS_HERO_ALLOWED` cards qualify, so configuring `streak` here is
+ *   ignored rather than producing a stretched, bad-looking row.
+ */
+export const DASHBOARD_PRO_STATS_HERO: StatsCardKey[] = parseStatsCardKeys(
+  rawDashboardPro.stats_hero,
+  DEFAULT_STATS_HERO
+)
+  .filter((key) => STATS_HERO_ALLOWED.includes(key))
+  .slice(0, 1);
 
 /**
  * Homepage module visibility.

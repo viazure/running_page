@@ -34,14 +34,12 @@ import {
   PRIVACY_ANONYMOUS_TITLES,
   GITHUB_URL,
   DASHBOARD_PRO_MODULES,
-  DASHBOARD_PRO_SHOW_LATEST,
 } from '@/core/config';
 import { CAN_PRIVACY_UNLOCK } from '@/core/privacyUnlock';
 import { DashboardContentSkeleton } from '@/components/PageSkeleton';
 import { TracksPageSkeleton } from './components/TracksPageSkeleton';
 import { MonthGlance } from './components/MonthGlance';
 import { MapDockFab } from './components/MapDockFab';
-import { LatestStrip } from './components/LatestStrip';
 import {
   playbackMapHeightPx,
   useMobileMapDock,
@@ -148,6 +146,17 @@ type Page = 'home' | 'tracks' | 'summary';
 
 const FOOTER_YEAR = new Date().getFullYear();
 const ACTIVITY_LOG_PAGE_SIZE = { mobile: 7, desktop: 16 } as const;
+/**
+ * Bounds for the right-column footprint map on desktop, and the heatmap height
+ * above which the "all years" view is considered expanded.
+ *
+ * The map is sized to make the right column end level with the left column's
+ * stats + heatmap block — but only while the heatmap is a single compact year.
+ * Past `SINGLE_YEAR_HEATMAP_MAX_H` the cached aligned height is reused, so
+ * expanding the heatmap never inflates the map.
+ */
+const FOOTPRINT_MIN_H = 180;
+const SINGLE_YEAR_HEATMAP_MAX_H = 420;
 
 function MapFallback({
   className = 'h-[220px] md:h-[380px]',
@@ -210,31 +219,48 @@ function DashboardProContent({
   const analysisEntryRef = useRef<'external' | 'internal' | null>(null);
   const applyingHashRef = useRef(false);
   const lastAppliedHashKeyRef = useRef('');
+  /**
+   * Set for a heatmap pick: keep the current year filter instead of narrowing
+   * 「全部」to the picked run's year (that shrinks the heatmap card and jumps the
+   * page). Camera framing is handled adaptively in RouteMap and needs no flag.
+   */
+  const keepYearFilterRef = useRef(false);
+  /** One-shot: the next ActivityLog render came from a `#run_<id>` deep link. */
+  const revealFromHashRef = useRef(false);
+  /** Latest selected run id, readable from effects that omit it as a dep. */
+  const selectedRunIdRef = useRef<number | null>(null);
 
-  const selectActivity = useCallback((next: Activity | null) => {
-    if (applyingHashRef.current) {
+  const selectActivity = useCallback(
+    (next: Activity | null, opts?: { keepYearFilter?: boolean }) => {
+      if (!applyingHashRef.current) {
+        keepYearFilterRef.current = opts?.keepYearFilter === true;
+      }
+      selectedRunIdRef.current = next?.run_id ?? null;
+      if (applyingHashRef.current) {
+        setSelectedActivity(next);
+        return;
+      }
       setSelectedActivity(next);
-      return;
-    }
-    setSelectedActivity(next);
-    if (!next) {
-      setAnalysisOpen(false);
-      analysisEntryRef.current = null;
-      clearRunHash();
-      return;
-    }
-    const current = readRunHash();
-    if (current?.analysis && current.runId !== next.run_id) {
-      setAnalysisOpen(false);
-      analysisEntryRef.current = null;
-    }
-    if (current?.runId === next.run_id && !current.analysis) return;
-    writeRunHash(
-      next.run_id,
-      false,
-      current?.runId === next.run_id ? 'replace' : 'push'
-    );
-  }, []);
+      if (!next) {
+        setAnalysisOpen(false);
+        analysisEntryRef.current = null;
+        clearRunHash();
+        return;
+      }
+      const current = readRunHash();
+      if (current?.analysis && current.runId !== next.run_id) {
+        setAnalysisOpen(false);
+        analysisEntryRef.current = null;
+      }
+      if (current?.runId === next.run_id && !current.analysis) return;
+      writeRunHash(
+        next.run_id,
+        false,
+        current?.runId === next.run_id ? 'replace' : 'push'
+      );
+    },
+    []
+  );
 
   const openAnalysis = useCallback(() => {
     if (!selectedActivity) return;
@@ -295,9 +321,22 @@ function DashboardProContent({
     }
 
     const y = activityYear(activity.start_date_local);
-    if (y != null && year !== y) setYear(y);
+    // A heatmap pick keeps the year filter as-is: narrowing「全部」to a single
+    // year drops the heatmap's multi-year rows and the card visibly shrinks.
+    const keepYear = keepYearFilterRef.current && year === null;
+    if (y != null && year !== y && !keepYear) {
+      setYear(y);
+    }
 
     applyingHashRef.current = true;
+    // Only a hash the user did not just create themselves counts as a deep
+    // link. `selectActivity` writes the hash right before selection, so the
+    // current selection already matches it and no reveal is wanted; a URL
+    // opened from outside leaves them different.
+    if (selectedRunIdRef.current !== hash.runId) {
+      revealFromHashRef.current = true;
+    }
+    selectedRunIdRef.current = hash.runId;
     setSelectedActivity((prev) =>
       prev?.run_id === activity.run_id &&
       prev.summary_polyline === activity.summary_polyline
@@ -354,16 +393,89 @@ function DashboardProContent({
 
   /** Same filter, but with sidecar geometry for map rendering. */
   const provinceFilteredTracks = useMemo(() => {
-    if (provinceFiltered === filtered) return activitiesWithTracks;
+    // Geometry lives on the sidecar-merged list, so ids are re-looked up here.
+    //
+    // This must NOT shortcut to `activitiesWithTracks` merely because no
+    // province is selected: that list is unfiltered by year, and doing so made
+    // the year tabs and the sport filter do nothing to the log, heatmap and
+    // stats. Only shortcut when nothing is filtered at all.
+    const unfiltered = year == null && filter === 'all' && !selectedProvince;
+    if (unfiltered) return activitiesWithTracks;
     const byId = new Map(
       activitiesWithTracks.map((a) => [a.run_id, a] as const)
     );
     return provinceFiltered.map((a) => byId.get(a.run_id) ?? a);
-  }, [provinceFiltered, filtered, activitiesWithTracks]);
+  }, [provinceFiltered, activitiesWithTracks, year, filter, selectedProvince]);
 
   const allYears = year == null;
   const mapSlotRef = useRef<HTMLDivElement>(null);
   const mapPinRef = useRef<HTMLDivElement>(null);
+
+  const profileRef = useRef<HTMLDivElement>(null);
+  const leftBlockRef = useRef<HTMLDivElement>(null);
+  /**
+   * Desktop: the footprint map is sized so the right column ends level with the
+   * left column's stats + heatmap block.
+   *
+   * Two requirements pull against each other:
+   *  - the right column should align with the left one (so the map fills the
+   *    leftover height, not a fixed 260px);
+   *  - the map must NOT grow when the heatmap is switched to "all years", which
+   *    makes the left block much taller.
+   *
+   * So the target height is measured only in the *single-year* view and cached.
+   * When the heatmap expands to all years, that cached value is reused instead
+   * of re-measuring — the map stays put and only the left column grows.
+   */
+  const [footprintHeight, setFootprintHeight] = useState<number | null>(null);
+  const alignedHeightRef = useRef<number | null>(null);
+  const heatmapBoxRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (window.innerWidth < 1024) {
+        setFootprintHeight(null);
+        return;
+      }
+      const left = leftBlockRef.current;
+      const profile = profileRef.current;
+      if (!left || !profile) return;
+
+      // Recompute only while the heatmap is a single compact year — that is the
+      // state the alignment is defined against. Once it expands to "all years"
+      // the cached height is reused so the map does not grow with it.
+      const heatH = heatmapBoxRef.current?.getBoundingClientRect().height ?? 0;
+      const heatExpanded = heatH > SINGLE_YEAR_HEATMAP_MAX_H;
+      if (heatExpanded && alignedHeightRef.current != null) {
+        setFootprintHeight(alignedHeightRef.current);
+        return;
+      }
+
+      const leftH = left.getBoundingClientRect().height;
+      const profileH = profile.getBoundingClientRect().height;
+      const gap = 16; // lg:gap-4 between profile and map
+      // Right column height = left column height, so the two bottom edges line
+      // up; the map takes whatever the profile leaves over.
+      const target = Math.max(
+        FOOTPRINT_MIN_H,
+        Math.round(leftH - profileH - gap)
+      );
+      if (!heatExpanded) alignedHeightRef.current = target;
+      setFootprintHeight(target);
+    };
+    measure();
+    const left = leftBlockRef.current;
+    const profile = profileRef.current;
+    const heat = heatmapBoxRef.current;
+    const ro = new ResizeObserver(measure);
+    if (left) ro.observe(left);
+    if (profile) ro.observe(profile);
+    if (heat) ro.observe(heat);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [allYears]);
   const [mapPlaying, setMapPlaying] = useState(false);
   // Keep play surface tall through exit settle (same as TracksPage / RouteMap).
   const [playSurfaceSized, setPlaySurfaceSized] = useState(false);
@@ -389,17 +501,17 @@ function DashboardProContent({
 
   // Keep footer FAB clearance in sync (padding lives under the copyright, not
   // between the last card and the footer — that looked like a huge bottom gap).
+  //
+  // The dock FAB is now gated on having a selected run, so the only case worth
+  // insetting for is "a run is selected" — where the split-analysis bookmark
+  // stacks above the dock FAB.
   useEffect(() => {
     if (!onFabClearanceChange) return;
-    if (page !== 'home' || analysisOpen) {
+    if (page !== 'home' || analysisOpen || selectedActivity == null) {
       onFabClearanceChange('none');
       return;
     }
-    const showDockFab = mapDock.showFab;
-    if (selectedActivity != null && showDockFab) onFabClearanceChange('two');
-    else if (selectedActivity != null || showDockFab)
-      onFabClearanceChange('one');
-    else onFabClearanceChange('none');
+    onFabClearanceChange(mapDock.showFab ? 'two' : 'one');
   }, [
     onFabClearanceChange,
     page,
@@ -434,14 +546,6 @@ function DashboardProContent({
 
   const activityLog = (
     <>
-      {DASHBOARD_PRO_SHOW_LATEST ? (
-        <LatestStrip
-          activities={provinceFilteredTracks}
-          getTitle={activityTitle}
-          onSelectActivity={selectActivity}
-          limit={3}
-        />
-      ) : null}
       <ActivityLog
         activities={provinceFilteredTracks}
         years={years}
@@ -451,6 +555,7 @@ function DashboardProContent({
         onSelectActivity={selectActivity}
         filter={filter}
         getTitle={activityTitle}
+        revealFromHashRef={revealFromHashRef}
         pageSize={ACTIVITY_LOG_PAGE_SIZE}
         variant="pro"
       />
@@ -512,14 +617,14 @@ function DashboardProContent({
           </Suspense>
         </div>
       </div>
-      {mapDock.showFab && !analysisOpen ? (
+      {mapDock.showFab && !analysisOpen && selectedActivity != null ? (
         <MapDockFab
           expanded={mapDock.expanded}
           labelShow={locale === 'zh' ? '显示轨迹' : 'Show map'}
           labelHide={locale === 'zh' ? '收起轨迹' : 'Hide map'}
           onToggle={mapDock.toggle}
           // Stack above splits bookmark when a run is selected.
-          lifted={selectedActivity != null}
+          lifted
         />
       ) : null}
     </>
@@ -574,7 +679,10 @@ function DashboardProContent({
         }`}
       >
         {/* Left: stats + heatmap, plus the log when every year is shown */}
-        <div className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-6">
+        <div
+          ref={leftBlockRef}
+          className="contents min-w-0 lg:col-start-1 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-6"
+        >
           {modules.weekly ||
           modules.yearly_goal ||
           modules.monthly_goal ||
@@ -591,13 +699,15 @@ function DashboardProContent({
             </div>
           ) : null}
           {modules.heatmap ? (
-            <div className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+            <div
+              ref={heatmapBoxRef}
+              className="order-3 min-w-0 overflow-hidden lg:order-none lg:shrink-0"
+            >
               <ContributionHeatmap
                 activities={activitiesWithTracks}
-                year={year}
+                initialYear={year}
                 filter={filter}
                 onSelectActivity={selectActivity}
-                onYearChange={setYear}
               />
             </div>
           ) : null}
@@ -611,10 +721,13 @@ function DashboardProContent({
         {/* Right: profile + map. All years also stacks route, calendar, chart. */}
         <div
           className={`contents min-w-0 lg:col-start-2 lg:row-start-1 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 ${
-            allYears ? '' : 'lg:h-full lg:overflow-hidden'
+            allYears ? '' : 'lg:h-full lg:overflow-visible'
           }`}
         >
-          <div className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0">
+          <div
+            ref={profileRef}
+            className="order-1 min-w-0 overflow-hidden lg:order-none lg:shrink-0"
+          >
             <ProfileCard
               activities={activitiesWithTracks}
               filter={filter}
@@ -627,9 +740,17 @@ function DashboardProContent({
           </div>
           {modules.footprint ? (
             <div
+              // Explicit height from the measured left column (see
+              // `footprintHeight`); `lg:flex-1` is gone so this never absorbs
+              // the row's height when the heatmap grows.
               className={`order-7 min-w-0 overflow-hidden lg:order-none ${
-                allYears ? 'lg:shrink-0' : 'lg:min-h-0 lg:flex-1'
+                allYears ? 'lg:shrink-0' : 'lg:min-h-0'
               }`}
+              style={
+                !allYears && footprintHeight != null
+                  ? { height: footprintHeight }
+                  : undefined
+              }
             >
               <Suspense
                 fallback={

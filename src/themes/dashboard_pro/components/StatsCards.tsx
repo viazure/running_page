@@ -1,8 +1,17 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useFixedPopover } from '../hooks/useFixedPopover';
 import type { Activity, SportFilter } from '@/types';
 import { formatDistance, parseMovingTime } from '@/hooks/useActivities';
 import { useLocale } from '@/hooks/useLocale';
-import { GOALS, DEFAULT_GOAL, DASHBOARD_PRO_MODULES } from '@/config';
+import {
+  GOALS,
+  DEFAULT_GOAL,
+  DASHBOARD_PRO_MODULES,
+  DASHBOARD_PRO_STATS_HERO,
+  DASHBOARD_PRO_STATS_ORDER,
+  type StatsCardKey,
+} from '@/config';
 /** Soften large year-over-year drops so the card does not feel punitive. */
 function formatYearYoY(
   yearDiff: number,
@@ -41,24 +50,50 @@ function GoalHeading({
   label: string;
   hint?: string;
 }) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  // The goal cards live inside `overflow-x-hidden` grids, which browsers turn
+  // into scroll containers on the other axis too — an absolutely positioned
+  // bubble above the title was clipped to a thin white sliver. The shared hook
+  // portals it to <body> and flips it below when there is no room above.
+  const { popRef } = useFixedPopover(anchorRef, open, { gap: 6 }, hint);
+
   return (
     <div
+      ref={anchorRef}
       className="group/period relative rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
       tabIndex={hint ? 0 : undefined}
       aria-label={hint ? `${label} ${hint}` : undefined}
+      onPointerEnter={(event) => {
+        if (hint && event.pointerType === 'mouse') setOpen(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') setOpen(false);
+      }}
+      onFocus={() => {
+        if (hint) setOpen(true);
+      }}
+      onBlur={() => setOpen(false)}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setOpen(false);
+      }}
     >
       <p className={className}>
         {icon}
         <span className="min-w-0 truncate">{label}</span>
       </p>
-      {hint ? (
-        <span
-          role="tooltip"
-          className="pointer-events-none absolute bottom-full left-0 z-10 mb-2 hidden rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-normal whitespace-nowrap text-[var(--color-text)] normal-case tabular-nums shadow-md group-focus-within/period:block group-hover/period:block"
-        >
-          {hint}
-        </span>
-      ) : null}
+      {hint && open
+        ? createPortal(
+            <div
+              ref={popRef}
+              role="tooltip"
+              className="pointer-events-none fixed z-[90] rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2.5 py-1 text-xs font-normal whitespace-nowrap text-[var(--color-text)] normal-case tabular-nums shadow-md"
+            >
+              {hint}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }
@@ -415,17 +450,11 @@ export function StatsCards({
   const unit = filter === 'Run' ? t('runs') : t('activities');
 
   const showWeekly = DASHBOARD_PRO_MODULES.weekly;
+  const statsOrder = DASHBOARD_PRO_STATS_ORDER;
+  const statsHero = DASHBOARD_PRO_STATS_HERO;
   const showYearly = DASHBOARD_PRO_MODULES.yearly_goal;
   const showMonthly = DASHBOARD_PRO_MODULES.monthly_goal;
   const showStreak = DASHBOARD_PRO_MODULES.streak;
-  const goalCardCount =
-    Number(showYearly) + Number(showMonthly) + Number(showStreak);
-  const goalGridClass =
-    goalCardCount <= 1
-      ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:gap-3'
-      : goalCardCount === 2
-        ? 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:gap-3'
-        : 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3';
 
   const ncCount =
     Number(showWeekly) +
@@ -817,85 +846,39 @@ export function StatsCards({
     );
   }
 
-  return (
-    <div className="flex flex-col gap-2 md:gap-3">
-      {/* Weekly Goal */}
-      {showWeekly ? (
-        <div className="card min-w-0 p-4 md:p-5">
-          <GoalHeading
-            className="eyebrow mb-2 flex min-w-0 items-center gap-1.5 text-[11px] tracking-[1.2px] text-[var(--color-muted)] md:text-xs"
-            label={t('weeklyGoal')}
-            hint={weekHint}
-            icon={
-              <svg
-                className="hidden h-3.5 w-3.5 shrink-0 md:block"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            }
-          />
-          <p className="metric text-[40px] leading-none font-bold whitespace-nowrap md:text-[52px]">
-            {goal.unit === 'time'
-              ? formatHours(weekSeconds)
-              : formatDistance(weekDistance)}
-            <span className="ml-2 text-base font-medium text-[var(--color-muted)] md:text-xl">
-              /{' '}
-              {goal.unit === 'time' ? `${weekGoalMins}m` : `${goal.weekly} km`}
-            </span>
-          </p>
-          <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-[#EFECE7] md:mt-4">
+  /**
+   * Compact (homepage) layout.
+   *
+   * Cards are declared once each and composed from config rather than from a
+   * layout enum: `stats_order` decides sequence, `stats_hero` decides which
+   * ones take a full-width row. Hero cards keep the big type; grid cards use
+   * the compact tile treatment.
+   *
+   * Hero and grid cards are emitted in `stats_order` sequence, so a hero card
+   * in the middle of the list splits the grid into two rows above and below it.
+   */
+  const cardDefs: Record<
+    StatsCardKey,
+    { enabled: boolean; render: (hero: boolean) => ReactNode } | null
+  > = {
+    yearly: showYearly
+      ? {
+          enabled: true,
+          render: (hero) => (
             <div
-              className="h-full rounded-full bg-[var(--color-accent)] transition-all"
-              style={{
-                width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60 || 1)) * 100 : (weekDistance / (weekGoalMeters || 1)) * 100, 100)}%`,
-              }}
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
-            <span className="flex items-center gap-1.5">
-              <svg
-                className="h-3.5 w-3.5 text-[var(--color-accent)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
+              className={
+                hero
+                  ? 'card min-w-0 p-4 md:p-5'
+                  : 'card flex h-full min-w-0 flex-col p-2 md:p-4'
+              }
+            >
+              <p
+                className={`eyebrow flex items-center gap-1 text-[var(--color-muted)] ${
+                  hero
+                    ? 'mb-2 text-[11px] tracking-[1.2px] md:text-xs'
+                    : 'mb-1 text-[10px] md:mb-2 md:gap-1.5 md:text-xs'
+                }`}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              {weekCount} {unit}
-            </span>
-            <span>{formatHours(weekSeconds)}</span>
-          </div>
-          <p
-            className={`mt-2 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
-          >
-            {weekDiff >= 0 ? '↗' : '↘'}{' '}
-            {goal.unit === 'time'
-              ? formatHours(Math.abs(weekDiff))
-              : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
-            <span className="hidden sm:inline">{t('vsLastWeek')}</span>
-          </p>
-        </div>
-      ) : null}
-
-      {goalCardCount > 0 ? (
-        <div className={goalGridClass}>
-          {/* Yearly Goal */}
-          {showYearly ? (
-            <div className="card min-w-0 p-2 md:p-4">
-              <p className="eyebrow mb-1 flex items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
                 <svg
                   className="hidden h-3.5 w-3.5 md:block"
                   fill="none"
@@ -911,26 +894,48 @@ export function StatsCards({
                 </svg>
                 <span className="truncate">{t('yearlyGoal')}</span>
               </p>
-              <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
+              <p
+                className={`metric leading-tight font-semibold ${
+                  hero
+                    ? 'text-[32px] whitespace-nowrap md:text-[40px]'
+                    : 'text-base md:text-2xl md:whitespace-nowrap'
+                }`}
+              >
                 {goal.unit === 'time'
                   ? formatHours(yearSeconds)
                   : formatDistance(yearDistance)}
-                <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
+                <span
+                  className={`font-normal text-[var(--color-muted)] ${
+                    hero
+                      ? 'ml-2 text-sm md:text-base'
+                      : 'ml-0.5 text-[10px] md:ml-1 md:text-sm'
+                  }`}
+                >
                   /{' '}
                   {goal.unit === 'time'
                     ? `${Math.round(yearGoalMins / 60)}h`
                     : `${goal.yearly} km`}
                 </span>
               </p>
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
+              <div
+                className={`overflow-hidden rounded-full bg-[var(--color-sunken)] ${
+                  hero ? 'mt-3 h-[3px] md:mt-4' : 'mt-2 h-1 md:mt-3 md:h-1.5'
+                }`}
+              >
                 <div
                   className="h-full rounded-full bg-[var(--color-accent)] transition-all"
                   style={{
-                    width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / yearGoalMeters) * 100, 100)}%`,
+                    width: `${Math.min(goal.unit === 'time' ? (yearSeconds / (yearGoalMins * 60)) * 100 : (yearDistance / (yearGoalMeters || 1)) * 100, 100)}%`,
                   }}
                 />
               </div>
-              <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
+              <div
+                className={`flex items-center justify-between text-[var(--color-muted)] ${
+                  hero
+                    ? 'mt-3 flex text-sm'
+                    : 'mt-2 hidden text-sm md:mt-3 md:flex'
+                }`}
+              >
                 <span className="flex items-center gap-1.5">
                   <svg
                     className="h-3.5 w-3.5 text-[var(--color-accent)]"
@@ -950,7 +955,7 @@ export function StatsCards({
                 <span>{formatHours(yearSeconds)}</span>
               </div>
               <p
-                className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+                className={`truncate ${hero ? 'mt-2 text-xs' : 'mt-1 text-[9px] md:mt-1.5 md:text-xs'} ${yearDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
               >
                 {formatYearYoY(
                   yearDiff,
@@ -961,13 +966,26 @@ export function StatsCards({
                 )}
               </p>
             </div>
-          ) : null}
-
-          {/* Monthly Goal */}
-          {showMonthly ? (
-            <div className="card min-w-0 p-2 md:p-4">
+          ),
+        }
+      : null,
+    monthly: showMonthly
+      ? {
+          enabled: true,
+          render: (hero) => (
+            <div
+              className={
+                hero
+                  ? 'card min-w-0 p-4 md:p-5'
+                  : 'card flex h-full min-w-0 flex-col p-2 md:p-4'
+              }
+            >
               <GoalHeading
-                className="eyebrow mb-1 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs"
+                className={`eyebrow flex min-w-0 items-center gap-1 text-[var(--color-muted)] ${
+                  hero
+                    ? 'mb-2 text-[11px] tracking-[1.2px] md:text-xs'
+                    : 'mb-1 text-[10px] md:mb-2 md:gap-1.5 md:text-xs'
+                }`}
                 label={t('monthlyGoal')}
                 hint={monthHint}
                 icon={
@@ -986,26 +1004,48 @@ export function StatsCards({
                   </svg>
                 }
               />
-              <p className="metric text-base leading-tight font-semibold md:text-2xl md:whitespace-nowrap">
+              <p
+                className={`metric leading-tight font-semibold ${
+                  hero
+                    ? 'text-[32px] whitespace-nowrap md:text-[40px]'
+                    : 'text-base md:text-2xl md:whitespace-nowrap'
+                }`}
+              >
                 {goal.unit === 'time'
                   ? formatHours(monthSeconds)
                   : formatDistance(monthDistance)}
-                <span className="ml-0.5 text-[10px] font-normal text-[var(--color-muted)] md:ml-1 md:text-sm">
+                <span
+                  className={`font-normal text-[var(--color-muted)] ${
+                    hero
+                      ? 'ml-2 text-sm md:text-base'
+                      : 'ml-0.5 text-[10px] md:ml-1 md:text-sm'
+                  }`}
+                >
                   /{' '}
                   {goal.unit === 'time'
                     ? `${Math.round(monthGoalMins / 60)}h`
                     : `${goal.monthly} km`}
                 </span>
               </p>
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--color-sunken)] md:mt-3 md:h-1.5">
+              <div
+                className={`overflow-hidden rounded-full bg-[var(--color-sunken)] ${
+                  hero ? 'mt-3 h-[3px] md:mt-4' : 'mt-2 h-1 md:mt-3 md:h-1.5'
+                }`}
+              >
                 <div
                   className="h-full rounded-full bg-[var(--color-accent)] transition-all"
                   style={{
-                    width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / monthGoalMeters) * 100, 100)}%`,
+                    width: `${Math.min(goal.unit === 'time' ? (monthSeconds / (monthGoalMins * 60)) * 100 : (monthDistance / (monthGoalMeters || 1)) * 100, 100)}%`,
                   }}
                 />
               </div>
-              <div className="mt-2 hidden items-center justify-between text-sm text-[var(--color-muted)] md:mt-3 md:flex">
+              <div
+                className={`flex items-center justify-between text-[var(--color-muted)] ${
+                  hero
+                    ? 'mt-3 flex text-sm'
+                    : 'mt-2 hidden text-sm md:mt-3 md:flex'
+                }`}
+              >
                 <span className="flex items-center gap-1.5">
                   <svg
                     className="h-3.5 w-3.5 text-[var(--color-accent)]"
@@ -1025,7 +1065,7 @@ export function StatsCards({
                 <span>{formatHours(monthSeconds)}</span>
               </div>
               <p
-                className={`mt-1 truncate text-[9px] md:mt-1.5 md:text-xs ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+                className={`truncate ${hero ? 'mt-2 text-xs' : 'mt-1 text-[9px] md:mt-1.5 md:text-xs'} ${monthDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
               >
                 {monthDiff >= 0 ? '↗' : '↘'}{' '}
                 {goal.unit === 'time'
@@ -1034,10 +1074,114 @@ export function StatsCards({
                 <span className="hidden sm:inline">{t('vsLastMonth')}</span>
               </p>
             </div>
-          ) : null}
-
-          {showStreak ? (
-            <div className="card col-span-2 min-w-0 overflow-hidden p-2 md:col-span-1 md:p-4">
+          ),
+        }
+      : null,
+    weekly: showWeekly
+      ? {
+          enabled: true,
+          render: (hero) => (
+            <div
+              className={
+                hero
+                  ? 'card min-w-0 p-4 md:p-5'
+                  : 'card flex h-full min-w-0 flex-col p-3 md:p-4'
+              }
+            >
+              <GoalHeading
+                className={`eyebrow flex min-w-0 items-center gap-1.5 text-[var(--color-muted)] ${
+                  hero
+                    ? 'mb-2 text-[11px] tracking-[1.2px] md:text-xs'
+                    : 'mb-1 text-[10px] md:mb-2 md:text-xs'
+                }`}
+                label={t('weeklyGoal')}
+                hint={weekHint}
+                icon={
+                  <svg
+                    className="hidden h-3.5 w-3.5 shrink-0 md:block"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                }
+              />
+              <p
+                className={`metric leading-none font-bold whitespace-nowrap ${
+                  hero
+                    ? 'text-[40px] md:text-[52px]'
+                    : 'text-[26px] md:text-[30px]'
+                }`}
+              >
+                {goal.unit === 'time'
+                  ? formatHours(weekSeconds)
+                  : formatDistance(weekDistance)}
+                <span
+                  className={`ml-2 font-medium text-[var(--color-muted)] ${
+                    hero ? 'text-base md:text-xl' : 'text-sm md:text-base'
+                  }`}
+                >
+                  /{' '}
+                  {goal.unit === 'time'
+                    ? `${weekGoalMins}m`
+                    : `${goal.weekly} km`}
+                </span>
+              </p>
+              <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-[#EFECE7] md:mt-4">
+                <div
+                  className="h-full rounded-full bg-[var(--color-accent)] transition-all"
+                  style={{
+                    width: `${Math.min(goal.unit === 'time' ? (weekSeconds / (weekGoalMins * 60 || 1)) * 100 : (weekDistance / (weekGoalMeters || 1)) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+                <span className="flex items-center gap-1.5">
+                  <svg
+                    className="h-3.5 w-3.5 text-[var(--color-accent)]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  {weekCount} {unit}
+                </span>
+                <span>{formatHours(weekSeconds)}</span>
+              </div>
+              <p
+                className={`mt-2 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+              >
+                {weekDiff >= 0 ? '↗' : '↘'}{' '}
+                {goal.unit === 'time'
+                  ? formatHours(Math.abs(weekDiff))
+                  : `${formatDistance(Math.abs(weekDiff))} km`}{' '}
+                <span className="hidden sm:inline">{t('vsLastWeek')}</span>
+              </p>
+            </div>
+          ),
+        }
+      : null,
+    streak: showStreak
+      ? {
+          enabled: true,
+          render: (hero) => (
+            <div
+              className={`card min-w-0 overflow-hidden ${
+                hero ? 'p-4 md:p-5' : 'flex h-full flex-col p-2 md:p-4'
+              }`}
+            >
               <p className="eyebrow mb-1.5 flex min-w-0 items-center gap-1 text-[10px] text-[var(--color-muted)] md:mb-2 md:gap-1.5 md:text-xs">
                 <svg
                   className="h-3.5 w-3.5 shrink-0"
@@ -1060,18 +1204,33 @@ export function StatsCards({
                 <span className="truncate">{streakTitle}</span>
               </p>
 
-              {/* Mobile: stack (handoff-like); desktop: number then week row */}
-              <div className="flex min-w-0 flex-col gap-2 lg:block lg:gap-3">
-                <p className="metric text-xl font-semibold lg:text-3xl">
+              {/*
+                The streak card keeps its compact stacked layout in both cases:
+                its content (a number plus a seven-day strip) does not scale up
+                to a full-width row — it either bunched into the left corner
+                with a large empty area beside it, or had to be stretched into
+                seven wide tiles. It is therefore excluded from `stats_hero`.
+              */}
+              <div
+                className={
+                  hero
+                    ? 'flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3'
+                    : 'flex min-w-0 flex-col gap-2 lg:block lg:gap-3'
+                }
+              >
+                <p
+                  className={`metric shrink-0 font-semibold ${hero ? 'text-3xl md:text-4xl' : 'text-xl lg:text-3xl'}`}
+                >
                   {shownStreakDays}
-                  <span className="ml-1 text-xs font-normal text-[var(--color-muted)] lg:text-base">
+                  <span
+                    className={`ml-1 text-xs font-normal text-[var(--color-muted)] ${hero ? 'md:text-base' : 'lg:text-base'}`}
+                  >
                     {t('days')}
                   </span>
                 </p>
 
-                {/* Week days visual */}
                 {(() => {
-                  const todayIdx = (calendarAnchor.getDay() + 6) % 7; // Mon=0 … Sun=6
+                  const todayIdx = (calendarAnchor.getDay() + 6) % 7;
                   const weekStart = new Date(
                     calendarAnchor.getTime() - todayIdx * 86400000
                   );
@@ -1103,6 +1262,7 @@ export function StatsCards({
                       acts: dayActs,
                     };
                   });
+
                   return (
                     <div className="flex w-full min-w-0 items-center gap-1 lg:mt-3 lg:gap-1.5">
                       <div className="flex shrink-0 flex-col items-center gap-0">
@@ -1122,12 +1282,6 @@ export function StatsCards({
                           {t('weeks')}
                         </span>
                       </div>
-                      {/* Centered cluster (not edge-stretched) so days stay inset from card sides */}
-                      {/* Seven day circles plus the flame must fit the narrowest
-                          card width (col-span-2 in a 2-col grid ≈ 161px inside
-                          padding). A fixed 24px circle needed 212px and
-                          overflowed by 51px, jamming the row together; 18px
-                          fits at every width we support. */}
                       <div className="flex min-w-0 flex-1 items-center justify-between gap-0 px-0">
                         {weekDays.map((wd, i) => {
                           const isPast =
@@ -1173,7 +1327,6 @@ export function StatsCards({
                 })()}
               </div>
 
-              {/* Mobile: short hint under body (no header side-note that blows width) */}
               <p className="mt-1.5 truncate text-[9px] text-[var(--color-muted)] lg:hidden">
                 {t('weeks')}: {shownWeekStreak}
                 {longestStreak > 0
@@ -1182,7 +1335,9 @@ export function StatsCards({
               </p>
 
               {streakFootnote ? (
-                <div className="mt-3 hidden items-center gap-2 text-sm text-[var(--color-muted)] lg:flex">
+                <div
+                  className={`mt-3 items-center gap-2 text-sm text-[var(--color-muted)] ${hero ? 'flex' : 'hidden lg:flex'}`}
+                >
                   <svg
                     className="h-3.5 w-3.5 text-[var(--color-accent)]"
                     fill="none"
@@ -1200,9 +1355,88 @@ export function StatsCards({
                 </div>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      ) : null}
+          ),
+        }
+      : null,
+  };
+
+  const enabledKeys = statsOrder.filter((key) => cardDefs[key]?.enabled);
+  if (enabledKeys.length === 0) return null;
+
+  /**
+   * At most one hero, and it always renders first.
+   *
+   * A hero card is a single emphasised row; making several of them hero-length
+   * just stacks full-width rows and stretches everything below (the footprint
+   * map ended up pushed far down). "Hero" also stops meaning anything once
+   * everyone is one, so only the first configured hero wins.
+   *
+   * Moving it to the front — instead of leaving it wherever `stats_order` puts
+   * it — keeps the remaining cards in one unbroken grid. A hero in the middle
+   * used to split the grid, leaving a lone card at half width that read as a
+   * stray banner.
+   */
+  const heroKey = statsOrder.find(
+    (key) => cardDefs[key]?.enabled && statsHero.includes(key)
+  );
+  const orderedKeys = heroKey
+    ? [heroKey, ...enabledKeys.filter((key) => key !== heroKey)]
+    : enabledKeys;
+
+  /**
+   * Split into runs: the hero card is its own full-width block, and every
+   * non-hero card shares a single grid below it.
+   */
+  const blocks: Array<
+    { kind: 'hero'; key: StatsCardKey } | { kind: 'grid'; keys: StatsCardKey[] }
+  > = [];
+  if (heroKey) blocks.push({ kind: 'hero', key: heroKey });
+  const gridKeys = orderedKeys.filter((key) => key !== heroKey);
+  if (gridKeys.length > 0) blocks.push({ kind: 'grid', keys: gridKeys });
+
+  /**
+   * Column count for a grid run.
+   *
+   * A lone leftover card (a hero sitting in the middle of the order splits the
+   * grid in two) used to stretch to the full row while still using the compact
+   * tile treatment, which looked like a stray banner. Half width keeps it a
+   * tile; two or more cards still fill their available columns.
+   */
+  const gridClassFor = (count: number) =>
+    count === 1
+      ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-2 md:gap-3'
+      : count === 2
+        ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-2 md:gap-3'
+        : count === 3
+          ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3'
+          : 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-4 md:gap-3';
+
+  return (
+    <div className="flex flex-col gap-2 md:gap-3">
+      {blocks.map((block, index) =>
+        block.kind === 'hero' ? (
+          <div key={`hero-${block.key}`}>
+            {cardDefs[block.key]?.render(true)}
+          </div>
+        ) : (
+          <div
+            key={`grid-${index}`}
+            className={gridClassFor(block.keys.length)}
+          >
+            {/*
+              `h-full` on both the grid item and the card: grid items stretch to
+              the row by default, but the card box is only as tall as its own
+              content, so the streak card (which has an extra week row) rendered
+              taller than its siblings and left the row visibly misaligned.
+            */}
+            {block.keys.map((key) => (
+              <div key={key} className="h-full min-w-0">
+                {cardDefs[key]?.render(false)}
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
