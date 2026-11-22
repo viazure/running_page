@@ -429,7 +429,7 @@ export function ActivityLog({
               </colgroup>
               <thead>
                 <tr className="border-b border-[var(--color-border)] text-left text-[var(--color-muted)]">
-                  <th className="py-0 pr-3 pb-3 pl-3 font-medium whitespace-nowrap md:pr-6 md:pl-5">
+                  <th className="py-0 pr-3 pb-3 pl-2.5 font-medium whitespace-nowrap md:pr-6 md:pl-5">
                     {t('date')}
                   </th>
                   <th
@@ -473,9 +473,13 @@ export function ActivityLog({
                       aria-selected={selected}
                     >
                       <td
-                        className={`py-3 pr-3 pl-1 text-sm text-[var(--color-muted)] md:pr-6 md:pl-5 md:whitespace-nowrap ${
+                        className={`py-3 pr-3 pl-2.5 text-sm text-[var(--color-muted)] md:pr-6 md:pl-5 md:whitespace-nowrap ${
                           selected
-                            ? 'shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                            ? // The accent rule is drawn with an inset shadow, which
+                              // occupies no space. Keeping `pl-2.5` in both states
+                              // leaves room between the rule and the date without
+                              // shifting the text when a row is selected.
+                              'shadow-[inset_2px_0_0_0_var(--color-accent)]'
                             : ''
                         }`}
                       >
