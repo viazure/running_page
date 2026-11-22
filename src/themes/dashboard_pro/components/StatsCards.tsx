@@ -1085,14 +1085,15 @@ export function StatsCards({
               className={
                 hero
                   ? 'card min-w-0 p-4 md:p-5'
-                  : 'card flex h-full min-w-0 flex-col p-3 md:p-4'
+                  : // Match monthly tile padding so side-by-side titles/metrics share a baseline.
+                    'card flex h-full min-w-0 flex-col p-2 md:p-4'
               }
             >
               <GoalHeading
-                className={`eyebrow flex min-w-0 items-center gap-1.5 text-[var(--color-muted)] ${
+                className={`eyebrow flex min-w-0 items-center gap-1 text-[var(--color-muted)] ${
                   hero
                     ? 'mb-2 text-[11px] tracking-[1.2px] md:text-xs'
-                    : 'mb-1 text-[10px] md:mb-2 md:text-xs'
+                    : 'mb-1 text-[10px] md:mb-2 md:gap-1.5 md:text-xs'
                 }`}
                 label={t('weeklyGoal')}
                 hint={weekHint}
@@ -1113,18 +1114,20 @@ export function StatsCards({
                 }
               />
               <p
-                className={`metric leading-none font-bold whitespace-nowrap ${
+                className={`metric leading-tight font-semibold ${
                   hero
-                    ? 'text-[40px] md:text-[52px]'
-                    : 'text-[26px] md:text-[30px]'
+                    ? 'text-[40px] whitespace-nowrap md:text-[52px]'
+                    : 'text-base md:text-2xl md:whitespace-nowrap'
                 }`}
               >
                 {goal.unit === 'time'
                   ? formatHours(weekSeconds)
                   : formatDistance(weekDistance)}
                 <span
-                  className={`ml-2 font-medium text-[var(--color-muted)] ${
-                    hero ? 'text-base md:text-xl' : 'text-sm md:text-base'
+                  className={`font-normal text-[var(--color-muted)] ${
+                    hero
+                      ? 'ml-2 text-base md:text-xl'
+                      : 'ml-0.5 text-[10px] md:ml-1 md:text-sm'
                   }`}
                 >
                   /{' '}
@@ -1133,7 +1136,11 @@ export function StatsCards({
                     : `${goal.weekly} km`}
                 </span>
               </p>
-              <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-[#EFECE7] md:mt-4">
+              <div
+                className={`overflow-hidden rounded-full bg-[var(--color-sunken)] ${
+                  hero ? 'mt-3 h-[3px] md:mt-4' : 'mt-2 h-1 md:mt-3 md:h-1.5'
+                }`}
+              >
                 <div
                   className="h-full rounded-full bg-[var(--color-accent)] transition-all"
                   style={{
@@ -1141,7 +1148,18 @@ export function StatsCards({
                   }}
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between text-sm text-[var(--color-muted)]">
+              {/*
+                Non-hero mobile sits in a 2-col grid with monthly: keep the
+                compact delta line, drop activity count/duration (monthly
+                already does the same). Hero / md+ still show the full row.
+              */}
+              <div
+                className={`items-center justify-between text-[var(--color-muted)] ${
+                  hero
+                    ? 'mt-3 flex text-sm'
+                    : 'mt-2 hidden text-sm md:mt-3 md:flex'
+                }`}
+              >
                 <span className="flex items-center gap-1.5">
                   <svg
                     className="h-3.5 w-3.5 text-[var(--color-accent)]"
@@ -1161,7 +1179,7 @@ export function StatsCards({
                 <span>{formatHours(weekSeconds)}</span>
               </div>
               <p
-                className={`mt-2 text-xs ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
+                className={`truncate ${hero ? 'mt-2 text-xs' : 'mt-1 text-[9px] md:mt-1.5 md:text-xs'} ${weekDiff >= 0 ? 'text-emerald-600' : 'text-[var(--color-muted)]'}`}
               >
                 {weekDiff >= 0 ? '↗' : '↘'}{' '}
                 {goal.unit === 'time'
@@ -1264,7 +1282,7 @@ export function StatsCards({
                   });
 
                   return (
-                    <div className="flex w-full min-w-0 items-center gap-1 lg:mt-3 lg:gap-1.5">
+                    <div className="flex w-full min-w-0 items-center gap-3 lg:mt-3 lg:gap-4">
                       <div className="flex shrink-0 flex-col items-center gap-0">
                         <div className="relative h-6 w-6 lg:h-9 lg:w-9">
                           <svg
@@ -1282,7 +1300,12 @@ export function StatsCards({
                           {t('weeks')}
                         </span>
                       </div>
-                      <div className="flex min-w-0 flex-1 items-center justify-between gap-0 px-0">
+                      {/*
+                        Keep「周」and Mon–Sun as two clear segments: the day
+                        strip sits to the right with a larger gap so Monday no
+                        longer crowds the flame.
+                      */}
+                      <div className="flex min-w-0 flex-1 items-center justify-between gap-0">
                         {weekDays.map((wd, i) => {
                           const isPast =
                             new Date(weekStart.getTime() + i * 86400000) <=
@@ -1397,19 +1420,30 @@ export function StatsCards({
   /**
    * Column count for a grid run.
    *
-   * A lone leftover card (a hero sitting in the middle of the order splits the
-   * grid in two) used to stretch to the full row while still using the compact
-   * tile treatment, which looked like a stray banner. Half width keeps it a
-   * tile; two or more cards still fill their available columns.
+   * Mobile packs the distance goals into one shared row (3-up when all three
+   * are present) so they read as a single group — not three full-width stacks.
+   * Streak still drops to its own row via col-span below. md+ keeps the usual
+   * multi-column tile grid; a lone leftover stays half-width so it reads as a
+   * tile rather than a stray banner.
    */
-  const gridClassFor = (count: number) =>
-    count === 1
-      ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-2 md:gap-3'
-      : count === 2
-        ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-2 md:gap-3'
-        : count === 3
-          ? 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3'
-          : 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-4 md:gap-3';
+  const gridClassFor = (keys: StatsCardKey[]) => {
+    const count = keys.length;
+    const goalCount = keys.filter((key) => key !== 'streak').length;
+    if (count <= 1) {
+      return 'grid w-full min-w-0 grid-cols-1 gap-2 overflow-x-hidden md:grid-cols-2 md:gap-3';
+    }
+    if (count === 2) {
+      return 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:gap-3';
+    }
+    // Three distance goals (+ optional streak): keep the goals on one row.
+    if (goalCount >= 3) {
+      return count >= 4
+        ? 'grid w-full min-w-0 grid-cols-3 gap-2 overflow-x-hidden md:grid-cols-4 md:gap-3'
+        : 'grid w-full min-w-0 grid-cols-3 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3';
+    }
+    // Hero case leftovers: monthly | weekly, streak full-width underneath.
+    return 'grid w-full min-w-0 grid-cols-2 gap-2 overflow-x-hidden md:grid-cols-3 md:gap-3';
+  };
 
   return (
     <div className="flex flex-col gap-2 md:gap-3">
@@ -1419,21 +1453,32 @@ export function StatsCards({
             {cardDefs[block.key]?.render(true)}
           </div>
         ) : (
-          <div
-            key={`grid-${index}`}
-            className={gridClassFor(block.keys.length)}
-          >
+          <div key={`grid-${index}`} className={gridClassFor(block.keys)}>
             {/*
               `h-full` on both the grid item and the card: grid items stretch to
               the row by default, but the card box is only as tall as its own
               content, so the streak card (which has an extra week row) rendered
               taller than its siblings and left the row visibly misaligned.
+
+              Streak spans the full mobile row under the goal group. Span must
+              equal the explicit column count (2 or 3) — never more — or the
+              grid grows an implicit column and the goals stop sitting together.
+              Class names are complete strings so Tailwind can see them.
             */}
-            {block.keys.map((key) => (
-              <div key={key} className="h-full min-w-0">
-                {cardDefs[key]?.render(false)}
-              </div>
-            ))}
+            {block.keys.map((key) => {
+              const goalCount = block.keys.filter((k) => k !== 'streak').length;
+              const streakFullMobile =
+                key !== 'streak'
+                  ? ''
+                  : goalCount >= 3
+                    ? ' col-span-3 md:col-span-1'
+                    : ' col-span-2 md:col-span-1';
+              return (
+                <div key={key} className={`h-full min-w-0${streakFullMobile}`}>
+                  {cardDefs[key]?.render(false)}
+                </div>
+              );
+            })}
           </div>
         )
       )}
