@@ -182,28 +182,30 @@ export function ActivityLog({
   }, [selectedActivity, sorted, distFilter, onSelectActivity, pageSize]);
 
   /**
-   * Deep links (`#run_<id>`) reveal their row once, then never again; in-page
-   * picks (heatmap / calendar / log) never scroll the page.
+   * Deep links (`#run_<id>`) reveal their row once, then never again.
+   * In-page picks — clicks, heatmap / calendar, and ↑↓ / j k keyboard
+   * browsing — must not scroll the page: `scrollIntoView` would drag the
+   * viewport away from the map while the user is trying to skim tracks.
    *
-   * The parent owns that knowledge: it knows when a selection came from the
-   * URL hash rather than from a click, and hands over a one-shot flag here.
-   * Inferring it locally from input events or mount timing both misfired — the
-   * former breaks on touch and synthetic clicks, the latter on slow loads.
+   * The parent owns deep-link knowledge: it knows when a selection came from
+   * the URL hash rather than from a click, and hands over a one-shot flag
+   * here. Inferring it locally from input events or mount timing both
+   * misfired — the former breaks on touch and synthetic clicks, the latter
+   * on slow loads.
    */
   const revealedRunIdRef = useRef<Activity['run_id'] | null>(null);
 
   useEffect(() => {
     if (!selectedActivity) return;
+    // Keep the one-shot flag until the row is on this page (paging may lag).
+    if (revealFromHashRef?.current !== true) return;
     const root = logRef.current;
     if (!root) return;
     const row = root.querySelector(
       `[data-run-id="${selectedActivity.run_id}"]`
     );
     if (!row) return;
-    const fromDeepLink = revealFromHashRef?.current === true;
-    if (fromDeepLink && revealFromHashRef) revealFromHashRef.current = false;
-    const keyboardNav = document.activeElement === logRef.current;
-    if (!fromDeepLink && !keyboardNav) return;
+    revealFromHashRef.current = false;
     // One reveal per run: the paging effect may re-run this after `page` moves.
     if (revealedRunIdRef.current === selectedActivity.run_id) return;
     revealedRunIdRef.current = selectedActivity.run_id;
