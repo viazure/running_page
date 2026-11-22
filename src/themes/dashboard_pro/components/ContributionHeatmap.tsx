@@ -495,16 +495,15 @@ export function ContributionHeatmap({
       </div>
 
       {/*
-        "All years" stacks one grid per year, which made this card grow to 874px
-        vs 265px for a single year — switching year resized the card and pushed
-        everything below it around. Cap the multi-year view and scroll inside it
-        so the card height stays close to the single-year case.
+        "All years" shows every year in full — the whole point of that mode is
+        seeing the entire history at a glance, so it must not be capped or
+        scrolled (an earlier max-height + overflow turned it into a small
+        window that defeated the purpose). The card therefore does grow when
+        switching from one year to all, which is the intended trade.
       */}
       <div
         className={
-          selectedYear === 'all'
-            ? 'heatmap-all-years max-h-[200px] space-y-8 overflow-y-auto pr-1'
-            : 'space-y-6'
+          selectedYear === 'all' ? 'heatmap-all-years space-y-8' : 'space-y-6'
         }
         key={String(selectedYear)}
       >
