@@ -48,7 +48,7 @@ dashboard_pro:
   # 哪张目标卡作为 hero（独占一整行、字号更大）。会永远排在最前。
   # 只取第一个；可选 yearly / monthly / weekly（连续记录不支持，始终紧凑显示）
   # 留空 [] 则所有卡片等权并排、无 hero
-  stats_hero: []
+  stats_hero: [yearly]
   # 首页模块开关（false 不渲染）
   modules:
     weekly: true # 本周目标
@@ -73,14 +73,14 @@ github_url: 'https://github.com/viazure/running_page'
 
 goals:
   all:
-    yearly: 400
-    monthly: 40
+    yearly: 500
+    monthly: 50
     weekly: 15
     unit: distance
 
   Run:
-    yearly: 400
-    monthly: 40
+    yearly: 500
+    monthly: 50
     weekly: 15
     unit: distance
 
